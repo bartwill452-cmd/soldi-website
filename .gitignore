@@ -1,0 +1,5 @@
+.env
+node_modules/
+_frames/
+soldi-*.png
+soldi-*.mp4

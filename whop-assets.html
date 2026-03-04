@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Soldi | Whop Dashboard Assets</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Inter', system-ui, sans-serif; background: #111; color: #fff; padding: 40px; }
+    .page-title { font-size: 32px; font-weight: 800; margin-bottom: 8px; }
+    .page-sub { color: #888; font-size: 14px; margin-bottom: 48px; }
+    .asset-section { margin-bottom: 60px; }
+    .asset-label { font-size: 11px; font-weight: 700; letter-spacing: 2px; color: #22c55e; text-transform: uppercase; margin-bottom: 6px; }
+    .asset-name { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+    .asset-dims { font-size: 13px; color: #666; margin-bottom: 20px; }
+    .asset-wrapper { border: 1px dashed #333; border-radius: 12px; padding: 20px; display: inline-block; background: #0a0a0a; max-width: 100%; overflow-x: auto; }
+    .instructions { margin-top: 12px; font-size: 12px; color: #555; }
+    hr { border: none; border-top: 1px solid #222; margin: 48px 0; }
+    .download-row { display: flex; gap: 12px; margin-top: 16px; flex-wrap: wrap; }
+    .dl-btn {
+      background: linear-gradient(135deg, #22c55e, #10b981);
+      color: #050507; border: none; padding: 10px 20px; border-radius: 10px;
+      font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .dl-btn:hover { opacity: 0.9; }
+    .dl-btn.recording { background: linear-gradient(135deg, #ef4444, #dc2626); color: #fff; }
+    .copy-section { background: #0a0a0f; border: 1px solid #222; border-radius: 12px; padding: 32px; max-width: 800px; position: relative; }
+    .copy-text { font-size: 15px; color: #d4d4d8; line-height: 1.8; white-space: pre-wrap; }
+    .copy-text h4 { color: #fff; font-size: 16px; font-weight: 700; margin: 20px 0 8px; }
+    .copy-text h4:first-child { margin-top: 0; }
+    .copy-btn {
+      position: absolute; top: 16px; right: 16px;
+      background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.2);
+      color: #22c55e; padding: 6px 14px; border-radius: 8px;
+      font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit;
+    }
+    .copy-btn:hover { background: rgba(34,197,94,0.2); }
+    .status-msg { margin-top: 10px; font-size: 13px; color: #22c55e; font-weight: 600; }
+
+    /* ===== SHARED BG ===== */
+    .bg-grid {
+      position: absolute; inset: 0;
+      background-image: linear-gradient(rgba(34,197,94,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(34,197,94,0.03) 1px, transparent 1px);
+      background-size: 60px 60px;
+    }
+    .orb-tl { position: absolute; width: 700px; height: 700px; background: radial-gradient(circle, rgba(34,197,94,0.12), transparent 70%); top: -250px; left: -150px; border-radius: 50%; }
+    .orb-br { position: absolute; width: 600px; height: 600px; background: radial-gradient(circle, rgba(16,185,129,0.08), transparent 70%); bottom: -250px; right: 50px; border-radius: 50%; }
+    .orb-c { position: absolute; width: 400px; height: 400px; background: radial-gradient(circle, rgba(6,214,160,0.06), transparent 70%); top: 100px; right: 350px; border-radius: 50%; }
+    .accent-line { position: absolute; bottom: 0; left: 0; right: 0; height: 4px; background: linear-gradient(90deg, #22c55e, #10b981, #06d6a0, #10b981, #22c55e); z-index: 5; }
+
+    /* ===== PROFILE PIC (400x400 stays square) ===== */
+    .profile-pic {
+      width: 400px; height: 400px; background: #050507; border-radius: 24px;
+      display: flex; align-items: center; justify-content: center;
+      position: relative; overflow: hidden;
+    }
+    .profile-pic::before {
+      content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
+      background: radial-gradient(circle at 30% 30%, rgba(34,197,94,0.15), transparent 60%);
+    }
+    .profile-logo {
+      width: 260px; height: 260px;
+      background: linear-gradient(135deg, #22c55e, #10b981, #06d6a0);
+      border-radius: 60px; display: flex; align-items: center; justify-content: center;
+      position: relative;
+      box-shadow: 0 20px 60px rgba(34,197,94,0.3), 0 0 120px rgba(34,197,94,0.1);
+    }
+    .profile-logo .s-letter { font-size: 180px; font-weight: 900; color: #050507; line-height: 1; letter-spacing: -8px; margin-top: -8px; }
+    .profile-logo::after {
+      content: ''; position: absolute; top: 8px; left: 15%; right: 15%; height: 40%;
+      background: linear-gradient(to bottom, rgba(255,255,255,0.12), transparent);
+      border-radius: 60px 60px 120px 120px;
+    }
+
+    /* ===== ALL 1920x1080 PANELS ===== */
+    .panel {
+      width: 1920px; height: 1080px; background: #050507; border-radius: 0;
+      position: relative; overflow: hidden;
+    }
+
+    /* --- BANNER CLEAN --- */
+    .banner-content {
+      position: relative; z-index: 2; padding: 0 120px;
+      display: flex; align-items: center; gap: 80px; width: 100%; height: 100%;
+    }
+    .banner-logo-mark {
+      width: 240px; height: 240px;
+      background: linear-gradient(135deg, #22c55e, #10b981, #06d6a0);
+      border-radius: 56px; display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      box-shadow: 0 20px 60px rgba(34,197,94,0.25), 0 0 120px rgba(34,197,94,0.08);
+      position: relative;
+    }
+    .banner-logo-mark .s-letter { font-size: 160px; font-weight: 900; color: #050507; line-height: 1; letter-spacing: -6px; margin-top: -6px; }
+    .banner-logo-mark::after {
+      content: ''; position: absolute; top: 8px; left: 15%; right: 15%; height: 40%;
+      background: linear-gradient(to bottom, rgba(255,255,255,0.1), transparent);
+      border-radius: 50px 50px 100px 100px;
+    }
+    .banner-brand { font-size: 96px; font-weight: 900; letter-spacing: -3px; line-height: 1; margin-bottom: 20px; }
+    .banner-tagline { font-size: 32px; font-weight: 500; color: #a1a1aa; line-height: 1.4; max-width: 800px; }
+    .banner-tagline span { background: linear-gradient(135deg, #22c55e, #10b981); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 700; }
+    .banner-stats { display: flex; gap: 64px; margin-top: 48px; }
+    .banner-stat-num { font-size: 40px; font-weight: 800; background: linear-gradient(135deg, #22c55e, #06d6a0); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .banner-stat-label { font-size: 16px; color: #71717a; font-weight: 500; margin-top: 4px; }
+
+    /* --- BANNER V2 WITH IMAGES --- */
+    .bv2-left { position: relative; z-index: 2; padding: 0 80px; flex-shrink: 0; width: 900px; height: 100%; display: flex; flex-direction: column; justify-content: center; }
+    .bv2-brand { display: flex; align-items: center; gap: 24px; margin-bottom: 28px; }
+    .bv2-logo {
+      width: 90px; height: 90px;
+      background: linear-gradient(135deg, #22c55e, #10b981, #06d6a0);
+      border-radius: 24px; display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 10px 36px rgba(34,197,94,0.25); position: relative; flex-shrink: 0;
+    }
+    .bv2-logo .s-letter { font-size: 58px; font-weight: 900; color: #050507; line-height: 1; letter-spacing: -2px; margin-top: -2px; }
+    .bv2-logo::after {
+      content: ''; position: absolute; top: 5px; left: 15%; right: 15%; height: 38%;
+      background: linear-gradient(to bottom, rgba(255,255,255,0.1), transparent);
+      border-radius: 18px 18px 50px 50px;
+    }
+    .bv2-name { font-size: 64px; font-weight: 900; letter-spacing: -2px; }
+    .bv2-tagline { font-size: 26px; color: #a1a1aa; line-height: 1.5; margin-bottom: 36px; }
+    .bv2-tagline span { background: linear-gradient(135deg, #22c55e, #10b981); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 700; }
+    .bv2-stats { display: flex; gap: 48px; }
+    .bv2-stat-num { font-size: 32px; font-weight: 800; background: linear-gradient(135deg, #22c55e, #06d6a0); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .bv2-stat-label { font-size: 14px; color: #71717a; font-weight: 500; margin-top: 3px; }
+    .bv2-right {
+      position: relative; z-index: 2; flex: 1; height: 100%;
+      display: flex; align-items: center; gap: 20px; padding-right: 60px;
+      mask-image: linear-gradient(to right, transparent, #000 60px, #000 calc(100% - 60px), transparent);
+      -webkit-mask-image: linear-gradient(to right, transparent, #000 60px, #000 calc(100% - 60px), transparent);
+    }
+    .bv2-right .scol { display: flex; flex-direction: column; gap: 16px; flex-shrink: 0; }
+    .bv2-right .sthumb {
+      width: 220px; height: 280px; border-radius: 14px; overflow: hidden;
+      border: 1px solid rgba(255,255,255,0.08); background: #0a0a0f; flex-shrink: 0;
+    }
+    .bv2-right .sthumb img { width: 100%; height: 100%; object-fit: contain; }
+
+    /* --- PRODUCT CARD --- */
+    .pc-content { position: relative; z-index: 2; text-align: center; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px; }
+    .pc-logo {
+      width: 140px; height: 140px;
+      background: linear-gradient(135deg, #22c55e, #10b981, #06d6a0);
+      border-radius: 36px; display: flex; align-items: center; justify-content: center;
+      margin-bottom: 36px; box-shadow: 0 16px 50px rgba(34,197,94,0.25); position: relative;
+    }
+    .pc-logo .s-letter { font-size: 90px; font-weight: 900; color: #050507; line-height: 1; letter-spacing: -4px; margin-top: -3px; }
+    .pc-logo::after {
+      content: ''; position: absolute; top: 6px; left: 15%; right: 15%; height: 40%;
+      background: linear-gradient(to bottom, rgba(255,255,255,0.1), transparent);
+      border-radius: 28px 28px 80px 80px;
+    }
+    .pc-title { font-size: 72px; font-weight: 900; letter-spacing: -2px; margin-bottom: 20px; }
+    .pc-sub { font-size: 28px; color: #a1a1aa; max-width: 800px; line-height: 1.5; margin-bottom: 48px; }
+    .pc-features { display: flex; gap: 24px; justify-content: center; flex-wrap: wrap; }
+    .pc-feat {
+      background: rgba(34,197,94,0.08); border: 1px solid rgba(34,197,94,0.15);
+      border-radius: 100px; padding: 14px 28px; font-size: 18px; font-weight: 600;
+      color: #22c55e; display: flex; align-items: center; gap: 10px;
+    }
+
+    /* --- SUCCESS COLLAGE --- */
+    .collage-inner { position: relative; z-index: 2; width: 100%; height: 100%; display: flex; flex-direction: column; }
+    .collage-header { text-align: center; padding: 50px 60px 30px; flex-shrink: 0; }
+    .ch-logo {
+      width: 64px; height: 64px;
+      background: linear-gradient(135deg, #22c55e, #10b981, #06d6a0);
+      border-radius: 18px; display: inline-flex; align-items: center; justify-content: center;
+      margin-bottom: 20px; box-shadow: 0 10px 30px rgba(34,197,94,0.2);
+    }
+    .ch-logo .s-letter { font-size: 42px; font-weight: 900; color: #050507; line-height: 1; letter-spacing: -2px; }
+    .ch-headline { font-size: 48px; font-weight: 900; letter-spacing: -1.5px; margin-bottom: 10px; }
+    .ch-headline span { background: linear-gradient(135deg, #22c55e, #06d6a0); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .ch-sub { font-size: 20px; color: #71717a; }
+    .collage-grid {
+      flex: 1; padding: 20px 40px 20px;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      grid-template-rows: repeat(2, 1fr);
+      gap: 16px;
+    }
+    .cg-cell { border-radius: 14px; overflow: hidden; border: 1px solid rgba(255,255,255,0.06); background: #0a0a0f; position: relative; }
+    .cg-cell img { width: 100%; height: 100%; object-fit: contain; display: block; }
+    .cg-cell.feat { grid-column: span 2; }
+    .cg-cell .ctag {
+      position: absolute; bottom: 10px; left: 10px;
+      background: rgba(34,197,94,0.9); color: #050507;
+      font-size: 14px; font-weight: 800; padding: 6px 14px;
+      border-radius: 8px; letter-spacing: 0.5px;
+    }
+    .collage-footer { flex-shrink: 0; padding: 20px 60px 40px; text-align: center; }
+    .cf-stats { display: flex; gap: 48px; justify-content: center; }
+    .cf-val { font-size: 32px; font-weight: 800; background: linear-gradient(135deg, #22c55e, #06d6a0); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .cf-lbl { font-size: 13px; color: #71717a; font-weight: 500; margin-top: 3px; }
+
+    /* --- ANIMATED SLIDESHOW (1920x1080) --- */
+    .slideshow-wrap {
+      width: 1920px; height: 1080px; background: #050507;
+      position: relative; overflow: hidden; display: flex; flex-direction: column;
+    }
+    .ss-header { position: relative; z-index: 5; text-align: center; padding: 60px 60px 20px; flex-shrink: 0; }
+    .ss-logo {
+      width: 80px; height: 80px;
+      background: linear-gradient(135deg, #22c55e, #10b981, #06d6a0);
+      border-radius: 22px; display: inline-flex; align-items: center; justify-content: center;
+      margin-bottom: 20px; box-shadow: 0 12px 36px rgba(34,197,94,0.25);
+    }
+    .ss-logo .s-letter { font-size: 52px; font-weight: 900; color: #050507; line-height: 1; letter-spacing: -2px; }
+    .ss-title { font-size: 56px; font-weight: 900; letter-spacing: -2px; margin-bottom: 10px; }
+    .ss-title span { background: linear-gradient(135deg, #22c55e, #06d6a0); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .ss-sub { font-size: 22px; color: #71717a; font-weight: 500; }
+
+    .ss-stage { position: relative; z-index: 3; flex: 1; display: flex; justify-content: center; align-items: center; padding: 20px 60px; overflow: hidden; }
+    .ss-images { display: flex; gap: 24px; justify-content: center; height: 560px; align-items: center; }
+    .ss-col { display: flex; flex-direction: column; gap: 20px; width: 260px; }
+    .ss-col:nth-child(1) { animation: sUp 20s linear infinite; }
+    .ss-col:nth-child(2) { animation: sDown 22s linear infinite; }
+    .ss-col:nth-child(3) { animation: sUp 18s linear infinite; }
+    .ss-col:nth-child(4) { animation: sDown 24s linear infinite; }
+    .ss-col:nth-child(5) { animation: sUp 21s linear infinite; }
+    .ss-col:nth-child(6) { animation: sDown 19s linear infinite; }
+    @keyframes sUp { 0% { transform: translateY(0); } 50% { transform: translateY(-140px); } 100% { transform: translateY(0); } }
+    @keyframes sDown { 0% { transform: translateY(0); } 50% { transform: translateY(140px); } 100% { transform: translateY(0); } }
+    .ss-thumb {
+      width: 260px; height: 340px; border-radius: 16px; overflow: hidden;
+      border: 1px solid rgba(255,255,255,0.08); background: #0a0a0f; flex-shrink: 0;
+      box-shadow: 0 10px 36px rgba(0,0,0,0.4);
+    }
+    .ss-thumb img { width: 100%; height: 100%; object-fit: contain; display: block; }
+
+    .ss-bottom { position: relative; z-index: 5; text-align: center; padding: 20px 60px 50px; flex-shrink: 0; }
+    .ss-stats { display: flex; gap: 64px; justify-content: center; margin-bottom: 24px; }
+    .ss-sn { font-size: 40px; font-weight: 900; background: linear-gradient(135deg, #22c55e, #06d6a0); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .ss-sl { font-size: 14px; color: #71717a; font-weight: 500; margin-top: 3px; }
+    .ss-cta {
+      display: inline-flex; align-items: center; gap: 12px;
+      background: linear-gradient(135deg, #22c55e, #10b981);
+      color: #050507; font-size: 22px; font-weight: 800; padding: 18px 44px;
+      border-radius: 14px; letter-spacing: -0.3px;
+      box-shadow: 0 10px 30px rgba(34,197,94,0.3);
+    }
+
+    /* --- SOCIAL PROOF --- */
+    .sp-content { position: relative; z-index: 2; text-align: center; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px; }
+    .sp-headline { font-size: 64px; font-weight: 900; letter-spacing: -2px; margin-bottom: 56px; }
+    .sp-headline span { background: linear-gradient(135deg, #22c55e, #06d6a0); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .sp-stats-row { display: flex; gap: 80px; justify-content: center; margin-bottom: 56px; }
+    .sp-stat-num { font-size: 72px; font-weight: 900; background: linear-gradient(135deg, #22c55e, #06d6a0); -webkit-background-clip: text; -webkit-text-fill-color: transparent; line-height: 1; }
+    .sp-stat-label { font-size: 18px; color: #71717a; font-weight: 500; margin-top: 10px; }
+    .sp-divider { width: 1px; background: rgba(255,255,255,0.1); align-self: stretch; }
+    .sp-wins { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
+    .sp-win-chip { background: rgba(34,197,94,0.08); border: 1px solid rgba(34,197,94,0.12); border-radius: 100px; padding: 12px 24px; font-size: 18px; font-weight: 700; color: #22c55e; }
+  </style>
+</head>
+<body>
+
+  <div class="page-title">Soldi | Whop Dashboard Assets</div>
+  <p class="page-sub">All dashboard assets are 1920x1080. Download PNGs or record the video directly from this page.</p>
+
+  <hr>
+
+  <!-- ===== ASSET 1: PROFILE PIC (400x400) ===== -->
+  <div class="asset-section">
+    <div class="asset-label">ASSET 1</div>
+    <div class="asset-name">Profile Picture / Logo</div>
+    <div class="asset-dims">400 x 400px (square for profile avatar)</div>
+    <div class="asset-wrapper">
+      <div class="profile-pic" id="profilePic">
+        <div class="profile-logo"><span class="s-letter">S</span></div>
+      </div>
+    </div>
+    <div class="download-row">
+      <button class="dl-btn" onclick="downloadAsset('profilePic', 'soldi-profile-400x400', 400, 400)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download PNG
+      </button>
+    </div>
+  </div>
+
+  <hr>
+
+  <!-- ===== ASSET 2A: BANNER CLEAN (1920x1080) ===== -->
+  <div class="asset-section">
+    <div class="asset-label">ASSET 2A</div>
+    <div class="asset-name">Banner - Clean</div>
+    <div class="asset-dims">1920 x 1080px</div>
+    <div class="asset-wrapper">
+      <div class="panel" id="bannerClean">
+        <div class="bg-grid"></div>
+        <div class="orb-tl"></div>
+        <div class="orb-br"></div>
+        <div class="orb-c"></div>
+        <div class="banner-content">
+          <div class="banner-logo-mark"><span class="s-letter">S</span></div>
+          <div>
+            <div class="banner-brand">Soldi</div>
+            <div class="banner-tagline">The All-In-One Blueprint to <span>Make Money Online</span></div>
+            <div class="banner-stats">
+              <div>
+                <div class="banner-stat-num">$10M+</div>
+                <div class="banner-stat-label">Member Revenue</div>
+              </div>
+              <div>
+                <div class="banner-stat-num">5+</div>
+                <div class="banner-stat-label">Income Streams</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="accent-line"></div>
+      </div>
+    </div>
+    <div class="download-row">
+      <button class="dl-btn" onclick="downloadAsset('bannerClean', 'soldi-banner-clean-1920x1080', 1920, 1080)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download PNG
+      </button>
+    </div>
+  </div>
+
+  <hr>
+
+  <!-- ===== ASSET 2B: BANNER WITH SUCCESS (1920x1080) ===== -->
+  <div class="asset-section">
+    <div class="asset-label">ASSET 2B</div>
+    <div class="asset-name">Banner - With Success Screenshots</div>
+    <div class="asset-dims">1920 x 1080px</div>
+    <div class="asset-wrapper">
+      <div class="panel" id="bannerSuccess" style="display: flex; align-items: center;">
+        <div class="bg-grid"></div>
+        <div class="orb-tl"></div>
+        <div class="orb-br"></div>
+        <div class="bv2-left">
+          <div class="bv2-brand">
+            <div class="bv2-logo"><span class="s-letter">S</span></div>
+            <div class="bv2-name">Soldi</div>
+          </div>
+          <div class="bv2-tagline">The All-In-One Blueprint to <span>Make Money Online</span></div>
+          <div class="bv2-stats">
+            <div><div class="bv2-stat-num">$10M+</div><div class="bv2-stat-label">Member Revenue</div></div>
+            <div><div class="bv2-stat-num">5+</div><div class="bv2-stat-label">Income Streams</div></div>
+          </div>
+        </div>
+        <div class="bv2-right">
+          <div class="scol">
+            <div class="sthumb"><img src="images/betting-success/bet-success-1.png" alt=""></div>
+            <div class="sthumb"><img src="images/betting-success/bet-success-5.png" alt=""></div>
+            <div class="sthumb"><img src="images/ecom-success/ecom-success-1.jpg" alt=""></div>
+          </div>
+          <div class="scol" style="margin-top: -60px;">
+            <div class="sthumb"><img src="images/betting-success/bet-success-3.png" alt=""></div>
+            <div class="sthumb"><img src="images/ecom-success/ecom-success-4.png" alt=""></div>
+            <div class="sthumb"><img src="images/betting-success/bet-success-7.png" alt=""></div>
+          </div>
+          <div class="scol">
+            <div class="sthumb"><img src="images/ecom-success/ecom-success-2.jpg" alt=""></div>
+            <div class="sthumb"><img src="images/betting-success/bet-success-10.png" alt=""></div>
+            <div class="sthumb"><img src="images/betting-success/bet-success-12.png" alt=""></div>
+          </div>
+          <div class="scol" style="margin-top: -60px;">
+            <div class="sthumb"><img src="images/betting-success/bet-success-15.png" alt=""></div>
+            <div class="sthumb"><img src="images/ecom-success/ecom-success-6.png" alt=""></div>
+            <div class="sthumb"><img src="images/betting-success/bet-success-9.png" alt=""></div>
+          </div>
+        </div>
+        <div class="accent-line"></div>
+      </div>
+    </div>
+    <div class="download-row">
+      <button class="dl-btn" onclick="downloadAsset('bannerSuccess', 'soldi-banner-success-1920x1080', 1920, 1080)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download PNG
+      </button>
+    </div>
+  </div>
+
+  <hr>
+
+  <!-- ===== ASSET 3: PRODUCT CARD (1920x1080) ===== -->
+  <div class="asset-section">
+    <div class="asset-label">ASSET 3</div>
+    <div class="asset-name">Product Card</div>
+    <div class="asset-dims">1920 x 1080px</div>
+    <div class="asset-wrapper">
+      <div class="panel" id="productCard">
+        <div class="bg-grid"></div>
+        <div class="orb-c" style="top: 50%; left: 50%; transform: translate(-50%,-50%); width: 600px; height: 600px;"></div>
+        <div class="pc-content">
+          <div class="pc-logo"><span class="s-letter">S</span></div>
+          <div class="pc-title">Soldi</div>
+          <div class="pc-sub">The complete blueprint to build 5+ income streams with AI-powered tools, proven systems & a winning community.</div>
+          <div class="pc-features">
+            <div class="pc-feat"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Sports Betting</div>
+            <div class="pc-feat"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> E-Commerce</div>
+            <div class="pc-feat"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> AI Automation</div>
+            <div class="pc-feat"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Affiliate Systems</div>
+          </div>
+        </div>
+        <div class="accent-line"></div>
+      </div>
+    </div>
+    <div class="download-row">
+      <button class="dl-btn" onclick="downloadAsset('productCard', 'soldi-product-card-1920x1080', 1920, 1080)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download PNG
+      </button>
+    </div>
+  </div>
+
+  <hr>
+
+  <!-- ===== ASSET 4: SUCCESS COLLAGE (1920x1080) ===== -->
+  <div class="asset-section">
+    <div class="asset-label">ASSET 4</div>
+    <div class="asset-name">Success Collage - Member Results</div>
+    <div class="asset-dims">1920 x 1080px</div>
+    <div class="asset-wrapper">
+      <div class="panel" id="successCollage">
+        <div class="bg-grid"></div>
+        <div class="collage-inner">
+          <div class="collage-header">
+            <div class="ch-logo"><span class="s-letter">S</span></div>
+            <div class="ch-headline">Real Members. <span>Real Money.</span></div>
+            <div class="ch-sub">Verified wins from Soldi members</div>
+          </div>
+          <div class="collage-grid">
+            <div class="cg-cell feat"><img src="images/betting-success/bet-success-1.png" alt=""><div class="ctag">+$34,931</div></div>
+            <div class="cg-cell"><img src="images/ecom-success/ecom-success-1.jpg" alt=""><div class="ctag">E-COM</div></div>
+            <div class="cg-cell"><img src="images/betting-success/bet-success-5.png" alt=""></div>
+            <div class="cg-cell"><img src="images/ecom-success/ecom-success-4.png" alt=""><div class="ctag">$352K</div></div>
+            <div class="cg-cell"><img src="images/betting-success/bet-success-10.png" alt=""></div>
+            <div class="cg-cell"><img src="images/betting-success/bet-success-3.png" alt=""></div>
+            <div class="cg-cell"><img src="images/ecom-success/ecom-success-2.jpg" alt=""><div class="ctag">E-COM</div></div>
+          </div>
+          <div class="collage-footer">
+            <div class="cf-stats">
+              <div><div class="cf-val">$10M+</div><div class="cf-lbl">Member Revenue</div></div>
+              <div><div class="cf-val">5+</div><div class="cf-lbl">Income Streams</div></div>
+              <div><div class="cf-val">$349.99</div><div class="cf-lbl">+ $19.99/mo</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="accent-line"></div>
+      </div>
+    </div>
+    <div class="download-row">
+      <button class="dl-btn" onclick="downloadAsset('successCollage', 'soldi-success-collage-1920x1080', 1920, 1080)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download PNG
+      </button>
+    </div>
+  </div>
+
+  <hr>
+
+  <!-- ===== ASSET 5: ANIMATED VIDEO (1920x1080) - DOWNLOADABLE ===== -->
+  <div class="asset-section">
+    <div class="asset-label">ASSET 5 - VIDEO</div>
+    <div class="asset-name">Animated Success Showcase (Downloadable Video)</div>
+    <div class="asset-dims">1920 x 1080px - Click "Record & Download" to save as .webm video</div>
+    <div class="asset-wrapper">
+      <div class="slideshow-wrap" id="slideshow">
+        <div class="bg-grid"></div>
+        <div class="orb-tl"></div>
+        <div class="orb-br"></div>
+
+        <div class="ss-header">
+          <div class="ss-logo"><span class="s-letter">S</span></div>
+          <div class="ss-title">See Why Members <span>Keep Winning</span></div>
+          <div class="ss-sub">Real results. Real screenshots. Real money.</div>
+        </div>
+
+        <div class="ss-stage">
+          <div class="ss-images">
+            <div class="ss-col">
+              <div class="ss-thumb"><img src="images/betting-success/bet-success-1.png" alt=""></div>
+              <div class="ss-thumb"><img src="images/ecom-success/ecom-success-1.jpg" alt=""></div>
+              <div class="ss-thumb"><img src="images/betting-success/bet-success-6.png" alt=""></div>
+            </div>
+            <div class="ss-col">
+              <div class="ss-thumb"><img src="images/betting-success/bet-success-3.png" alt=""></div>
+              <div class="ss-thumb"><img src="images/ecom-success/ecom-success-4.png" alt=""></div>
+              <div class="ss-thumb"><img src="images/betting-success/bet-success-8.png" alt=""></div>
+            </div>
+            <div class="ss-col">
+              <div class="ss-thumb"><img src="images/ecom-success/ecom-success-2.jpg" alt=""></div>
+              <div class="ss-thumb"><img src="images/betting-success/bet-success-10.png" alt=""></div>
+              <div class="ss-thumb"><img src="images/ecom-success/ecom-success-6.png" alt=""></div>
+            </div>
+            <div class="ss-col">
+              <div class="ss-thumb"><img src="images/betting-success/bet-success-5.png" alt=""></div>
+              <div class="ss-thumb"><img src="images/betting-success/bet-success-12.png" alt=""></div>
+              <div class="ss-thumb"><img src="images/betting-success/bet-success-15.png" alt=""></div>
+            </div>
+            <div class="ss-col">
+              <div class="ss-thumb"><img src="images/betting-success/bet-success-7.png" alt=""></div>
+              <div class="ss-thumb"><img src="images/ecom-success/ecom-success-8.jpg" alt=""></div>
+              <div class="ss-thumb"><img src="images/betting-success/bet-success-14.png" alt=""></div>
+            </div>
+            <div class="ss-col">
+              <div class="ss-thumb"><img src="images/betting-success/bet-success-9.png" alt=""></div>
+              <div class="ss-thumb"><img src="images/ecom-success/ecom-success-5.png" alt=""></div>
+              <div class="ss-thumb"><img src="images/betting-success/bet-success-16.png" alt=""></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="ss-bottom">
+          <div class="ss-stats">
+            <div><div class="ss-sn">$10M+</div><div class="ss-sl">Member Revenue</div></div>
+            <div><div class="ss-sn">5+</div><div class="ss-sl">Income Streams</div></div>
+          </div>
+          <div class="ss-cta">
+            Join Soldi | $349.99 + $19.99/mo
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+          </div>
+        </div>
+        <div class="accent-line"></div>
+      </div>
+    </div>
+    <div class="download-row">
+      <button class="dl-btn" id="recordBtn" onclick="recordVideo()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4" fill="currentColor"/></svg>
+        Record & Download Video (20 sec)
+      </button>
+    </div>
+    <div id="recordStatus" class="status-msg"></div>
+  </div>
+
+  <hr>
+
+  <!-- ===== ASSET 6: SOCIAL PROOF (1920x1080) ===== -->
+  <div class="asset-section">
+    <div class="asset-label">ASSET 6</div>
+    <div class="asset-name">Social Proof / Stats Card</div>
+    <div class="asset-dims">1920 x 1080px</div>
+    <div class="asset-wrapper">
+      <div class="panel" id="socialProof">
+        <div class="bg-grid"></div>
+        <div class="orb-tl"></div>
+        <div class="orb-br"></div>
+        <div class="sp-content">
+          <div class="sp-headline">Real Members. <span>Real Results.</span></div>
+          <div class="sp-stats-row">
+            <div><div class="sp-stat-num">$10M+</div><div class="sp-stat-label">Total Member Revenue</div></div>
+            <div class="sp-divider"></div>
+            <div><div class="sp-stat-num">$42K</div><div class="sp-stat-label">Top Monthly Profit</div></div>
+            <div class="sp-divider"></div>
+            <div><div class="sp-stat-num">$4.2M</div><div class="sp-stat-label">Store Revenue</div></div>
+          </div>
+          <div class="sp-wins">
+            <div class="sp-win-chip">+$34,931 Nov</div>
+            <div class="sp-win-chip">+$42,219 Monthly</div>
+            <div class="sp-win-chip">$352K Store Sales</div>
+            <div class="sp-win-chip">+$24,865 Verified</div>
+            <div class="sp-win-chip">$15K/mo AI Services</div>
+          </div>
+        </div>
+        <div class="accent-line"></div>
+      </div>
+    </div>
+    <div class="download-row">
+      <button class="dl-btn" onclick="downloadAsset('socialProof', 'soldi-social-proof-1920x1080', 1920, 1080)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download PNG
+      </button>
+    </div>
+  </div>
+
+  <hr>
+
+  <!-- ===== COPY SECTIONS ===== -->
+  <div class="asset-section">
+    <div class="asset-label">COPY - HEADLINE</div>
+    <div class="asset-name">Whop Product Headline</div>
+    <div class="copy-section">
+      <button class="copy-btn" onclick="copyText(this, 'headlineCopy')">Copy</button>
+      <div class="copy-text" id="headlineCopy">Soldi | The All-In-One Blueprint to Make Money Online</div>
+    </div>
+  </div>
+
+  <hr>
+
+  <div class="asset-section">
+    <div class="asset-label">COPY - SHORT DESCRIPTION</div>
+    <div class="asset-name">Whop Short Description</div>
+    <div class="copy-section">
+      <button class="copy-btn" onclick="copyText(this, 'shortDescCopy')">Copy</button>
+      <div class="copy-text" id="shortDescCopy">Build real income with proven sports betting systems, e-commerce blueprints, AI automation tools, and affiliate marketing playbooks. $10M+ in combined member revenue and counting.</div>
+    </div>
+  </div>
+
+  <hr>
+
+  <div class="asset-section">
+    <div class="asset-label">COPY - FULL DESCRIPTION</div>
+    <div class="asset-name">Whop Full Product Description</div>
+    <div class="copy-section">
+      <button class="copy-btn" onclick="copyText(this, 'fullDescCopy')">Copy</button>
+      <div class="copy-text" id="fullDescCopy"><h4>🚀 What is Soldi?</h4>
+Soldi is the all-in-one money-making platform that gives you everything you need to build multiple income streams online. No experience required. Our members have generated over $10M+ in combined revenue using our proven systems, AI-powered tools, and step-by-step blueprints.
+
+<h4>💰 What's Included</h4>
+✅ <strong>Sports Betting Systems</strong> - Proven +EV strategies. Follow top traders who are up millions. Real-time bot alerts delivered to your phone.
+✅ <strong>E-Commerce Mastery</strong> - Step-by-step systems to launch & scale profitable stores. Members doing $10K+ days and $300K+ months.
+✅ <strong>AI Automation & Selling AI</strong> - Learn to build and sell AI-powered services. Automate workflows and 10x your output. High demand, low competition.
+✅ <strong>Affiliate Marketing Playbooks</strong> - Proven systems for earning $10K+/month in commissions with our scaling blueprints.
+✅ <strong>Private Community</strong> - Active Discord with mentors, weekly strategy calls, and real-time market opportunities.
+✅ <strong>Automated Bots</strong> - Our proprietary bots scan markets 24/7 and send profitable opportunities straight to your phone.
+
+<h4>📊 Member Results</h4>
+• $10M+ combined member revenue
+• Top trader: +$22M verified profit
+• Members earning $42K+/month
+• Store revenue hitting $4.2M+
+• $15K/mo selling AI services
+
+<h4>🔥 Why Soldi?</h4>
+• 5+ income streams in one membership
+• AI-powered tools and automation built in
+• Active community with real mentorship
+• Proven results with verified screenshots
+• Weekly live strategy calls
+
+<h4>⚡ Get Started</h4>
+Click "Join" to get instant access to everything. All blueprints, tools, bots, community, and weekly calls. Start building your income streams today.</div>
+    </div>
+  </div>
+
+  <hr>
+
+  <div class="asset-section">
+    <div class="asset-label">COPY - POST-PURCHASE MESSAGE</div>
+    <div class="asset-name">Whop Success / Thank You Message</div>
+    <div class="copy-section">
+      <button class="copy-btn" onclick="copyText(this, 'successCopy')">Copy</button>
+      <div class="copy-text" id="successCopy"><h4>🎉 Welcome to Soldi!</h4>
+You just made one of the best investments in yourself. Here's how to get started:
+
+<strong>Step 1:</strong> Join the private Discord community (link below) and introduce yourself in #welcome
+<strong>Step 2:</strong> Check out the #start-here channel for your personalized roadmap
+<strong>Step 3:</strong> Pick your first income stream and dive into the blueprints
+<strong>Step 4:</strong> Join the next live strategy call (schedule pinned in Discord)
+
+Your bots and tools are already active. You'll start receiving alerts immediately.
+
+Questions? Drop them in #support or DM a mentor. We're here to help you win. 💰</div>
+    </div>
+  </div>
+
+  <hr>
+  <p style="color: #444; font-size: 12px; text-align: center; padding: 40px 0;">Soldi Whop Dashboard Assets</p>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script>
+    // PNG download
+    async function downloadAsset(elementId, filename, width, height) {
+      const el = document.getElementById(elementId);
+      try {
+        const canvas = await html2canvas(el, {
+          width, height, scale: 1,
+          backgroundColor: '#050507',
+          useCORS: true, logging: false
+        });
+        const link = document.createElement('a');
+        link.download = filename + '.png';
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+      } catch(e) {
+        alert('Right-click the image and "Save image as..." instead.');
+      }
+    }
+
+    // ========== PURE CANVAS VIDEO RECORDER ==========
+    async function recordVideo() {
+      const btn = document.getElementById('recordBtn');
+      const status = document.getElementById('recordStatus');
+
+      btn.classList.add('recording');
+      btn.innerHTML = '⏺ Loading images...';
+      status.textContent = 'Preparing video...';
+
+      const W = 1920, H = 1080;
+      const canvas = document.createElement('canvas');
+      canvas.width = W; canvas.height = H;
+      const ctx = canvas.getContext('2d');
+
+      // Load all success images
+      const imgSrcs = [
+        'images/betting-success/bet-success-1.png',
+        'images/ecom-success/ecom-success-1.jpg',
+        'images/betting-success/bet-success-6.png',
+        'images/betting-success/bet-success-3.png',
+        'images/ecom-success/ecom-success-4.png',
+        'images/betting-success/bet-success-8.png',
+        'images/ecom-success/ecom-success-2.jpg',
+        'images/betting-success/bet-success-10.png',
+        'images/ecom-success/ecom-success-6.png',
+        'images/betting-success/bet-success-5.png',
+        'images/betting-success/bet-success-12.png',
+        'images/betting-success/bet-success-15.png',
+        'images/betting-success/bet-success-7.png',
+        'images/ecom-success/ecom-success-8.jpg',
+        'images/betting-success/bet-success-14.png',
+        'images/betting-success/bet-success-9.png',
+        'images/ecom-success/ecom-success-5.png',
+        'images/betting-success/bet-success-16.png',
+      ];
+
+      const images = await Promise.all(imgSrcs.map(src => {
+        return new Promise(resolve => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.onerror = () => resolve(null);
+          img.src = src;
+        });
+      }));
+
+      // Column config: 6 columns, 3 images each
+      const cols = [];
+      for (let i = 0; i < 6; i++) {
+        cols.push(images.slice(i * 3, i * 3 + 3).filter(Boolean));
+      }
+
+      const colW = 260, colH = 340, gap = 24, colGap = 20;
+      const totalW = cols.length * colW + (cols.length - 1) * colGap;
+      const startX = (W - totalW) / 2;
+
+      // Animation params per column (alternating up/down)
+      const colAnim = [
+        { dir: -1, speed: 0.0031 },
+        { dir: 1, speed: 0.0028 },
+        { dir: -1, speed: 0.0035 },
+        { dir: 1, speed: 0.0025 },
+        { dir: -1, speed: 0.003 },
+        { dir: 1, speed: 0.0033 },
+      ];
+
+      // Setup MediaRecorder
+      const stream = canvas.captureStream(30);
+      let mimeType = 'video/webm;codecs=vp9';
+      if (!MediaRecorder.isTypeSupported(mimeType)) {
+        mimeType = 'video/webm';
+      }
+      const recorder = new MediaRecorder(stream, {
+        mimeType: mimeType,
+        videoBitsPerSecond: 8000000
+      });
+
+      const chunks = [];
+      recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+      recorder.onstop = () => {
+        const blob = new Blob(chunks, { type: 'video/webm' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'soldi-success-video-1920x1080.webm';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        btn.classList.remove('recording');
+        btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4" fill="currentColor"/></svg> Record & Download Video (20 sec)';
+        status.textContent = '✅ Video downloaded! Upload it to your Whop product page.';
+      };
+
+      // Helper to draw rounded rect
+      function roundRect(x, y, w, h, r) {
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.lineTo(x + w - r, y);
+        ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+        ctx.lineTo(x + w, y + h - r);
+        ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+        ctx.lineTo(x + r, y + h);
+        ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+        ctx.lineTo(x, y + r);
+        ctx.quadraticCurveTo(x, y, x + r, y);
+        ctx.closePath();
+      }
+
+      // Draw image contained in box
+      function drawContained(img, x, y, bw, bh) {
+        if (!img) return;
+        const scale = Math.min(bw / img.width, bh / img.height);
+        const dw = img.width * scale;
+        const dh = img.height * scale;
+        const dx = x + (bw - dw) / 2;
+        const dy = y + (bh - dh) / 2;
+        ctx.drawImage(img, dx, dy, dw, dh);
+      }
+
+      // Gradient helper
+      function greenGrad(x, y, w, h) {
+        const g = ctx.createLinearGradient(x, y, x + w, y + h);
+        g.addColorStop(0, '#22c55e');
+        g.addColorStop(0.5, '#10b981');
+        g.addColorStop(1, '#06d6a0');
+        return g;
+      }
+
+      const duration = 20000;
+      const startTime = performance.now();
+
+      btn.innerHTML = '⏺ Recording...';
+      recorder.start(100);
+
+      function renderFrame(now) {
+        const elapsed = now - startTime;
+        if (elapsed >= duration) {
+          recorder.stop();
+          return;
+        }
+
+        // BG
+        ctx.fillStyle = '#050507';
+        ctx.fillRect(0, 0, W, H);
+
+        // Grid
+        ctx.strokeStyle = 'rgba(34,197,94,0.03)';
+        ctx.lineWidth = 1;
+        for (let x = 0; x < W; x += 60) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+        for (let y = 0; y < H; y += 60) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+
+        // Orbs
+        const orbG1 = ctx.createRadialGradient(150, 100, 0, 150, 100, 350);
+        orbG1.addColorStop(0, 'rgba(34,197,94,0.1)'); orbG1.addColorStop(1, 'transparent');
+        ctx.fillStyle = orbG1; ctx.fillRect(0, 0, 700, 700);
+
+        const orbG2 = ctx.createRadialGradient(W - 200, H - 100, 0, W - 200, H - 100, 300);
+        orbG2.addColorStop(0, 'rgba(16,185,129,0.06)'); orbG2.addColorStop(1, 'transparent');
+        ctx.fillStyle = orbG2; ctx.fillRect(W - 600, H - 600, 600, 600);
+
+        // Header - Logo
+        const logoX = W / 2 - 40, logoY = 50;
+        ctx.fillStyle = greenGrad(logoX, logoY, 80, 80);
+        roundRect(logoX, logoY, 80, 80, 22);
+        ctx.fill();
+        ctx.fillStyle = '#050507';
+        ctx.font = '900 52px Inter, system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('S', logoX + 40, logoY + 60);
+
+        // Title
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '900 56px Inter, system-ui, sans-serif';
+        ctx.fillText('See Why Members', W / 2, 190);
+        ctx.fillStyle = greenGrad(W/2 - 150, 200, 300, 50);
+        ctx.font = '900 56px Inter, system-ui, sans-serif';
+        ctx.fillText('Keep Winning', W / 2, 256);
+
+        // Subtitle
+        ctx.fillStyle = '#71717a';
+        ctx.font = '500 22px Inter, system-ui, sans-serif';
+        ctx.fillText('Real results. Real screenshots. Real money.', W / 2, 296);
+
+        // Draw animated columns
+        const stageTop = 320, stageH = 560;
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(0, stageTop, W, stageH);
+        ctx.clip();
+
+        cols.forEach((colImgs, ci) => {
+          const anim = colAnim[ci];
+          const offset = Math.sin(elapsed * anim.speed) * 140 * anim.dir;
+          const cx = startX + ci * (colW + colGap);
+
+          colImgs.forEach((img, ri) => {
+            const baseY = stageTop + ri * (colH + gap) + (stageH - 3 * colH - 2 * gap) / 2;
+            const iy = baseY + offset;
+
+            // Card background
+            ctx.fillStyle = '#0a0a0f';
+            roundRect(cx, iy, colW, colH, 16);
+            ctx.fill();
+
+            // Border
+            ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+            ctx.lineWidth = 1;
+            roundRect(cx, iy, colW, colH, 16);
+            ctx.stroke();
+
+            // Image (contained)
+            ctx.save();
+            roundRect(cx, iy, colW, colH, 16);
+            ctx.clip();
+            drawContained(img, cx, iy, colW, colH);
+            ctx.restore();
+          });
+        });
+        ctx.restore();
+
+        // Bottom stats
+        const bottomY = H - 120;
+        ctx.textAlign = 'center';
+
+        ctx.fillStyle = greenGrad(W/2 - 200, bottomY, 100, 40);
+        ctx.font = '900 40px Inter, system-ui, sans-serif';
+        ctx.fillText('$10M+', W / 2 - 120, bottomY);
+        ctx.fillStyle = '#71717a';
+        ctx.font = '500 14px Inter, system-ui, sans-serif';
+        ctx.fillText('Member Revenue', W / 2 - 120, bottomY + 22);
+
+        ctx.fillStyle = greenGrad(W/2 + 80, bottomY, 100, 40);
+        ctx.font = '900 40px Inter, system-ui, sans-serif';
+        ctx.fillText('5+', W / 2 + 120, bottomY);
+        ctx.fillStyle = '#71717a';
+        ctx.font = '500 14px Inter, system-ui, sans-serif';
+        ctx.fillText('Income Streams', W / 2 + 120, bottomY + 22);
+
+        // CTA button
+        const btnW = 440, btnH = 56, btnX = W / 2 - btnW / 2, btnY = H - 64;
+        ctx.fillStyle = greenGrad(btnX, btnY, btnW, btnH);
+        roundRect(btnX, btnY, btnW, btnH, 14);
+        ctx.fill();
+        ctx.fillStyle = '#050507';
+        ctx.font = '800 22px Inter, system-ui, sans-serif';
+        ctx.fillText('Join Soldi | $349.99 + $19.99/mo  →', W / 2, btnY + 37);
+
+        // Accent line
+        ctx.fillStyle = greenGrad(0, H - 4, W, 4);
+        ctx.fillRect(0, H - 4, W, 4);
+
+        // Status update
+        const sec = Math.round(elapsed / 1000);
+        status.textContent = `⏺ Recording... ${sec}s / 20s`;
+
+        requestAnimationFrame(renderFrame);
+      }
+
+      requestAnimationFrame(renderFrame);
+    }
+
+    // Copy text
+    function copyText(btn, id) {
+      const text = document.getElementById(id).innerText;
+      navigator.clipboard.writeText(text).then(() => {
+        btn.textContent = 'Copied!';
+        btn.style.color = '#fff';
+        btn.style.background = 'rgba(34,197,94,0.3)';
+        setTimeout(() => { btn.textContent = 'Copy'; btn.style.color = ''; btn.style.background = ''; }, 2000);
+      });
+    }
+  </script>
+
+</body>
+</html>
