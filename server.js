@@ -7,7 +7,23 @@ const path = require('path');
 const cheerio = require('cheerio');
 const bcrypt = require('bcryptjs');
 
+// Resend for post-purchase welcome emails
+let resend = null;
+try {
+  const { Resend } = require('resend');
+  if (process.env.RESEND_API_KEY) {
+    resend = new Resend(process.env.RESEND_API_KEY);
+    console.log('[Resend] Email service initialized');
+  }
+} catch (e) {
+  console.log('[Resend] Package not installed - email sending disabled');
+}
+
 const app = express();
+
+// Raw body for Whop webhook signature verification (MUST be before express.json())
+app.use('/api/webhooks/whop', express.raw({ type: 'application/json' }));
+
 app.use(express.json());
 app.use(express.static(path.join(__dirname)));
 
@@ -279,6 +295,34 @@ function requireAuth(req, res, next) {
   }
 }
 
+// ============================================
+// DUAL AUTH: Accept either API key or JWT Bearer token
+// ============================================
+function authenticateRequest(req) {
+  // Method 1: API key in query param
+  const key = req.query.key;
+  if (key) {
+    const keys = loadApiKeys();
+    const keyData = keys[key];
+    if (keyData && keyData.status === 'active') {
+      return { authenticated: true, email: keyData.email, apiKey: key, method: 'apikey' };
+    }
+  }
+
+  // Method 2: JWT Bearer token in Authorization header
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    try {
+      const decoded = jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
+      // Also find their API key for endpoints that need it
+      const existing = findKeyByMembershipId(decoded.membershipId);
+      return { authenticated: true, email: decoded.email, user: decoded, apiKey: existing?.key, method: 'jwt' };
+    } catch (e) { /* token invalid or expired */ }
+  }
+
+  return { authenticated: false };
+}
+
 function requireAdmin(req, res, next) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -403,12 +447,17 @@ app.post('/api/verify-membership', async (req, res) => {
       saveApiKeys(keys);
     }
 
+    // Extract first name from Whop user data
+    const fullName = found.user?.name || found.user?.username || null;
+    const firstName = fullName ? fullName.split(' ')[0] : null;
+
     // Sign JWT (14 day expiry)
     const token = jwt.sign(
       {
         membershipId: found.id,
         email: found.user?.email || found.email,
-        name: found.user?.name || null,
+        name: fullName,
+        firstName,
         status: found.status,
         affiliateLink,
         affiliateUsername,
@@ -424,7 +473,8 @@ app.post('/api/verify-membership', async (req, res) => {
       apiKey,
       user: {
         email: found.user?.email || found.email,
-        name: found.user?.name || null,
+        name: fullName,
+        firstName,
         status: found.status,
         affiliateLink,
         affiliateUsername,
@@ -496,35 +546,427 @@ app.get('/api/validate-key', (req, res) => {
 });
 
 // ============================================
-// GET /api/odds-data - Get odds data (requires API key)
+// GET /api/health - Service health check
 // ============================================
-app.get('/api/odds-data', (req, res) => {
-  const { key } = req.query;
-  if (!key) return res.status(400).json({ error: 'API key is required' });
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', uptime: process.uptime(), timestamp: new Date().toISOString(), version: '2.0.0' });
+});
 
-  const keys = loadApiKeys();
-  const keyData = keys[key];
+// ============================================
+// WHOP WEBHOOK: Post-purchase welcome email
+// ============================================
+app.post('/api/webhooks/whop', async (req, res) => {
+  const WHOP_WEBHOOK_SECRET = process.env.WHOP_WEBHOOK_SECRET;
 
-  if (!keyData || keyData.status !== 'active') {
-    return res.status(401).json({ error: 'Invalid or inactive API key' });
+  // Verify signature if secret is configured
+  if (WHOP_WEBHOOK_SECRET) {
+    const signature = req.headers['whop-signature'] || req.headers['x-whop-signature'];
+    const body = typeof req.body === 'string' ? req.body : req.body.toString('utf8');
+    const hmac = crypto.createHmac('sha256', WHOP_WEBHOOK_SECRET).update(body).digest('hex');
+    if (signature !== hmac) {
+      console.error('[Webhook] Invalid signature');
+      return res.status(401).json({ error: 'Invalid signature' });
+    }
   }
 
-  // Mock odds data (replace with real data feed later)
-  const now = new Date().toISOString();
-  const odds = [
-    { sport: 'NBA', game: 'Lakers vs Celtics', line: 'LAL -3.5', odds: '-110', book: 'FanDuel', edge: '3.2%', updated: now },
-    { sport: 'NBA', game: 'Warriors vs Bucks', line: 'Over 228.5', odds: '-105', book: 'DraftKings', edge: '2.8%', updated: now },
-    { sport: 'NBA', game: 'Nuggets vs 76ers', line: 'DEN ML', odds: '+145', book: 'BetMGM', edge: '4.1%', updated: now },
-    { sport: 'NFL', game: 'Chiefs vs Bills', line: 'KC -2.5', odds: '-108', book: 'Caesars', edge: '2.5%', updated: now },
-    { sport: 'NFL', game: 'Eagles vs Cowboys', line: 'Under 44.5', odds: '-112', book: 'FanDuel', edge: '1.9%', updated: now },
-    { sport: 'MLB', game: 'Yankees vs Red Sox', line: 'NYY ML', odds: '-135', book: 'DraftKings', edge: '3.7%', updated: now },
-    { sport: 'MLB', game: 'Dodgers vs Padres', line: 'Over 8.5', odds: '+100', book: 'BetMGM', edge: '2.1%', updated: now },
-    { sport: 'NHL', game: 'Rangers vs Bruins', line: 'NYR ML', odds: '+120', book: 'FanDuel', edge: '3.5%', updated: now },
-    { sport: 'NBA', game: 'Heat vs Knicks', line: 'NYK -5.5', odds: '-110', book: 'Caesars', edge: '2.3%', updated: now },
-    { sport: 'NFL', game: 'Ravens vs Bengals', line: 'BAL -1.5', odds: '-102', book: 'DraftKings', edge: '4.6%', updated: now },
-  ];
+  try {
+    const raw = typeof req.body === 'string' ? req.body : req.body.toString('utf8');
+    const event = JSON.parse(raw);
+    const eventType = event.action || event.event;
+    console.log(`[Webhook] Received: ${eventType}`);
 
-  return res.json({ success: true, odds, generatedAt: now });
+    if (eventType === 'membership.went_active' || eventType === 'membership.created') {
+      const membership = event.data;
+      const email = membership?.user?.email || membership?.email;
+      const name = membership?.user?.name || membership?.user?.username || null;
+      const firstName = name ? name.split(' ')[0] : null;
+
+      if (email && resend) {
+        try {
+          await resend.emails.send({
+            from: 'Soldi <onboarding@resend.dev>',
+            to: email,
+            subject: 'Welcome to Soldi — Get Started Now',
+            html: buildWelcomeEmailHtml(firstName || 'there', email)
+          });
+          console.log(`[Webhook] Welcome email sent to ${email}`);
+        } catch (emailErr) {
+          console.error('[Webhook] Email send error:', emailErr);
+        }
+      }
+    }
+
+    return res.json({ received: true });
+  } catch (err) {
+    console.error('[Webhook] Processing error:', err);
+    return res.status(400).json({ error: 'Invalid payload' });
+  }
+});
+
+function buildWelcomeEmailHtml(firstName, email) {
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;padding:0;background:#050507;font-family:'Inter',system-ui,-apple-system,sans-serif;">
+<div style="max-width:600px;margin:0 auto;background:#111;color:#fff;padding:40px;border-radius:16px;margin-top:20px;">
+  <div style="text-align:center;margin-bottom:32px;">
+    <div style="display:inline-block;width:60px;height:60px;background:linear-gradient(135deg,#22c55e,#10b981);border-radius:16px;line-height:60px;font-size:32px;font-weight:900;color:#050507;">S</div>
+  </div>
+  <h1 style="font-size:26px;font-weight:800;text-align:center;margin:0 0 8px;">Welcome to Soldi, ${firstName}!</h1>
+  <p style="color:#a1a1aa;text-align:center;margin:0 0 32px;font-size:15px;">Your membership is now active. Here's how to get started:</p>
+
+  <div style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:24px;margin-bottom:16px;">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
+      <span style="background:#22c55e;color:#050507;width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;">1</span>
+      <h3 style="color:#22c55e;margin:0;font-size:16px;">Verify on the Website</h3>
+    </div>
+    <p style="color:#d4d4d8;font-size:14px;margin:0;padding-left:40px;">Visit <a href="https://soldi-website.onrender.com" style="color:#22c55e;text-decoration:none;font-weight:600;">soldi-website.onrender.com</a> and enter your email (<strong style="color:#fff;">${email}</strong>) to unlock your dashboard and AI tools.</p>
+  </div>
+
+  <div style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:24px;margin-bottom:16px;">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
+      <span style="background:#22c55e;color:#050507;width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;">2</span>
+      <h3 style="color:#22c55e;margin:0;font-size:16px;">Explore Your AI Tools</h3>
+    </div>
+    <p style="color:#d4d4d8;font-size:14px;margin:0;padding-left:40px;">Access the Business Finder, Receptionist Leads, AI Image Generator, Chatbot Builder, Odds Screen, TikTok Analytics, and more — all from your dashboard.</p>
+  </div>
+
+  <div style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:24px;margin-bottom:32px;">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
+      <span style="background:#22c55e;color:#050507;width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;">3</span>
+      <h3 style="color:#22c55e;margin:0;font-size:16px;">Join the Discord</h3>
+    </div>
+    <p style="color:#d4d4d8;font-size:14px;margin:0;padding-left:40px;">Connect with other members for live alerts, whale tracking, and community discussions. Access Discord from your Whop dashboard or your Soldi member dashboard.</p>
+  </div>
+
+  <div style="text-align:center;margin-bottom:24px;">
+    <a href="https://soldi-website.onrender.com" style="display:inline-block;padding:14px 40px;background:linear-gradient(135deg,#22c55e,#10b981);color:#050507;font-weight:700;border-radius:10px;text-decoration:none;font-size:15px;">Go to Dashboard</a>
+  </div>
+
+  <p style="text-align:center;color:#52525b;font-size:12px;margin:0;">&copy; 2026 Soldi. All rights reserved.</p>
+</div>
+</body></html>`;
+}
+
+// ============================================
+// THE ODDS API: Sports Betting Data
+// ============================================
+const THE_ODDS_API_KEY = process.env.THE_ODDS_API_KEY;
+const oddsCache = new Map();
+
+function getOddsCache(key) {
+  const entry = oddsCache.get(key);
+  if (!entry) return null;
+  if (Date.now() > entry.expiry) { oddsCache.delete(key); return null; }
+  return entry.data;
+}
+function setOddsCache(key, data, ttlSeconds) {
+  oddsCache.set(key, { data, expiry: Date.now() + ttlSeconds * 1000 });
+}
+
+// Sportsbook definitions
+const ODDS_SPORTSBOOKS = [
+  { key: 'fanduel', name: 'FanDuel', shortName: 'FD' },
+  { key: 'draftkings', name: 'DraftKings', shortName: 'DK' },
+  { key: 'betmgm', name: 'BetMGM', shortName: 'MGM' },
+  { key: 'pinnacle', name: 'Pinnacle', shortName: 'PIN' },
+  { key: 'williamhill_us', name: 'Caesars', shortName: 'CZR' },
+  { key: 'bovada', name: 'Bovada', shortName: 'BOV' },
+  { key: 'bet365', name: 'Bet365', shortName: '365' },
+  { key: 'betonlineag', name: 'BetOnline', shortName: 'BOL' },
+  { key: 'betrivers', name: 'BetRivers', shortName: 'BR' },
+  { key: 'hardrock', name: 'Hard Rock Bet', shortName: 'HR' },
+  { key: 'novig', name: 'Novig', shortName: 'NOV' },
+  { key: 'bookmaker', name: 'Bookmaker', shortName: 'BM' },
+  { key: 'mybookieag', name: 'MyBookie', shortName: 'MB' },
+];
+const SHARP_BOOKS = ['pinnacle', 'novig'];
+
+const ODDS_SPORT_CATEGORIES = [
+  { id: 'basketball', name: 'Basketball', icon: '🏀', leagues: [
+    { key: 'basketball_nba', name: 'NBA' }, { key: 'basketball_ncaab', name: 'NCAAB' }
+  ]},
+  { id: 'football', name: 'Football', icon: '🏈', leagues: [
+    { key: 'americanfootball_nfl', name: 'NFL' }, { key: 'americanfootball_ncaaf', name: 'NCAAF' }
+  ]},
+  { id: 'baseball', name: 'Baseball', icon: '⚾', leagues: [
+    { key: 'baseball_mlb', name: 'MLB' }
+  ]},
+  { id: 'hockey', name: 'Hockey', icon: '🏒', leagues: [
+    { key: 'icehockey_nhl', name: 'NHL' }
+  ]},
+  { id: 'soccer', name: 'Soccer', icon: '⚽', leagues: [
+    { key: 'soccer_epl', name: 'EPL' }, { key: 'soccer_usa_mls', name: 'MLS' }
+  ]},
+  { id: 'mma', name: 'MMA', icon: '🥊', leagues: [
+    { key: 'mma_mixed_martial_arts', name: 'UFC' }
+  ]},
+  { id: 'tennis', name: 'Tennis', icon: '🎾', leagues: [
+    { key: 'tennis_atp_french_open', name: 'ATP' }, { key: 'tennis_wta_french_open', name: 'WTA' }
+  ]},
+];
+
+// ============================================
+// BETTING MATH (ported from OddsScreen/lib/sportsbooks.ts)
+// ============================================
+function impliedProbability(americanOdds) {
+  if (americanOdds > 0) return 100 / (americanOdds + 100);
+  return Math.abs(americanOdds) / (Math.abs(americanOdds) + 100);
+}
+
+function probToAmericanOdds(prob) {
+  if (prob <= 0 || prob >= 1) return 0;
+  if (prob >= 0.5) return Math.round(-(prob / (1 - prob)) * 100);
+  return Math.round(((1 - prob) / prob) * 100);
+}
+
+function formatAmericanOdds(odds) {
+  if (!odds || odds === 0) return '-';
+  return odds > 0 ? `+${odds}` : `${odds}`;
+}
+
+function devigProbabilities(imp1, imp2) {
+  const total = imp1 + imp2;
+  if (total <= 0) return [0.5, 0.5];
+  return [imp1 / total, imp2 / total];
+}
+
+function findMarketConsensusEV(bookOdds, sharpOddsList, sharpOppOddsList) {
+  if (!sharpOddsList.length) return { ev: 0, isPositive: false, trueProb: 0, kelly: 0 };
+  const avgImp = sharpOddsList.reduce((s, o) => s + impliedProbability(o), 0) / sharpOddsList.length;
+  const avgOpp = sharpOppOddsList.length > 0
+    ? sharpOppOddsList.reduce((s, o) => s + impliedProbability(o), 0) / sharpOppOddsList.length
+    : 1 - avgImp;
+  const [trueProb] = devigProbabilities(avgImp, avgOpp);
+  const decimal = bookOdds > 0 ? bookOdds / 100 + 1 : 100 / Math.abs(bookOdds) + 1;
+  const ev = (trueProb * decimal - 1) * 100;
+  const b = decimal - 1;
+  const kelly = b > 0 ? Math.max(0, (trueProb * b - (1 - trueProb)) / b) * 100 : 0;
+  return { ev: Math.round(ev * 100) / 100, isPositive: ev > 0, trueProb: Math.round(trueProb * 10000) / 100, kelly: Math.round(kelly * 100) / 100 };
+}
+
+function findArbitrageForEvent(allOdds) {
+  let bestHome = { bookmaker: '', odds: -Infinity };
+  let bestAway = { bookmaker: '', odds: -Infinity };
+  for (const o of allOdds) {
+    if (o.home > bestHome.odds) bestHome = { bookmaker: o.bookmaker, odds: o.home };
+    if (o.away > bestAway.odds) bestAway = { bookmaker: o.bookmaker, odds: o.away };
+  }
+  const homeD = bestHome.odds > 0 ? bestHome.odds / 100 + 1 : 100 / Math.abs(bestHome.odds) + 1;
+  const awayD = bestAway.odds > 0 ? bestAway.odds / 100 + 1 : 100 / Math.abs(bestAway.odds) + 1;
+  const arbPct = 1 / homeD + 1 / awayD;
+  if (arbPct < 1) {
+    const homeStake = (100 / homeD) / arbPct;
+    const awayStake = (100 / awayD) / arbPct;
+    const profit = ((1 / arbPct) - 1) * 100;
+    return {
+      profit: Math.round(profit * 100) / 100,
+      bets: [
+        { bookmaker: bestHome.bookmaker, side: 'home', odds: bestHome.odds, stake: Math.round(homeStake * 100) / 100 },
+        { bookmaker: bestAway.bookmaker, side: 'away', odds: bestAway.odds, stake: Math.round(awayStake * 100) / 100 },
+      ]
+    };
+  }
+  return null;
+}
+
+// Transform The Odds API response to our format
+function transformOddsEvents(rawEvents) {
+  return rawEvents.map(event => {
+    const bookmakers = (event.bookmakers || []).map(bm => {
+      const result = { key: bm.key, name: bm.title };
+      for (const market of bm.markets || []) {
+        if (market.key === 'h2h') {
+          const home = market.outcomes.find(o => o.name === event.home_team);
+          const away = market.outcomes.find(o => o.name === event.away_team);
+          const draw = market.outcomes.find(o => o.name === 'Draw');
+          result.moneyline = { home: home?.price || 0, away: away?.price || 0, draw: draw?.price || null };
+        }
+        if (market.key === 'spreads') {
+          const home = market.outcomes.find(o => o.name === event.home_team);
+          const away = market.outcomes.find(o => o.name === event.away_team);
+          result.spread = {
+            home: home?.price || 0, homePoint: home?.point || 0,
+            away: away?.price || 0, awayPoint: away?.point || 0
+          };
+        }
+        if (market.key === 'totals') {
+          const over = market.outcomes.find(o => o.name === 'Over');
+          const under = market.outcomes.find(o => o.name === 'Under');
+          result.total = {
+            over: over?.price || 0, overPoint: over?.point || 0,
+            under: under?.price || 0, underPoint: under?.point || 0
+          };
+        }
+      }
+      return result;
+    });
+    return {
+      id: event.id, sport: event.sport_title, sportKey: event.sport_key,
+      homeTeam: event.home_team, awayTeam: event.away_team,
+      commenceTime: event.commence_time, bookmakers
+    };
+  });
+}
+
+// Calculate +EV bets across all events
+function calculatePositiveEV(events) {
+  const evBets = [];
+  for (const event of events) {
+    const sharpML = event.bookmakers.filter(b => SHARP_BOOKS.includes(b.key) && b.moneyline);
+    const sharpHomeML = sharpML.map(b => b.moneyline.home).filter(Boolean);
+    const sharpAwayML = sharpML.map(b => b.moneyline.away).filter(Boolean);
+
+    for (const bm of event.bookmakers) {
+      if (SHARP_BOOKS.includes(bm.key)) continue;
+      const bookInfo = ODDS_SPORTSBOOKS.find(s => s.key === bm.key);
+
+      // Moneyline EV
+      if (bm.moneyline && sharpHomeML.length > 0) {
+        addEVBet(evBets, event, bm, bookInfo, 'Moneyline', bm.moneyline.home, event.homeTeam, sharpHomeML, sharpAwayML, null);
+        addEVBet(evBets, event, bm, bookInfo, 'Moneyline', bm.moneyline.away, event.awayTeam, sharpAwayML, sharpHomeML, null);
+      }
+      // Spread EV
+      if (bm.spread) {
+        const sharpSP = event.bookmakers.filter(b => SHARP_BOOKS.includes(b.key) && b.spread && Math.abs(b.spread.homePoint - bm.spread.homePoint) < 0.01);
+        if (sharpSP.length > 0) {
+          addEVBet(evBets, event, bm, bookInfo, `Spread ${bm.spread.homePoint > 0 ? '+' : ''}${bm.spread.homePoint}`, bm.spread.home, event.homeTeam, sharpSP.map(b => b.spread.home), sharpSP.map(b => b.spread.away), bm.spread.homePoint);
+          addEVBet(evBets, event, bm, bookInfo, `Spread ${bm.spread.awayPoint > 0 ? '+' : ''}${bm.spread.awayPoint}`, bm.spread.away, event.awayTeam, sharpSP.map(b => b.spread.away), sharpSP.map(b => b.spread.home), bm.spread.awayPoint);
+        }
+      }
+      // Total EV
+      if (bm.total) {
+        const sharpTOT = event.bookmakers.filter(b => SHARP_BOOKS.includes(b.key) && b.total && Math.abs(b.total.overPoint - bm.total.overPoint) < 0.01);
+        if (sharpTOT.length > 0) {
+          addEVBet(evBets, event, bm, bookInfo, `Over ${bm.total.overPoint}`, bm.total.over, 'Over', sharpTOT.map(b => b.total.over), sharpTOT.map(b => b.total.under), bm.total.overPoint);
+          addEVBet(evBets, event, bm, bookInfo, `Under ${bm.total.underPoint}`, bm.total.under, 'Under', sharpTOT.map(b => b.total.under), sharpTOT.map(b => b.total.over), bm.total.underPoint);
+        }
+      }
+    }
+  }
+  evBets.sort((a, b) => b.ev - a.ev);
+  return evBets;
+}
+
+function addEVBet(evBets, event, bm, bookInfo, marketType, odds, team, sharpSide, sharpOpp, point) {
+  if (!odds) return;
+  const result = findMarketConsensusEV(odds, sharpSide, sharpOpp);
+  if (result.isPositive && result.ev > 0.5) {
+    const avgImp = sharpSide.reduce((s, o) => s + impliedProbability(o), 0) / sharpSide.length;
+    const avgOpp = sharpOpp.reduce((s, o) => s + impliedProbability(o), 0) / sharpOpp.length;
+    const [tp] = devigProbabilities(avgImp, avgOpp);
+    evBets.push({
+      eventId: event.id, sport: event.sport, sportKey: event.sportKey,
+      homeTeam: event.homeTeam, awayTeam: event.awayTeam, commenceTime: event.commenceTime,
+      bookmaker: bm.key, bookmakerName: bookInfo?.name || bm.name,
+      team, odds, fairOdds: probToAmericanOdds(tp), ev: result.ev,
+      trueProb: result.trueProb, kelly: result.kelly, marketType, point
+    });
+  }
+}
+
+// Find arbitrage opportunities across all events
+function findArbitrageOpportunities(events) {
+  const arbs = [];
+  for (const event of events) {
+    const bmsWithML = event.bookmakers.filter(b => b.moneyline && b.moneyline.home && b.moneyline.away);
+    if (bmsWithML.length < 2) continue;
+    const oddsArray = bmsWithML.map(bm => ({ bookmaker: bm.key, home: bm.moneyline.home, away: bm.moneyline.away }));
+    const arb = findArbitrageForEvent(oddsArray);
+    if (arb) {
+      arbs.push({
+        eventId: event.id, sport: event.sport, sportKey: event.sportKey,
+        homeTeam: event.homeTeam, awayTeam: event.awayTeam, commenceTime: event.commenceTime,
+        profit: arb.profit,
+        bets: arb.bets.map(b => {
+          const bookInfo = ODDS_SPORTSBOOKS.find(s => s.key === b.bookmaker);
+          return { ...b, bookmakerName: bookInfo?.name || b.bookmaker, team: b.side === 'home' ? event.homeTeam : event.awayTeam };
+        })
+      });
+    }
+  }
+  arbs.sort((a, b) => b.profit - a.profit);
+  return arbs;
+}
+
+// Fetch odds from The Odds API (with cache)
+async function fetchOddsEvents(sport) {
+  const cacheKey = `odds_events_${sport}`;
+  const cached = getOddsCache(cacheKey);
+  if (cached) return { events: cached, cached: true };
+
+  if (!THE_ODDS_API_KEY) throw new Error('THE_ODDS_API_KEY not configured');
+
+  const bookmakers = ODDS_SPORTSBOOKS.map(b => b.key).join(',');
+  const url = `https://api.the-odds-api.com/v4/sports/${sport}/odds?apiKey=${THE_ODDS_API_KEY}&regions=us,us2&markets=h2h,spreads,totals&bookmakers=${bookmakers}&oddsFormat=american`;
+  const apiRes = await fetch(url);
+  if (!apiRes.ok) {
+    const err = await apiRes.text();
+    console.error('Odds API error:', apiRes.status, err);
+    throw new Error(`Odds API returned ${apiRes.status}`);
+  }
+  const remaining = apiRes.headers.get('x-requests-remaining');
+  const rawEvents = await apiRes.json();
+  const events = transformOddsEvents(rawEvents);
+  setOddsCache(cacheKey, events, 60);
+  console.log(`[Odds API] Fetched ${events.length} events for ${sport} (${remaining} requests remaining)`);
+  return { events, cached: false, remaining };
+}
+
+// GET /api/odds/sports - List sport categories
+app.get('/api/odds/sports', (req, res) => {
+  const auth = authenticateRequest(req);
+  if (!auth.authenticated) return res.status(401).json({ error: 'Authentication required' });
+  res.json({ success: true, categories: ODDS_SPORT_CATEGORIES, sportsbooks: ODDS_SPORTSBOOKS });
+});
+
+// GET /api/odds/events?sport=basketball_nba - Live odds
+app.get('/api/odds/events', async (req, res) => {
+  const auth = authenticateRequest(req);
+  if (!auth.authenticated) return res.status(401).json({ error: 'Authentication required' });
+  const sport = req.query.sport || 'basketball_nba';
+  try {
+    const result = await fetchOddsEvents(sport);
+    res.json({ success: true, events: result.events, cached: result.cached, remaining: result.remaining });
+  } catch (err) {
+    console.error('Odds events error:', err.message);
+    res.status(502).json({ error: err.message || 'Failed to fetch odds' });
+  }
+});
+
+// GET /api/odds/ev?sport=basketball_nba - +EV bets
+app.get('/api/odds/ev', async (req, res) => {
+  const auth = authenticateRequest(req);
+  if (!auth.authenticated) return res.status(401).json({ error: 'Authentication required' });
+  const sport = req.query.sport || 'basketball_nba';
+  const evCacheKey = `odds_ev_${sport}`;
+  const cached = getOddsCache(evCacheKey);
+  if (cached) return res.json({ success: true, bets: cached, cached: true });
+  try {
+    const result = await fetchOddsEvents(sport);
+    const evBets = calculatePositiveEV(result.events);
+    setOddsCache(evCacheKey, evBets, 120);
+    res.json({ success: true, bets: evBets, cached: false });
+  } catch (err) {
+    console.error('EV calculation error:', err.message);
+    res.status(502).json({ error: err.message || 'Failed to calculate EV' });
+  }
+});
+
+// GET /api/odds/arbitrage?sport=basketball_nba - Arbitrage opportunities
+app.get('/api/odds/arbitrage', async (req, res) => {
+  const auth = authenticateRequest(req);
+  if (!auth.authenticated) return res.status(401).json({ error: 'Authentication required' });
+  const sport = req.query.sport || 'basketball_nba';
+  const arbCacheKey = `odds_arb_${sport}`;
+  const cached = getOddsCache(arbCacheKey);
+  if (cached) return res.json({ success: true, arbs: cached, cached: true });
+  try {
+    const result = await fetchOddsEvents(sport);
+    const arbs = findArbitrageOpportunities(result.events);
+    setOddsCache(arbCacheKey, arbs, 120);
+    res.json({ success: true, arbs, cached: false });
+  } catch (err) {
+    console.error('Arbitrage calculation error:', err.message);
+    res.status(502).json({ error: err.message || 'Failed to calculate arbitrage' });
+  }
 });
 
 // ============================================
@@ -1264,14 +1706,8 @@ const BUSINESS_CATEGORIES = [
 // GET /api/business-finder/categories
 // ============================================
 app.get('/api/business-finder/categories', (req, res) => {
-  const { key } = req.query;
-  if (!key) return res.status(400).json({ error: 'API key is required' });
-
-  const keys = loadApiKeys();
-  const keyData = keys[key];
-  if (!keyData || keyData.status !== 'active') {
-    return res.status(401).json({ error: 'Invalid or inactive API key' });
-  }
+  const auth = authenticateRequest(req);
+  if (!auth.authenticated) return res.status(401).json({ error: 'Authentication required' });
 
   return res.json({
     success: true,
@@ -1283,11 +1719,13 @@ app.get('/api/business-finder/categories', (req, res) => {
 // GET /api/business-finder/search
 // ============================================
 app.get('/api/business-finder/search', async (req, res) => {
-  const { key, niche, city, state } = req.query;
+  const auth = authenticateRequest(req);
+  if (!auth.authenticated) return res.status(401).json({ error: 'Authentication required' });
+
+  const { niche, city, state } = req.query;
   // Support legacy 'location' param or new city/state params
   let location = req.query.location || '';
 
-  if (!key) return res.status(400).json({ error: 'API key is required' });
   if (!niche) return res.status(400).json({ error: 'Niche/category is required' });
 
   // Build location from city + state if not provided as single string
@@ -1305,15 +1743,8 @@ app.get('/api/business-finder/search', async (req, res) => {
     return res.status(400).json({ error: 'Location is required. Provide a city, state, or both.' });
   }
 
-  // Validate API key
-  const keys = loadApiKeys();
-  const keyData = keys[key];
-  if (!keyData || keyData.status !== 'active') {
-    return res.status(401).json({ error: 'Invalid or inactive API key' });
-  }
-
   // Check rate limit
-  if (!checkRateLimit(key)) {
+  if (!checkRateLimit(auth.apiKey || auth.email)) {
     return res.status(429).json({
       error: 'Rate limit exceeded. Maximum 10 searches per 5 minutes.',
       retryAfter: 300
@@ -1432,14 +1863,8 @@ const RECEPTIONIST_CATEGORIES = [
 
 // GET /api/receptionist-leads/categories
 app.get('/api/receptionist-leads/categories', (req, res) => {
-  const { key } = req.query;
-  if (!key) return res.status(400).json({ error: 'API key is required' });
-
-  const keys = loadApiKeys();
-  const keyData = keys[key];
-  if (!keyData || keyData.status !== 'active') {
-    return res.status(401).json({ error: 'Invalid or inactive API key' });
-  }
+  const auth = authenticateRequest(req);
+  if (!auth.authenticated) return res.status(401).json({ error: 'Authentication required' });
 
   return res.json({
     success: true,
@@ -1449,21 +1874,15 @@ app.get('/api/receptionist-leads/categories', (req, res) => {
 
 // GET /api/receptionist-leads/search
 app.get('/api/receptionist-leads/search', async (req, res) => {
-  const { key, category, location } = req.query;
+  const auth = authenticateRequest(req);
+  if (!auth.authenticated) return res.status(401).json({ error: 'Authentication required' });
 
-  if (!key) return res.status(400).json({ error: 'API key is required' });
+  const { category, location } = req.query;
   if (!category) return res.status(400).json({ error: 'Industry category is required' });
   if (!location) return res.status(400).json({ error: 'Location is required' });
 
-  // Validate API key
-  const keys = loadApiKeys();
-  const keyData = keys[key];
-  if (!keyData || keyData.status !== 'active') {
-    return res.status(401).json({ error: 'Invalid or inactive API key' });
-  }
-
   // Check rate limit
-  if (!checkReceptionistRateLimit(key)) {
+  if (!checkReceptionistRateLimit(auth.apiKey || auth.email)) {
     return res.status(429).json({
       error: 'Rate limit exceeded. Maximum 10 searches per 5 minutes.',
       retryAfter: 300
@@ -1548,12 +1967,8 @@ const IMAGE_SIZES = [
 ];
 
 app.get('/api/image-gen/models', (req, res) => {
-  const apiKey = req.query.key;
-  if (!apiKey) return res.status(400).json({ error: 'API key required' });
-  const keys = loadApiKeys();
-  if (!keys[apiKey] || keys[apiKey].status !== 'active') {
-    return res.status(401).json({ error: 'Invalid or inactive API key' });
-  }
+  const auth = authenticateRequest(req);
+  if (!auth.authenticated) return res.status(401).json({ error: 'Authentication required' });
   return res.json({
     success: true,
     models: IMAGE_MODELS,
@@ -1567,14 +1982,10 @@ app.get('/api/image-gen/models', (req, res) => {
 // AI IMAGE GENERATOR - Server-side Proxy
 // ============================================
 app.get('/api/image-gen/generate', async (req, res) => {
-  const { key, prompt, model, width, height, style, seed, enhance, nologo } = req.query;
+  const auth = authenticateRequest(req);
+  if (!auth.authenticated) return res.status(401).json({ error: 'Authentication required' });
 
-  // Validate API key
-  if (!key) return res.status(400).json({ error: 'API key required' });
-  const keys = loadApiKeys();
-  if (!keys[key] || keys[key].status !== 'active') {
-    return res.status(401).json({ error: 'Invalid or inactive API key' });
-  }
+  const { prompt, model, width, height, style, seed, enhance, nologo } = req.query;
 
   // Validate prompt
   if (!prompt || !prompt.trim()) {
@@ -1713,12 +2124,8 @@ const REVIEW_SMS_TEMPLATES = [
 ];
 
 app.get('/api/review-campaign/templates', (req, res) => {
-  const apiKey = req.query.key;
-  if (!apiKey) return res.status(400).json({ error: 'API key required' });
-  const keys = loadApiKeys();
-  if (!keys[apiKey] || keys[apiKey].status !== 'active') {
-    return res.status(401).json({ error: 'Invalid or inactive API key' });
-  }
+  const auth = authenticateRequest(req);
+  if (!auth.authenticated) return res.status(401).json({ error: 'Authentication required' });
   return res.json({
     success: true,
     emailTemplates: REVIEW_EMAIL_TEMPLATES,
@@ -1783,41 +2190,35 @@ function buildSystemPrompt(bot) {
 
 // List user's chatbots
 app.get('/api/chatbot/list', (req, res) => {
-  const apiKey = req.query.key;
-  if (!apiKey) return res.status(400).json({ error: 'API key required' });
-  const keys = loadApiKeys();
-  if (!keys[apiKey] || keys[apiKey].status !== 'active') {
-    return res.status(401).json({ error: 'Invalid or inactive API key' });
-  }
+  const auth = authenticateRequest(req);
+  if (!auth.authenticated) return res.status(401).json({ error: 'Authentication required' });
+  const storageKey = auth.apiKey || auth.email;
   const chatbots = loadChatbots();
-  return res.json({ success: true, chatbots: chatbots[apiKey] || [] });
+  return res.json({ success: true, chatbots: chatbots[storageKey] || [] });
 });
 
 // Save (create/update) a chatbot
 app.post('/api/chatbot/save', (req, res) => {
-  const { key, chatbot } = req.body;
-  if (!key) return res.status(400).json({ error: 'API key required' });
-  const keys = loadApiKeys();
-  if (!keys[key] || keys[key].status !== 'active') {
-    return res.status(401).json({ error: 'Invalid or inactive API key' });
-  }
+  const auth = authenticateRequest(req);
+  if (!auth.authenticated) return res.status(401).json({ error: 'Authentication required' });
+  const storageKey = auth.apiKey || auth.email;
+
+  const { chatbot } = req.body;
   if (!chatbot || !chatbot.businessName) {
     return res.status(400).json({ error: 'Business name is required' });
   }
 
   const chatbots = loadChatbots();
-  if (!chatbots[key]) chatbots[key] = [];
+  if (!chatbots[storageKey]) chatbots[storageKey] = [];
 
-  const existing = chatbot.id ? chatbots[key].findIndex(c => c.id === chatbot.id) : -1;
+  const existing = chatbot.id ? chatbots[storageKey].findIndex(c => c.id === chatbot.id) : -1;
   if (existing >= 0) {
-    // Update
-    chatbots[key][existing] = { ...chatbots[key][existing], ...chatbot, updatedAt: new Date().toISOString() };
+    chatbots[storageKey][existing] = { ...chatbots[storageKey][existing], ...chatbot, updatedAt: new Date().toISOString() };
   } else {
-    // Create
-    if (chatbots[key].length >= 5) {
+    if (chatbots[storageKey].length >= 5) {
       return res.status(400).json({ error: 'Maximum 5 chatbots per account' });
     }
-    chatbots[key].push({
+    chatbots[storageKey].push({
       id: crypto.randomUUID(),
       name: chatbot.name || chatbot.businessName + ' Bot',
       businessName: chatbot.businessName,
@@ -1835,23 +2236,21 @@ app.post('/api/chatbot/save', (req, res) => {
   }
 
   saveChatbots(chatbots);
-  return res.json({ success: true, chatbots: chatbots[key] });
+  return res.json({ success: true, chatbots: chatbots[storageKey] });
 });
 
 // Delete a chatbot
 app.delete('/api/chatbot/delete', (req, res) => {
-  const apiKey = req.query.key;
+  const auth = authenticateRequest(req);
+  if (!auth.authenticated) return res.status(401).json({ error: 'Authentication required' });
+  const storageKey = auth.apiKey || auth.email;
   const botId = req.query.id;
-  if (!apiKey || !botId) return res.status(400).json({ error: 'API key and chatbot ID required' });
-  const keys = loadApiKeys();
-  if (!keys[apiKey] || keys[apiKey].status !== 'active') {
-    return res.status(401).json({ error: 'Invalid or inactive API key' });
-  }
+  if (!botId) return res.status(400).json({ error: 'Chatbot ID required' });
   const chatbots = loadChatbots();
-  if (!chatbots[apiKey]) return res.json({ success: true, chatbots: [] });
-  chatbots[apiKey] = chatbots[apiKey].filter(c => c.id !== botId);
+  if (!chatbots[storageKey]) return res.json({ success: true, chatbots: [] });
+  chatbots[storageKey] = chatbots[storageKey].filter(c => c.id !== botId);
   saveChatbots(chatbots);
-  return res.json({ success: true, chatbots: chatbots[apiKey] });
+  return res.json({ success: true, chatbots: chatbots[storageKey] });
 });
 
 // Chat endpoint (public — called by widget and preview)

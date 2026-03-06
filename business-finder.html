@@ -685,7 +685,9 @@
       errorEl.style.display = 'none';
 
       try {
-        const res = await fetch('/api/validate-key?key=' + encodeURIComponent(key));
+        const token = localStorage.getItem('soldi_token');
+        const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+        const res = await fetch('/api/validate-key?key=' + encodeURIComponent(key), { headers });
         const data = await res.json();
 
         if (res.ok && data.success) {
@@ -720,7 +722,9 @@
 
     async function loadCategories(key) {
       try {
-        const res = await fetch('/api/business-finder/categories?key=' + encodeURIComponent(key));
+        const token = localStorage.getItem('soldi_token');
+        const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+        const res = await fetch('/api/business-finder/categories?key=' + encodeURIComponent(key), { headers });
         const data = await res.json();
 
         if (res.ok && data.success) {
@@ -821,7 +825,9 @@
           niche: selectedNiche.name,
           location: location
         });
-        const res = await fetch('/api/business-finder/search?' + params.toString());
+        const token = localStorage.getItem('soldi_token');
+        const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+        const res = await fetch('/api/business-finder/search?' + params.toString(), { headers });
         const data = await res.json();
 
         document.getElementById('finderLoading').classList.remove('active');
@@ -928,9 +934,11 @@
       document.getElementById('finderKeyInput').value = '';
     }
 
-    // Auto-auth from localStorage
-    (async function() {
+    // Auto-auth from localStorage (API key) or JWT token
+    (async function autoAuth() {
       if (currentApiKey) return; // already authenticated via sessionStorage
+
+      // Try API key first
       const savedKey = localStorage.getItem('soldi_api_key');
       if (savedKey) {
         try {
@@ -940,6 +948,24 @@
             sessionStorage.setItem('soldi_finder_key', savedKey);
             currentApiKey = savedKey;
             accessFinderScreen(savedKey);
+            return;
+          }
+        } catch (e) {}
+      }
+
+      // Fallback: Try JWT token
+      const savedToken = localStorage.getItem('soldi_token');
+      if (savedToken) {
+        try {
+          const res = await fetch('/api/me', {
+            headers: { 'Authorization': 'Bearer ' + savedToken }
+          });
+          const data = await res.json();
+          if (res.ok && data.success) {
+            currentApiKey = data.apiKey || 'jwt_auth';
+            sessionStorage.setItem('soldi_finder_key', currentApiKey);
+            accessFinderScreen(currentApiKey);
+            return;
           }
         } catch (e) {}
       }

@@ -143,6 +143,15 @@ function isValidEthAddress(addr) {
   return /^0x[a-fA-F0-9]{40}$/.test(addr);
 }
 
+function formatUptime(seconds) {
+  const d = Math.floor(seconds / 86400);
+  const h = Math.floor((seconds % 86400) / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (d > 0) return `${d}d ${h}h ${m}m`;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
 client.once('ready', () => {
   console.log(`\n✅ Soldi Bot is online as ${client.user.tag}`);
   console.log(`   Watching for !verify commands and new member joins\n`);
@@ -215,6 +224,94 @@ client.on('messageCreate', async (message) => {
     } catch (err) {
       await message.reply('❌ I couldn\'t send you a DM. Please enable DMs from server members and try again.');
     }
+    return;
+  }
+
+  // !status — Check health of all Soldi services (works in guild + DMs)
+  if (message.content.toLowerCase() === '!status') {
+    const statusMsg = await message.reply('🔍 Checking all services...');
+
+    const fields = [];
+
+    // 1. Website Server
+    try {
+      const res = await fetch('https://soldi-website.onrender.com/api/health', {
+        signal: AbortSignal.timeout(10000),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const uptime = data.uptime ? formatUptime(Math.floor(data.uptime)) : 'unknown';
+        fields.push({ name: '✅ Website Server', value: `Online — uptime: ${uptime}`, inline: false });
+      } else {
+        fields.push({ name: '❌ Website Server', value: `Responded with status ${res.status}`, inline: false });
+      }
+    } catch (err) {
+      fields.push({ name: '❌ Website Server', value: `Unreachable: ${err.message}`, inline: false });
+    }
+
+    // 2. Odds Screen API
+    try {
+      const res = await fetch('https://soldi-website.onrender.com/api/odds/sports', {
+        signal: AbortSignal.timeout(10000),
+      });
+      if (res.ok) {
+        fields.push({ name: '✅ Odds Screen API', value: 'Responding', inline: false });
+      } else {
+        fields.push({ name: '❌ Odds Screen API', value: `Responded with status ${res.status}`, inline: false });
+      }
+    } catch (err) {
+      fields.push({ name: '❌ Odds Screen API', value: `Unreachable: ${err.message}`, inline: false });
+    }
+
+    // 3. Discord Bot (self)
+    const botUptime = formatUptime(Math.floor(process.uptime()));
+    fields.push({ name: '✅ Discord Bot', value: `Online — uptime: ${botUptime}`, inline: false });
+
+    // 4. Polymarket Tracker
+    try {
+      const trackingPath = path.join(__dirname, 'data', 'user-tracking.json');
+      if (fs.existsSync(trackingPath)) {
+        const data = JSON.parse(fs.readFileSync(trackingPath, 'utf8'));
+        const userCount = Object.keys(data).length;
+        fields.push({ name: '✅ Polymarket Tracker', value: `Data file present — ${userCount} user(s) tracked`, inline: false });
+      } else {
+        fields.push({ name: '❌ Polymarket Tracker', value: 'No tracking data file found', inline: false });
+      }
+    } catch (err) {
+      fields.push({ name: '❌ Polymarket Tracker', value: `Error reading data: ${err.message}`, inline: false });
+    }
+
+    // 5. Twitter/X Bot
+    try {
+      const twitterStatePath = path.join(__dirname, 'data', 'twitter-bot-state.json');
+      if (fs.existsSync(twitterStatePath)) {
+        const state = JSON.parse(fs.readFileSync(twitterStatePath, 'utf8'));
+        const lastRun = state.lastRun || state.lastCheck || state.updatedAt;
+        if (lastRun) {
+          const ago = Math.floor((Date.now() - new Date(lastRun).getTime()) / 60000);
+          fields.push({ name: '✅ Twitter/X Bot', value: `State file present — last activity ${ago}m ago`, inline: false });
+        } else {
+          fields.push({ name: '✅ Twitter/X Bot', value: 'State file present', inline: false });
+        }
+      } else {
+        fields.push({ name: '❌ Twitter/X Bot', value: 'No state file found', inline: false });
+      }
+    } catch (err) {
+      fields.push({ name: '❌ Twitter/X Bot', value: `Error reading state: ${err.message}`, inline: false });
+    }
+
+    const allGood = fields.every(f => f.name.startsWith('✅'));
+
+    await sendEmbed(message.channel.id, {
+      title: allGood ? '✅ All Systems Operational' : '⚠️ System Status',
+      description: allGood
+        ? 'All Soldi services are running normally.'
+        : 'One or more services may need attention.',
+      color: allGood ? COLORS.GREEN : COLORS.YELLOW,
+      fields,
+      footer: { text: 'Soldi • Service Status' },
+    });
+
     return;
   }
 
@@ -382,6 +479,7 @@ client.on('messageCreate', async (message) => {
           { name: '!untrack 0x...', value: 'Stop tracking an address', inline: false },
           { name: '!mytrackers', value: 'List your tracked addresses', inline: false },
           { name: '!whales', value: 'Show default whale addresses', inline: false },
+          { name: '!status', value: 'Check health of all Soldi services', inline: false },
         ],
         footer: { text: 'Soldi' },
       });

@@ -762,7 +762,9 @@
       }
 
       try {
-        const res = await fetch(`/api/validate-key?key=${encodeURIComponent(key)}`);
+        const token = localStorage.getItem('soldi_token');
+        const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+        const res = await fetch(`/api/validate-key?key=${encodeURIComponent(key)}`, { headers });
         const data = await res.json();
         if (data.success) {
           currentApiKey = key;
@@ -789,7 +791,9 @@
 
       // Load styles from API or use defaults
       try {
-        const res = await fetch(`/api/image-gen/models?key=${encodeURIComponent(currentApiKey)}`);
+        const token = localStorage.getItem('soldi_token');
+        const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+        const res = await fetch(`/api/image-gen/models?key=${encodeURIComponent(currentApiKey)}`, { headers });
         const data = await res.json();
         if (data.success) {
           stylePresets = data.stylePresets || DEFAULT_STYLES;
@@ -860,7 +864,9 @@
       const proxyUrl = `/api/image-gen/generate?${params.toString()}`;
 
       try {
-        const response = await fetch(proxyUrl);
+        const token = localStorage.getItem('soldi_token');
+        const fetchHeaders = token ? { 'Authorization': 'Bearer ' + token } : {};
+        const response = await fetch(proxyUrl, { headers: fetchHeaders });
 
         if (!response.ok) {
           let errorMsg = 'Failed to generate image. The service may be busy — please try again.';
@@ -973,9 +979,11 @@
       }
     });
 
-    // Auto-auth from localStorage
-    (async function() {
+    // Auto-auth from localStorage (API key) or JWT token
+    (async function autoAuth() {
       if (currentApiKey) return;
+
+      // Try API key first
       const savedKey = localStorage.getItem('soldi_api_key');
       if (savedKey) {
         try {
@@ -985,6 +993,24 @@
             currentApiKey = savedKey;
             sessionStorage.setItem('soldi_imagegen_key', savedKey);
             accessIgenScreen();
+            return;
+          }
+        } catch (e) {}
+      }
+
+      // Fallback: Try JWT token
+      const savedToken = localStorage.getItem('soldi_token');
+      if (savedToken) {
+        try {
+          const res = await fetch('/api/me', {
+            headers: { 'Authorization': 'Bearer ' + savedToken }
+          });
+          const data = await res.json();
+          if (res.ok && data.success) {
+            currentApiKey = data.apiKey || 'jwt_auth';
+            sessionStorage.setItem('soldi_imagegen_key', currentApiKey);
+            accessIgenScreen();
+            return;
           }
         } catch (e) {}
       }

@@ -1303,7 +1303,7 @@
 
     function showDashboard(user, apiKey) {
       document.getElementById('dashboard').style.display = 'block';
-      document.getElementById('dashboardEmail').textContent = user.name || user.email;
+      document.getElementById('dashboardEmail').textContent = user.firstName || user.name || user.email;
 
       const statusEl = document.getElementById('dashStatus');
       const badge = statusEl.querySelector('.status-badge');

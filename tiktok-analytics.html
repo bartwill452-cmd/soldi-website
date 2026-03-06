@@ -195,7 +195,9 @@
       const key = document.getElementById('ttKeyInput').value.trim();
       if (!key) return;
       try {
-        const res = await fetch('/api/validate-key?key=' + encodeURIComponent(key));
+        const token = localStorage.getItem('soldi_token');
+        const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+        const res = await fetch('/api/validate-key?key=' + encodeURIComponent(key), { headers });
         const data = await res.json();
         if (data.success) {
           API_KEY = key;
@@ -236,7 +238,9 @@
 
       try {
         const url = `/api/tiktok-shop/trending?key=${encodeURIComponent(API_KEY)}&period=${currentPeriod}` + (forceRefresh ? '&bust=' + Date.now() : '');
-        const res = await fetch(url);
+        const token = localStorage.getItem('soldi_token');
+        const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+        const res = await fetch(url, { headers });
         const data = await res.json();
 
         if (!data.success) throw new Error(data.error || 'Failed');
@@ -343,9 +347,10 @@
       btn.textContent = 'Analyzing...';
 
       try {
+        const token = localStorage.getItem('soldi_token');
         const res = await fetch('/api/tiktok-shop/analyze', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { ...(token ? { 'Authorization': 'Bearer ' + token } : {}), 'Content-Type': 'application/json' },
           body: JSON.stringify({ key: API_KEY, video })
         });
         const data = await res.json();
@@ -372,9 +377,11 @@
 
     function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
 
-    // Auto-auth from localStorage
-    (async function() {
+    // Auto-auth from localStorage (API key) or JWT token
+    (async function autoAuth() {
       if (API_KEY) return;
+
+      // Try API key first
       const savedKey = localStorage.getItem('soldi_api_key');
       if (savedKey) {
         try {
@@ -386,6 +393,26 @@
             document.getElementById('ttGate').style.display = 'none';
             document.getElementById('ttApp').style.display = 'block';
             fetchTrending();
+            return;
+          }
+        } catch (e) {}
+      }
+
+      // Fallback: Try JWT token
+      const savedToken = localStorage.getItem('soldi_token');
+      if (savedToken) {
+        try {
+          const res = await fetch('/api/me', {
+            headers: { 'Authorization': 'Bearer ' + savedToken }
+          });
+          const data = await res.json();
+          if (res.ok && data.success) {
+            API_KEY = data.apiKey || 'jwt_auth';
+            sessionStorage.setItem('soldi_tiktok_analytics_key', API_KEY);
+            document.getElementById('ttGate').style.display = 'none';
+            document.getElementById('ttApp').style.display = 'block';
+            fetchTrending();
+            return;
           }
         } catch (e) {}
       }

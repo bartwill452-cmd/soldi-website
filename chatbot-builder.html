@@ -1025,7 +1025,9 @@
         return;
       }
       try {
-        const res = await fetch(`/api/validate-key?key=${encodeURIComponent(key)}`);
+        const token = localStorage.getItem('soldi_token');
+        const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+        const res = await fetch(`/api/validate-key?key=${encodeURIComponent(key)}`, { headers });
         const data = await res.json();
         if (data.success) {
           currentApiKey = key;
@@ -1063,7 +1065,9 @@
     // ---- Data ----
     async function loadBots() {
       try {
-        const res = await fetch(`/api/chatbot/list?key=${encodeURIComponent(currentApiKey)}`);
+        const token = localStorage.getItem('soldi_token');
+        const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+        const res = await fetch(`/api/chatbot/list?key=${encodeURIComponent(currentApiKey)}`, { headers });
         const data = await res.json();
         chatbots = data.chatbots || [];
         renderBotList();
@@ -1180,9 +1184,10 @@
       };
 
       try {
+        const token = localStorage.getItem('soldi_token');
         const res = await fetch('/api/chatbot/save', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { ...(token ? { 'Authorization': 'Bearer ' + token } : {}), 'Content-Type': 'application/json' },
           body: JSON.stringify({ key: currentApiKey, chatbot }),
         });
         const data = await res.json();
@@ -1207,7 +1212,9 @@
     async function deleteBot(id) {
       if (!confirm('Delete this chatbot?')) return;
       try {
-        const res = await fetch(`/api/chatbot/delete?key=${encodeURIComponent(currentApiKey)}&id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+        const token = localStorage.getItem('soldi_token');
+        const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+        const res = await fetch(`/api/chatbot/delete?key=${encodeURIComponent(currentApiKey)}&id=${encodeURIComponent(id)}`, { method: 'DELETE', headers });
         const data = await res.json();
         chatbots = data.chatbots || [];
         if (currentBotId === id) {
@@ -1321,9 +1328,10 @@
       document.getElementById('cbPreviewSend').disabled = true;
 
       try {
+        const token = localStorage.getItem('soldi_token');
         const res = await fetch('/api/chatbot/chat', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { ...(token ? { 'Authorization': 'Bearer ' + token } : {}), 'Content-Type': 'application/json' },
           body: JSON.stringify({
             chatbotId: currentBotId,
             message: text,
@@ -1393,9 +1401,11 @@
       return d.innerHTML;
     }
 
-    // Auto-auth from localStorage
-    (async function() {
+    // Auto-auth from localStorage (API key) or JWT token
+    (async function autoAuth() {
       if (currentApiKey) return;
+
+      // Try API key first
       const savedKey = localStorage.getItem('soldi_api_key');
       if (savedKey) {
         try {
@@ -1405,6 +1415,24 @@
             currentApiKey = savedKey;
             sessionStorage.setItem('soldi_chatbot_key', savedKey);
             enterDashboard();
+            return;
+          }
+        } catch (e) {}
+      }
+
+      // Fallback: Try JWT token
+      const savedToken = localStorage.getItem('soldi_token');
+      if (savedToken) {
+        try {
+          const res = await fetch('/api/me', {
+            headers: { 'Authorization': 'Bearer ' + savedToken }
+          });
+          const data = await res.json();
+          if (res.ok && data.success) {
+            currentApiKey = data.apiKey || 'jwt_auth';
+            sessionStorage.setItem('soldi_chatbot_key', currentApiKey);
+            enterDashboard();
+            return;
           }
         } catch (e) {}
       }
