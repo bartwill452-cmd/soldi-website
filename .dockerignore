@@ -1,0 +1,17 @@
+node_modules
+.env
+.git
+.gitignore
+*.md
+*.db
+*.db-shm
+*.db-wal
+soldi-api/venv
+soldi-api/__pycache__
+soldi-api/.env
+soldi-api/line_history.db*
+soldi-api/discover_*.py
+soldi-api/benchmark_*.py
+images/*.mp4
+generate-*.js
+set-bot-avatar.js
