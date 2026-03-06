@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Dashboard - Soldi</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon.png">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    .admin-page { padding: 120px 0 80px; min-height: 100vh; }
+
+    /* Login Gate */
+    .admin-gate { max-width: 420px; margin: 80px auto 0; text-align: center; }
+    .admin-gate-icon { width: 64px; height: 64px; background: rgba(16,185,129,0.12); border-radius: 16px; display: flex; align-items: center; justify-content: center; margin: 0 auto 24px; color: #10b981; }
+    .admin-gate h2 { font-size: 28px; font-weight: 800; color: #fff; margin-bottom: 8px; }
+    .admin-gate p { font-size: 14px; color: #71717a; line-height: 1.6; margin-bottom: 28px; }
+    .admin-gate-form { display: flex; flex-direction: column; gap: 12px; margin-bottom: 12px; }
+    .admin-gate-form input { padding: 14px 16px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; color: #fff; font-size: 14px; font-family: 'Inter', sans-serif; outline: none; transition: border-color 0.2s; }
+    .admin-gate-form input:focus { border-color: #10b981; }
+    .admin-gate-form input::placeholder { color: #52525b; }
+    .admin-gate-btn { padding: 14px; background: #10b981; color: #fff; border: none; border-radius: 10px; font-size: 15px; font-weight: 700; font-family: 'Inter', sans-serif; cursor: pointer; transition: all 0.2s; }
+    .admin-gate-btn:hover { background: #059669; transform: translateY(-1px); }
+    .admin-gate-error { color: #ef4444; font-size: 13px; margin-top: 8px; display: none; }
+
+    /* Dashboard */
+    .admin-dash { display: none; max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+    .admin-dash.active { display: block; }
+
+    /* Header */
+    .admin-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 32px; flex-wrap: wrap; gap: 16px; }
+    .admin-header-left { display: flex; align-items: center; gap: 16px; }
+    .admin-header-left h1 { font-size: 28px; font-weight: 800; color: #fff; }
+    .admin-header-left h1 span { color: #10b981; }
+    .admin-header-right { display: flex; align-items: center; gap: 16px; }
+    .admin-email { font-size: 13px; color: #71717a; }
+    .admin-role-badge { font-size: 11px; font-weight: 700; text-transform: uppercase; padding: 4px 10px; border-radius: 6px; background: rgba(16,185,129,0.15); color: #10b981; letter-spacing: 0.5px; }
+    .admin-logout-btn { padding: 8px 16px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #a1a1aa; font-size: 13px; font-weight: 600; cursor: pointer; font-family: 'Inter', sans-serif; transition: all 0.2s; }
+    .admin-logout-btn:hover { background: rgba(239,68,68,0.1); border-color: rgba(239,68,68,0.3); color: #ef4444; }
+
+    /* Stats cards — 2 rows of 3 */
+    .admin-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 32px; }
+    .admin-stat-card { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 14px; padding: 24px; }
+    .admin-stat-label { font-size: 13px; color: #71717a; font-weight: 500; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+    .admin-stat-value { font-size: 36px; font-weight: 800; color: #fff; }
+    .admin-stat-card:nth-child(1) .admin-stat-value { color: #10b981; }
+    .admin-stat-card:nth-child(2) .admin-stat-value { color: #3b82f6; }
+    .admin-stat-card:nth-child(3) .admin-stat-value { color: #a855f7; }
+    .admin-stat-card:nth-child(4) .admin-stat-value { color: #10b981; }
+    .admin-stat-card:nth-child(5) .admin-stat-value { color: #3b82f6; }
+    .admin-stat-card:nth-child(6) .admin-stat-value { color: #f59e0b; }
+
+    /* Live pulse dot */
+    .live-dot { width: 8px; height: 8px; background: #10b981; border-radius: 50%; display: inline-block; animation: livePulse 2s ease-in-out infinite; }
+    @keyframes livePulse { 0%,100% { opacity: 1; box-shadow: 0 0 0 0 rgba(16,185,129,0.4); } 50% { opacity: 0.8; box-shadow: 0 0 0 8px rgba(16,185,129,0); } }
+
+    /* Tabs */
+    .admin-tabs { display: flex; gap: 4px; margin-bottom: 24px; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 0; overflow-x: auto; }
+    .admin-tab { padding: 12px 20px; font-size: 14px; font-weight: 600; color: #71717a; background: none; border: none; border-bottom: 2px solid transparent; cursor: pointer; font-family: 'Inter', sans-serif; transition: all 0.2s; margin-bottom: -1px; white-space: nowrap; }
+    .admin-tab:hover { color: #a1a1aa; }
+    .admin-tab.active { color: #10b981; border-bottom-color: #10b981; }
+    .admin-tab-panel { display: none; }
+    .admin-tab-panel.active { display: block; }
+
+    /* Toolbar */
+    .admin-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+    .admin-search { flex: 1; min-width: 200px; padding: 10px 14px 10px 38px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; color: #fff; font-size: 14px; font-family: 'Inter', sans-serif; outline: none; transition: border-color 0.2s; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2371717a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: 12px center; }
+    .admin-search:focus { border-color: #10b981; }
+    .admin-search::placeholder { color: #52525b; }
+    .admin-toolbar-btn { padding: 10px 18px; background: rgba(16,185,129,0.12); border: 1px solid rgba(16,185,129,0.2); border-radius: 10px; color: #10b981; font-size: 13px; font-weight: 600; cursor: pointer; font-family: 'Inter', sans-serif; transition: all 0.2s; white-space: nowrap; }
+    .admin-toolbar-btn:hover { background: rgba(16,185,129,0.2); }
+    .admin-filter-select { padding: 10px 14px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; color: #fff; font-size: 14px; font-family: 'Inter', sans-serif; outline: none; }
+    .admin-filter-select option { background: #18181b; color: #fff; }
+
+    /* Table */
+    .admin-table-wrap { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 14px; overflow: hidden; }
+    .admin-table { width: 100%; border-collapse: collapse; }
+    .admin-table th { padding: 14px 16px; text-align: left; font-size: 12px; font-weight: 600; color: #71717a; text-transform: uppercase; letter-spacing: 0.5px; background: rgba(255,255,255,0.03); border-bottom: 1px solid rgba(255,255,255,0.06); }
+    .admin-table td { padding: 14px 16px; font-size: 14px; color: #d4d4d8; border-bottom: 1px solid rgba(255,255,255,0.04); }
+    .admin-table tr:last-child td { border-bottom: none; }
+    .admin-table tr:hover td { background: rgba(255,255,255,0.02); }
+    .admin-table .name-cell { color: #fff; font-weight: 600; }
+    .admin-table .email-cell { color: #10b981; }
+    .admin-table .date-cell { color: #71717a; font-size: 13px; }
+    .admin-expand-btn { padding: 4px 10px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; color: #a1a1aa; font-size: 12px; cursor: pointer; font-family: 'Inter', sans-serif; transition: all 0.2s; }
+    .admin-expand-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
+    .admin-delete-btn { padding: 4px 10px; background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.15); border-radius: 6px; color: #ef4444; font-size: 12px; cursor: pointer; font-family: 'Inter', sans-serif; transition: all 0.2s; margin-left: 6px; }
+    .admin-delete-btn:hover { background: rgba(239,68,68,0.15); }
+    .admin-expanded-row td { padding: 0 16px; background: rgba(16,185,129,0.03); }
+    .admin-expanded-content { padding: 16px 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
+    .admin-detail-item label { display: block; font-size: 11px; font-weight: 600; color: #71717a; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+    .admin-detail-item span { font-size: 14px; color: #d4d4d8; }
+    .admin-pagination { display: flex; align-items: center; justify-content: space-between; padding: 16px; border-top: 1px solid rgba(255,255,255,0.06); }
+    .admin-pagination-info { font-size: 13px; color: #71717a; }
+    .admin-pagination-btns { display: flex; gap: 8px; }
+    .admin-page-btn { padding: 6px 14px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; color: #a1a1aa; font-size: 13px; cursor: pointer; font-family: 'Inter', sans-serif; transition: all 0.2s; }
+    .admin-page-btn:hover:not(:disabled) { background: rgba(255,255,255,0.08); color: #fff; }
+    .admin-page-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+    .admin-mgmt-form { display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; }
+    .admin-mgmt-form input { flex: 1; min-width: 180px; padding: 12px 16px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; color: #fff; font-size: 14px; font-family: 'Inter', sans-serif; outline: none; transition: border-color 0.2s; }
+    .admin-mgmt-form input:focus { border-color: #10b981; }
+    .admin-mgmt-form input::placeholder { color: #52525b; }
+    .admin-empty { text-align: center; padding: 60px 20px; color: #52525b; font-size: 15px; }
+    .admin-empty svg { margin-bottom: 16px; opacity: 0.3; }
+
+    /* Status badges */
+    .status-badge { padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; }
+    .status-open { background: rgba(234,179,8,0.15); color: #eab308; }
+    .status-responding { background: rgba(59,130,246,0.15); color: #3b82f6; }
+    .status-won { background: rgba(16,185,129,0.15); color: #10b981; }
+    .status-lost { background: rgba(239,68,68,0.15); color: #ef4444; }
+    .status-active { background: rgba(16,185,129,0.15); color: #10b981; }
+    .status-inactive { background: rgba(239,68,68,0.15); color: #ef4444; }
+
+    /* Dispute form */
+    .dispute-form { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 24px; margin-bottom: 24px; display: none; }
+    .dispute-form.active { display: block; }
+    .dispute-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .dispute-form-full { grid-column: 1 / -1; }
+    .dispute-form input, .dispute-form select, .dispute-form textarea { width: 100%; padding: 12px 16px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; color: #fff; font-size: 14px; font-family: 'Inter', sans-serif; outline: none; box-sizing: border-box; }
+    .dispute-form input:focus, .dispute-form select:focus, .dispute-form textarea:focus { border-color: #10b981; }
+    .dispute-form select option { background: #18181b; }
+    .dispute-form textarea { min-height: 80px; resize: vertical; }
+    .dispute-form-actions { display: flex; gap: 12px; margin-top: 16px; }
+    .dispute-stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 20px; }
+    .dispute-mini-stat { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; padding: 14px; text-align: center; }
+    .dispute-mini-stat .val { font-size: 22px; font-weight: 800; color: #fff; }
+    .dispute-mini-stat .lbl { font-size: 11px; color: #71717a; margin-top: 4px; text-transform: uppercase; }
+
+    /* Analytics */
+    .analytics-live { display: flex; align-items: center; gap: 20px; margin-bottom: 24px; padding: 20px; background: rgba(16,185,129,0.05); border: 1px solid rgba(16,185,129,0.15); border-radius: 14px; }
+    .analytics-live-count { font-size: 48px; font-weight: 800; color: #10b981; min-width: 80px; text-align: center; }
+    .analytics-live-label { font-size: 14px; color: #71717a; }
+    .analytics-live-sessions { flex: 1; max-height: 160px; overflow-y: auto; }
+    .analytics-live-session { padding: 6px 12px; font-size: 13px; color: #a1a1aa; display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.04); }
+    .analytics-metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
+    .analytics-metric { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; padding: 16px; text-align: center; }
+    .analytics-metric-value { font-size: 28px; font-weight: 800; color: #10b981; }
+    .analytics-metric-label { font-size: 12px; color: #71717a; margin-top: 4px; }
+    .analytics-section-title { font-size: 15px; font-weight: 700; color: #fff; margin: 24px 0 12px; }
+    .hourly-chart { display: flex; align-items: flex-end; gap: 2px; height: 120px; padding: 0; margin-bottom: 24px; }
+    .hourly-bar { flex: 1; background: rgba(16,185,129,0.3); border-radius: 3px 3px 0 0; min-height: 2px; transition: height 0.3s; position: relative; }
+    .hourly-bar:hover { background: #10b981; }
+    .hourly-labels { display: flex; gap: 2px; margin-bottom: 24px; }
+    .hourly-labels span { flex: 1; text-align: center; font-size: 9px; color: #52525b; }
+    .analytics-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+
+    /* Funnel */
+    .funnel-date-picker { margin-bottom: 20px; }
+    .funnel-date-picker input { padding: 10px 14px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; color: #fff; font-size: 14px; font-family: 'Inter', sans-serif; outline: none; color-scheme: dark; }
+    .funnel-chart { margin-bottom: 32px; }
+    .funnel-bar-wrap { margin-bottom: 8px; }
+    .funnel-bar-header { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 13px; }
+    .funnel-bar-name { color: #d4d4d8; font-weight: 600; }
+    .funnel-bar-nums { color: #71717a; }
+    .funnel-bar { height: 36px; background: rgba(16,185,129,0.2); border-left: 3px solid #10b981; display: flex; align-items: center; padding: 0 12px; border-radius: 0 8px 8px 0; transition: width 0.5s ease; }
+    .funnel-bar span { font-size: 14px; color: #fff; font-weight: 700; }
+    .funnel-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
+    .funnel-summary-card { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; padding: 16px; text-align: center; }
+    .funnel-summary-card .val { font-size: 28px; font-weight: 800; }
+    .funnel-summary-card .lbl { font-size: 12px; color: #71717a; margin-top: 4px; }
+
+    /* Toast */
+    .admin-toast { position: fixed; bottom: 24px; right: 24px; padding: 14px 20px; border-radius: 10px; font-size: 14px; font-weight: 600; color: #fff; z-index: 1000; transform: translateY(100px); opacity: 0; transition: all 0.3s; }
+    .admin-toast.show { transform: translateY(0); opacity: 1; }
+    .admin-toast.success { background: #10b981; }
+    .admin-toast.error { background: #ef4444; }
+
+    /* Mobile */
+    @media (max-width: 768px) {
+      .admin-stats { grid-template-columns: 1fr; }
+      .admin-header { flex-direction: column; align-items: flex-start; }
+      .admin-header-right { width: 100%; justify-content: space-between; }
+      .admin-table th:nth-child(4), .admin-table td:nth-child(4),
+      .admin-table th:nth-child(5), .admin-table td:nth-child(5) { display: none; }
+      .admin-mgmt-form { flex-direction: column; }
+      .dispute-form-grid { grid-template-columns: 1fr; }
+      .analytics-metrics { grid-template-columns: 1fr 1fr; }
+      .analytics-two-col { grid-template-columns: 1fr; }
+      .analytics-live { flex-direction: column; text-align: center; }
+      .funnel-summary { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <nav class="nav">
+    <div class="container nav-inner">
+      <a href="/" class="nav-logo">
+        <img src="/images/soldi-logo.png" alt="Soldi" class="nav-logo-img" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+        <span class="nav-logo-text" style="display:none;">Soldi</span>
+      </a>
+      <div class="nav-links">
+        <a href="/" class="nav-link">Home</a>
+      </div>
+    </div>
+  </nav>
+
+  <section class="admin-page">
+    <div class="container">
+
+      <!-- LOGIN GATE -->
+      <div class="admin-gate" id="loginGate">
+        <div class="admin-gate-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+          </svg>
+        </div>
+        <h2>Admin Dashboard</h2>
+        <p>Sign in with your admin credentials to manage submissions, view analytics, and configure your team.</p>
+        <form class="admin-gate-form" id="loginForm">
+          <input type="email" id="loginEmail" placeholder="Email address" required autocomplete="email">
+          <input type="password" id="loginPassword" placeholder="Password" required autocomplete="current-password">
+          <button type="submit" class="admin-gate-btn">Sign In</button>
+        </form>
+        <div class="admin-gate-error" id="loginError"></div>
+      </div>
+
+      <!-- DASHBOARD -->
+      <div class="admin-dash" id="dashboard">
+
+        <!-- Header -->
+        <div class="admin-header">
+          <div class="admin-header-left">
+            <h1><span>Soldi</span> Admin</h1>
+          </div>
+          <div class="admin-header-right">
+            <span class="admin-email" id="adminEmail"></span>
+            <span class="admin-role-badge" id="adminRole"></span>
+            <button class="admin-logout-btn" onclick="logout()">Logout</button>
+          </div>
+        </div>
+
+        <!-- Stats — 2 rows of 3 -->
+        <div class="admin-stats">
+          <div class="admin-stat-card">
+            <div class="admin-stat-label">Total Submissions</div>
+            <div class="admin-stat-value" id="statTotal">-</div>
+          </div>
+          <div class="admin-stat-card">
+            <div class="admin-stat-label">Today</div>
+            <div class="admin-stat-value" id="statToday">-</div>
+          </div>
+          <div class="admin-stat-card">
+            <div class="admin-stat-label">This Week</div>
+            <div class="admin-stat-value" id="statWeek">-</div>
+          </div>
+          <div class="admin-stat-card">
+            <div class="admin-stat-label"><span class="live-dot"></span> Live Visitors</div>
+            <div class="admin-stat-value" id="statLive">-</div>
+          </div>
+          <div class="admin-stat-card">
+            <div class="admin-stat-label">Today's Page Views</div>
+            <div class="admin-stat-value" id="statPageViews">-</div>
+          </div>
+          <div class="admin-stat-card">
+            <div class="admin-stat-label">Open Disputes</div>
+            <div class="admin-stat-value" id="statOpenDisputes">-</div>
+          </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="admin-tabs">
+          <button class="admin-tab active" data-tab="submissions">Submissions</button>
+          <button class="admin-tab" data-tab="users">Users</button>
+          <button class="admin-tab" data-tab="disputes">Disputes</button>
+          <button class="admin-tab" data-tab="analytics">Analytics</button>
+          <button class="admin-tab" data-tab="funnel">Funnel</button>
+          <button class="admin-tab" data-tab="admins" id="adminsTab" style="display:none;">Team</button>
+        </div>
+
+        <!-- Submissions Panel -->
+        <div class="admin-tab-panel active" id="panel-submissions">
+          <div class="admin-toolbar">
+            <input type="text" class="admin-search" id="searchInput" placeholder="Search by name, email, phone...">
+            <button class="admin-toolbar-btn" onclick="exportCSV()">Export CSV</button>
+          </div>
+          <div class="admin-table-wrap">
+            <table class="admin-table"><thead><tr><th>Date</th><th>Name</th><th>Email</th><th>Phone</th><th>Interest</th><th>Actions</th></tr></thead><tbody id="submissionsBody"></tbody></table>
+            <div class="admin-empty" id="submissionsEmpty" style="display:none;"><p>No submissions yet</p></div>
+            <div class="admin-pagination" id="pagination"><span class="admin-pagination-info" id="pageInfo"></span><div class="admin-pagination-btns"><button class="admin-page-btn" id="prevBtn" onclick="changePage(-1)">Previous</button><button class="admin-page-btn" id="nextBtn" onclick="changePage(1)">Next</button></div></div>
+          </div>
+        </div>
+
+        <!-- Users Panel -->
+        <div class="admin-tab-panel" id="panel-users">
+          <div class="admin-toolbar">
+            <input type="text" class="admin-search" id="usersSearch" placeholder="Search by email or membership ID...">
+            <select class="admin-filter-select" id="usersStatusFilter" onchange="loadUsers()">
+              <option value="all">All Status</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </div>
+          <div class="admin-table-wrap">
+            <table class="admin-table"><thead><tr><th>Email</th><th>Membership ID</th><th>API Key</th><th>Status</th><th>Created</th></tr></thead><tbody id="usersBody"></tbody></table>
+            <div class="admin-empty" id="usersEmpty" style="display:none;"><p>No users found</p></div>
+            <div class="admin-pagination" id="usersPagination"><span class="admin-pagination-info" id="usersPageInfo"></span><div class="admin-pagination-btns"><button class="admin-page-btn" id="usersPrevBtn" onclick="changeUsersPage(-1)">Previous</button><button class="admin-page-btn" id="usersNextBtn" onclick="changeUsersPage(1)">Next</button></div></div>
+          </div>
+        </div>
+
+        <!-- Disputes Panel -->
+        <div class="admin-tab-panel" id="panel-disputes">
+          <div class="dispute-stats-row" id="disputeStatsRow"></div>
+          <div class="admin-toolbar">
+            <input type="text" class="admin-search" id="disputesSearch" placeholder="Search by name, email, reason...">
+            <select class="admin-filter-select" id="disputesStatusFilter" onchange="loadDisputes()">
+              <option value="all">All Status</option>
+              <option value="open">Open</option>
+              <option value="responding">Responding</option>
+              <option value="won">Won</option>
+              <option value="lost">Lost</option>
+            </select>
+            <button class="admin-toolbar-btn" onclick="showDisputeForm()">+ New Dispute</button>
+          </div>
+
+          <!-- Dispute Form (inline, hidden by default) -->
+          <div class="dispute-form" id="disputeForm">
+            <h3 style="font-size:16px;font-weight:700;color:#fff;margin-bottom:16px;" id="disputeFormTitle">New Dispute</h3>
+            <input type="hidden" id="disputeEditId">
+            <div class="dispute-form-grid">
+              <div><label style="font-size:12px;color:#71717a;display:block;margin-bottom:4px;">Customer Name</label><input type="text" id="dfName" placeholder="John Doe"></div>
+              <div><label style="font-size:12px;color:#71717a;display:block;margin-bottom:4px;">Customer Email</label><input type="email" id="dfEmail" placeholder="john@email.com"></div>
+              <div><label style="font-size:12px;color:#71717a;display:block;margin-bottom:4px;">Amount ($)</label><input type="number" id="dfAmount" placeholder="49.99" step="0.01" min="0"></div>
+              <div><label style="font-size:12px;color:#71717a;display:block;margin-bottom:4px;">Status</label><select id="dfStatus"><option value="open">Open</option><option value="responding">Responding</option><option value="won">Won</option><option value="lost">Lost</option></select></div>
+              <div class="dispute-form-full"><label style="font-size:12px;color:#71717a;display:block;margin-bottom:4px;">Reason</label><input type="text" id="dfReason" placeholder="Product not as described"></div>
+              <div class="dispute-form-full"><label style="font-size:12px;color:#71717a;display:block;margin-bottom:4px;">Evidence</label><textarea id="dfEvidence" placeholder="Describe evidence to counter the dispute..."></textarea></div>
+              <div class="dispute-form-full"><label style="font-size:12px;color:#71717a;display:block;margin-bottom:4px;">Internal Notes</label><textarea id="dfNotes" placeholder="Internal notes (not shared with customer)"></textarea></div>
+            </div>
+            <div class="dispute-form-actions">
+              <button class="admin-toolbar-btn" onclick="saveDispute()">Save Dispute</button>
+              <button class="admin-toolbar-btn" style="background:rgba(255,255,255,0.06);border-color:rgba(255,255,255,0.1);color:#a1a1aa;" onclick="hideDisputeForm()">Cancel</button>
+            </div>
+          </div>
+
+          <div class="admin-table-wrap">
+            <table class="admin-table"><thead><tr><th>Date</th><th>Customer</th><th>Email</th><th>Amount</th><th>Status</th><th>Actions</th></tr></thead><tbody id="disputesBody"></tbody></table>
+            <div class="admin-empty" id="disputesEmpty" style="display:none;"><p>No disputes found</p></div>
+            <div class="admin-pagination" id="disputesPagination"><span class="admin-pagination-info" id="disputesPageInfo"></span><div class="admin-pagination-btns"><button class="admin-page-btn" id="disputesPrevBtn" onclick="changeDisputesPage(-1)">Previous</button><button class="admin-page-btn" id="disputesNextBtn" onclick="changeDisputesPage(1)">Next</button></div></div>
+          </div>
+        </div>
+
+        <!-- Analytics Panel -->
+        <div class="admin-tab-panel" id="panel-analytics">
+          <div class="analytics-live" id="analyticsLive">
+            <div>
+              <div class="analytics-live-count" id="liveCount">0</div>
+              <div class="analytics-live-label"><span class="live-dot"></span> Live Visitors</div>
+            </div>
+            <div class="analytics-live-sessions" id="liveSessions"><div style="color:#52525b;font-size:13px;">No active visitors</div></div>
+          </div>
+          <div class="analytics-metrics">
+            <div class="analytics-metric"><div class="analytics-metric-value" id="metricPageViews">0</div><div class="analytics-metric-label">Page Views</div></div>
+            <div class="analytics-metric"><div class="analytics-metric-value" id="metricUniques">0</div><div class="analytics-metric-label">Unique Visitors</div></div>
+            <div class="analytics-metric"><div class="analytics-metric-value" id="metricSessions">0</div><div class="analytics-metric-label">Sessions</div></div>
+            <div class="analytics-metric"><div class="analytics-metric-value" id="metricAvgDuration">0s</div><div class="analytics-metric-label">Avg Duration</div></div>
+          </div>
+          <div class="analytics-section-title">Hourly Traffic (Today)</div>
+          <div class="hourly-chart" id="hourlyChart"></div>
+          <div class="hourly-labels" id="hourlyLabels"></div>
+          <div class="analytics-two-col">
+            <div>
+              <div class="analytics-section-title">Popular Pages</div>
+              <div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Page</th><th>Views</th><th>Uniques</th></tr></thead><tbody id="topPagesBody"></tbody></table></div>
+            </div>
+            <div>
+              <div class="analytics-section-title">Top Referrers</div>
+              <div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Referrer</th><th>Count</th></tr></thead><tbody id="topRefBody"></tbody></table></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Funnel Panel -->
+        <div class="admin-tab-panel" id="panel-funnel">
+          <div class="funnel-date-picker">
+            <label style="font-size:13px;color:#71717a;margin-right:8px;">Date:</label>
+            <input type="date" id="funnelDate" onchange="loadFunnel()">
+          </div>
+          <div class="funnel-summary" id="funnelSummary"></div>
+          <div class="analytics-section-title">Conversion Funnel</div>
+          <div class="funnel-chart" id="funnelChart"></div>
+          <div class="analytics-section-title">Step-by-Step Breakdown</div>
+          <div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Step</th><th>From</th><th>To</th><th>Conversion</th><th>Drop-off</th></tr></thead><tbody id="funnelTableBody"></tbody></table></div>
+        </div>
+
+        <!-- Team Panel -->
+        <div class="admin-tab-panel" id="panel-admins">
+          <h3 style="font-size: 18px; font-weight: 700; color: #fff; margin-bottom: 20px;">Manage Admins</h3>
+          <div class="admin-mgmt-form">
+            <input type="email" id="newAdminEmail" placeholder="New admin email">
+            <input type="password" id="newAdminPassword" placeholder="Password (min 6 chars)">
+            <button class="admin-toolbar-btn" onclick="addAdmin()">Add Admin</button>
+          </div>
+          <div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Email</th><th>Role</th><th>Created</th><th>Actions</th></tr></thead><tbody id="adminsBody"></tbody></table></div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <div class="admin-toast" id="toast"></div>
+
+  <script>
+    const API_BASE = '';
+    let token = sessionStorage.getItem('soldi_admin_token');
+    let currentAdmin = null;
+    let currentPage = 1;
+    let currentSearch = '';
+    let searchTimeout = null;
+    let usersPage = 1;
+    let disputesPage = 1;
+    let liveInterval = null;
+
+    // ============================================
+    // INIT
+    // ============================================
+    async function init() {
+      if (token) {
+        try {
+          const me = await apiFetch('/api/admin/me');
+          currentAdmin = me;
+          showDashboard();
+        } catch {
+          sessionStorage.removeItem('soldi_admin_token');
+          token = null;
+        }
+      }
+    }
+
+    // ============================================
+    // AUTH
+    // ============================================
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('loginEmail').value;
+      const password = document.getElementById('loginPassword').value;
+      const errorEl = document.getElementById('loginError');
+      errorEl.style.display = 'none';
+      try {
+        const res = await fetch(API_BASE + '/api/admin/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Login failed');
+        token = data.token;
+        sessionStorage.setItem('soldi_admin_token', token);
+        currentAdmin = data.admin;
+        showDashboard();
+      } catch (err) {
+        errorEl.textContent = err.message;
+        errorEl.style.display = 'block';
+      }
+    });
+
+    function logout() {
+      sessionStorage.removeItem('soldi_admin_token');
+      token = null;
+      currentAdmin = null;
+      stopLiveRefresh();
+      document.getElementById('dashboard').classList.remove('active');
+      document.getElementById('loginGate').style.display = 'block';
+    }
+
+    // ============================================
+    // API HELPER
+    // ============================================
+    async function apiFetch(path, opts = {}) {
+      const res = await fetch(API_BASE + path, {
+        ...opts,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + token,
+          ...(opts.headers || {}),
+        },
+      });
+      if (res.status === 401) { logout(); throw new Error('Session expired'); }
+      if (res.headers.get('Content-Type')?.includes('text/csv')) return res.text();
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Request failed');
+      return data;
+    }
+
+    // ============================================
+    // DASHBOARD
+    // ============================================
+    function showDashboard() {
+      document.getElementById('loginGate').style.display = 'none';
+      document.getElementById('dashboard').classList.add('active');
+      document.getElementById('adminEmail').textContent = currentAdmin.email;
+      document.getElementById('adminRole').textContent = currentAdmin.role;
+      if (currentAdmin.role === 'owner') document.getElementById('adminsTab').style.display = '';
+      document.getElementById('funnelDate').value = new Date().toISOString().split('T')[0];
+      loadAllStats();
+      loadSubmissions();
+    }
+
+    // ============================================
+    // STATS (all 6 cards)
+    // ============================================
+    async function loadAllStats() {
+      try {
+        const [subStats, liveData, dStats] = await Promise.all([
+          apiFetch('/api/admin/submissions/stats'),
+          apiFetch('/api/admin/analytics/live'),
+          apiFetch('/api/admin/disputes/stats'),
+        ]);
+        document.getElementById('statTotal').textContent = subStats.total;
+        document.getElementById('statToday').textContent = subStats.today;
+        document.getElementById('statWeek').textContent = subStats.thisWeek;
+        document.getElementById('statLive').textContent = liveData.activeVisitors;
+        document.getElementById('statOpenDisputes').textContent = dStats.open;
+
+        const summary = await apiFetch('/api/admin/analytics/summary');
+        document.getElementById('statPageViews').textContent = summary.pageViews || 0;
+      } catch (err) { console.error('Stats error:', err); }
+    }
+
+    // ============================================
+    // SUBMISSIONS
+    // ============================================
+    async function loadSubmissions() {
+      try {
+        const params = new URLSearchParams({ page: currentPage, limit: 20 });
+        if (currentSearch) params.set('search', currentSearch);
+        const data = await apiFetch('/api/admin/submissions?' + params);
+        const tbody = document.getElementById('submissionsBody');
+        const emptyEl = document.getElementById('submissionsEmpty');
+        if (data.submissions.length === 0 && currentPage === 1) {
+          tbody.innerHTML = '';
+          emptyEl.style.display = 'block';
+          document.getElementById('pagination').style.display = 'none';
+          return;
+        }
+        emptyEl.style.display = 'none';
+        document.getElementById('pagination').style.display = 'flex';
+        tbody.innerHTML = data.submissions.map(s => {
+          const d = new Date(s.submittedAt);
+          const ds = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+          const ts = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+          return `<tr><td class="date-cell">${ds}<br><span style="font-size:12px;">${ts}</span></td><td class="name-cell">${esc(s.firstName)} ${esc(s.lastName)}</td><td class="email-cell">${esc(s.email)}</td><td>${esc(s.phone||'-')}</td><td>${esc(s.interest||'-')}</td><td><button class="admin-expand-btn" onclick="toggleExpand(this,'${s.id}')">Details</button><button class="admin-delete-btn" onclick="deleteSubmission('${s.id}')">Delete</button></td></tr>
+          <tr class="admin-expanded-row" id="expand-${s.id}" style="display:none;"><td colspan="6"><div class="admin-expanded-content"><div class="admin-detail-item"><label>Instagram</label><span>${esc(s.instagram||'-')}</span></div><div class="admin-detail-item"><label>Experience</label><span>${esc(s.experience||'-')}</span></div><div class="admin-detail-item"><label>Goal</label><span>${esc(s.goal||'-')}</span></div><div class="admin-detail-item"><label>UTM Source</label><span>${esc(s.utm_source||'-')}</span></div><div class="admin-detail-item"><label>UTM Medium</label><span>${esc(s.utm_medium||'-')}</span></div><div class="admin-detail-item"><label>UTM Campaign</label><span>${esc(s.utm_campaign||'-')}</span></div></div></td></tr>`;
+        }).join('');
+        const start = (data.page-1)*data.limit+1, end = Math.min(data.page*data.limit, data.total);
+        document.getElementById('pageInfo').textContent = `${start}-${end} of ${data.total}`;
+        document.getElementById('prevBtn').disabled = data.page <= 1;
+        document.getElementById('nextBtn').disabled = data.page >= data.totalPages;
+      } catch (err) { console.error('Load submissions error:', err); }
+    }
+
+    function toggleExpand(btn, id) { const r = document.getElementById('expand-'+id); if(r.style.display==='none'){r.style.display='';btn.textContent='Hide';}else{r.style.display='none';btn.textContent='Details';} }
+    async function deleteSubmission(id) { if(!confirm('Delete this submission?'))return; try{await apiFetch('/api/admin/submissions/'+id,{method:'DELETE'});showToast('Deleted','success');loadSubmissions();loadAllStats();}catch(e){showToast(e.message,'error');} }
+    function changePage(d) { currentPage+=d; if(currentPage<1)currentPage=1; loadSubmissions(); }
+
+    document.getElementById('searchInput').addEventListener('input', (e) => {
+      clearTimeout(searchTimeout);
+      searchTimeout = setTimeout(() => { currentSearch = e.target.value.trim(); currentPage = 1; loadSubmissions(); }, 300);
+    });
+
+    async function exportCSV() {
+      try { const csv = await apiFetch('/api/admin/submissions/export'); const b = new Blob([csv],{type:'text/csv'}); const u = URL.createObjectURL(b); const a = document.createElement('a'); a.href=u; a.download='soldi-submissions.csv'; a.click(); URL.revokeObjectURL(u); showToast('CSV downloaded','success'); } catch(e){ showToast(e.message,'error'); }
+    }
+
+    // ============================================
+    // USERS
+    // ============================================
+    async function loadUsers() {
+      try {
+        const search = document.getElementById('usersSearch').value.trim();
+        const status = document.getElementById('usersStatusFilter').value;
+        const params = new URLSearchParams({ page: usersPage, limit: 20 });
+        if (search) params.set('search', search);
+        if (status !== 'all') params.set('status', status);
+        const data = await apiFetch('/api/admin/users?' + params);
+        const tbody = document.getElementById('usersBody');
+        if (data.users.length === 0) {
+          tbody.innerHTML = '';
+          document.getElementById('usersEmpty').style.display = 'block';
+          document.getElementById('usersPagination').style.display = 'none';
+          return;
+        }
+        document.getElementById('usersEmpty').style.display = 'none';
+        document.getElementById('usersPagination').style.display = 'flex';
+        tbody.innerHTML = data.users.map(u => {
+          const d = new Date(u.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+          const st = u.status === 'active' ? 'active' : 'inactive';
+          return `<tr><td class="email-cell">${esc(u.email)}</td><td style="font-family:monospace;font-size:12px;color:#71717a;">${esc(u.membershipId)}</td><td style="font-family:monospace;font-size:12px;color:#52525b;">${esc(u.apiKey)}</td><td><span class="status-badge status-${st}">${u.status}</span></td><td class="date-cell">${d}</td></tr>`;
+        }).join('');
+        const start = (data.page-1)*data.limit+1, end = Math.min(data.page*data.limit, data.total);
+        document.getElementById('usersPageInfo').textContent = `${start}-${end} of ${data.total}`;
+        document.getElementById('usersPrevBtn').disabled = data.page <= 1;
+        document.getElementById('usersNextBtn').disabled = data.page >= data.totalPages;
+      } catch (err) { console.error('Load users error:', err); }
+    }
+    function changeUsersPage(d) { usersPage+=d; if(usersPage<1)usersPage=1; loadUsers(); }
+    document.getElementById('usersSearch').addEventListener('input', (e) => {
+      clearTimeout(searchTimeout);
+      searchTimeout = setTimeout(() => { usersPage = 1; loadUsers(); }, 300);
+    });
+
+    // ============================================
+    // DISPUTES
+    // ============================================
+    async function loadDisputes() {
+      try {
+        const search = document.getElementById('disputesSearch').value.trim();
+        const status = document.getElementById('disputesStatusFilter').value;
+        const params = new URLSearchParams({ page: disputesPage, limit: 20 });
+        if (search) params.set('search', search);
+        if (status !== 'all') params.set('status', status);
+        const data = await apiFetch('/api/admin/disputes?' + params);
+        const tbody = document.getElementById('disputesBody');
+        if (data.disputes.length === 0 && disputesPage === 1) {
+          tbody.innerHTML = '';
+          document.getElementById('disputesEmpty').style.display = 'block';
+          document.getElementById('disputesPagination').style.display = 'none';
+          return;
+        }
+        document.getElementById('disputesEmpty').style.display = 'none';
+        document.getElementById('disputesPagination').style.display = 'flex';
+        tbody.innerHTML = data.disputes.map(d => {
+          const dt = new Date(d.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+          return `<tr><td class="date-cell">${dt}</td><td class="name-cell">${esc(d.customerName)}</td><td class="email-cell">${esc(d.customerEmail)}</td><td>$${d.amount.toFixed(2)}</td><td><span class="status-badge status-${d.status}">${d.status}</span></td><td><button class="admin-expand-btn" onclick="editDispute('${d.id}')">Edit</button><button class="admin-delete-btn" onclick="deleteDispute('${d.id}')">Delete</button></td></tr>
+          <tr class="admin-expanded-row" id="dexp-${d.id}" style="display:none;"><td colspan="6"><div class="admin-expanded-content"><div class="admin-detail-item"><label>Reason</label><span>${esc(d.reason||'-')}</span></div><div class="admin-detail-item"><label>Evidence</label><span>${esc(d.evidenceText||'-')}</span></div><div class="admin-detail-item"><label>Notes</label><span>${esc(d.notes||'-')}</span></div><div class="admin-detail-item"><label>Created By</label><span>${esc(d.createdBy||'-')}</span></div></div></td></tr>`;
+        }).join('');
+        const start = (data.page-1)*data.limit+1, end = Math.min(data.page*data.limit, data.total);
+        document.getElementById('disputesPageInfo').textContent = `${start}-${end} of ${data.total}`;
+        document.getElementById('disputesPrevBtn').disabled = data.page <= 1;
+        document.getElementById('disputesNextBtn').disabled = data.page >= data.totalPages;
+      } catch (err) { console.error('Load disputes error:', err); }
+    }
+    function changeDisputesPage(d) { disputesPage+=d; if(disputesPage<1)disputesPage=1; loadDisputes(); }
+    document.getElementById('disputesSearch').addEventListener('input', (e) => {
+      clearTimeout(searchTimeout);
+      searchTimeout = setTimeout(() => { disputesPage = 1; loadDisputes(); }, 300);
+    });
+
+    async function loadDisputeStats() {
+      try {
+        const s = await apiFetch('/api/admin/disputes/stats');
+        document.getElementById('disputeStatsRow').innerHTML = `
+          <div class="dispute-mini-stat"><div class="val">${s.total}</div><div class="lbl">Total</div></div>
+          <div class="dispute-mini-stat"><div class="val" style="color:#eab308;">${s.open}</div><div class="lbl">Open</div></div>
+          <div class="dispute-mini-stat"><div class="val" style="color:#3b82f6;">${s.responding}</div><div class="lbl">Responding</div></div>
+          <div class="dispute-mini-stat"><div class="val" style="color:#10b981;">${s.won}</div><div class="lbl">Won</div></div>
+          <div class="dispute-mini-stat"><div class="val" style="color:#ef4444;">${s.lost}</div><div class="lbl">Lost</div></div>
+          <div class="dispute-mini-stat"><div class="val">$${s.totalAmount.toFixed(2)}</div><div class="lbl">Total $</div></div>
+        `;
+      } catch (err) { console.error('Dispute stats error:', err); }
+    }
+
+    function showDisputeForm(dispute) {
+      const form = document.getElementById('disputeForm');
+      form.classList.add('active');
+      document.getElementById('disputeFormTitle').textContent = dispute ? 'Edit Dispute' : 'New Dispute';
+      document.getElementById('disputeEditId').value = dispute ? dispute.id : '';
+      document.getElementById('dfName').value = dispute ? dispute.customerName : '';
+      document.getElementById('dfEmail').value = dispute ? dispute.customerEmail : '';
+      document.getElementById('dfAmount').value = dispute ? dispute.amount : '';
+      document.getElementById('dfStatus').value = dispute ? dispute.status : 'open';
+      document.getElementById('dfReason').value = dispute ? dispute.reason : '';
+      document.getElementById('dfEvidence').value = dispute ? dispute.evidenceText : '';
+      document.getElementById('dfNotes').value = dispute ? dispute.notes : '';
+    }
+    function hideDisputeForm() { document.getElementById('disputeForm').classList.remove('active'); }
+
+    async function editDispute(id) {
+      try {
+        const data = await apiFetch('/api/admin/disputes?limit=100');
+        const d = data.disputes.find(x => x.id === id);
+        if (d) showDisputeForm(d);
+      } catch (err) { showToast(err.message, 'error'); }
+    }
+
+    async function saveDispute() {
+      const editId = document.getElementById('disputeEditId').value;
+      const body = {
+        customerName: document.getElementById('dfName').value,
+        customerEmail: document.getElementById('dfEmail').value,
+        amount: document.getElementById('dfAmount').value,
+        status: document.getElementById('dfStatus').value,
+        reason: document.getElementById('dfReason').value,
+        evidenceText: document.getElementById('dfEvidence').value,
+        notes: document.getElementById('dfNotes').value,
+      };
+      try {
+        if (editId) {
+          await apiFetch('/api/admin/disputes/' + editId, { method: 'PUT', body: JSON.stringify(body) });
+          showToast('Dispute updated', 'success');
+        } else {
+          await apiFetch('/api/admin/disputes', { method: 'POST', body: JSON.stringify(body) });
+          showToast('Dispute created', 'success');
+        }
+        hideDisputeForm();
+        loadDisputes();
+        loadDisputeStats();
+        loadAllStats();
+      } catch (err) { showToast(err.message, 'error'); }
+    }
+
+    async function deleteDispute(id) {
+      if (!confirm('Delete this dispute?')) return;
+      try { await apiFetch('/api/admin/disputes/'+id, {method:'DELETE'}); showToast('Deleted','success'); loadDisputes(); loadDisputeStats(); loadAllStats(); } catch(e){ showToast(e.message,'error'); }
+    }
+
+    // ============================================
+    // ANALYTICS
+    // ============================================
+    async function loadAnalytics() {
+      try {
+        const [live, summary] = await Promise.all([
+          apiFetch('/api/admin/analytics/live'),
+          apiFetch('/api/admin/analytics/summary'),
+        ]);
+
+        // Live visitors
+        document.getElementById('liveCount').textContent = live.activeVisitors;
+        const sessEl = document.getElementById('liveSessions');
+        if (live.sessions.length === 0) {
+          sessEl.innerHTML = '<div style="color:#52525b;font-size:13px;">No active visitors</div>';
+        } else {
+          sessEl.innerHTML = live.sessions.map(s => {
+            const dur = s.duration < 60 ? s.duration + 's' : Math.floor(s.duration/60) + 'm ' + (s.duration%60) + 's';
+            return `<div class="analytics-live-session"><span style="color:#10b981;">${esc(s.page)}</span><span>${dur} &middot; ${s.pageViews} pv</span></div>`;
+          }).join('');
+        }
+
+        // Metrics
+        document.getElementById('metricPageViews').textContent = summary.pageViews || 0;
+        document.getElementById('metricUniques').textContent = summary.uniqueVisitors || 0;
+        document.getElementById('metricSessions').textContent = summary.sessions || 0;
+        // Avg duration from live sessions
+        if (live.sessions.length > 0) {
+          const avg = Math.round(live.sessions.reduce((a,s) => a + s.duration, 0) / live.sessions.length);
+          document.getElementById('metricAvgDuration').textContent = avg < 60 ? avg + 's' : Math.floor(avg/60) + 'm ' + (avg%60) + 's';
+        }
+
+        // Hourly chart
+        const hourly = summary.hourlyViews || new Array(24).fill(0);
+        const maxH = Math.max(...hourly, 1);
+        const chart = document.getElementById('hourlyChart');
+        chart.innerHTML = hourly.map((v, i) => {
+          const pct = Math.max((v / maxH) * 100, 2);
+          return `<div class="hourly-bar" style="height:${pct}%" title="${i}:00 — ${v} views"></div>`;
+        }).join('');
+        const labels = document.getElementById('hourlyLabels');
+        labels.innerHTML = hourly.map((_, i) => `<span>${i}</span>`).join('');
+
+        // Top pages
+        const pages = summary.topPages || Object.entries(summary.pages||{}).map(([p,d])=>({page:p,views:d.views,uniques:d.uniques})).sort((a,b)=>b.views-a.views).slice(0,10);
+        document.getElementById('topPagesBody').innerHTML = pages.map(p =>
+          `<tr><td style="color:#10b981;">${esc(p.page)}</td><td>${p.views}</td><td>${p.uniques}</td></tr>`
+        ).join('') || '<tr><td colspan="3" style="color:#52525b;text-align:center;">No data yet</td></tr>';
+
+        // Top referrers
+        const refs = summary.topReferrers || Object.entries(summary.referrers||{}).map(([r,c])=>({referrer:r,count:c})).sort((a,b)=>b.count-a.count).slice(0,10);
+        document.getElementById('topRefBody').innerHTML = refs.map(r =>
+          `<tr><td>${esc(r.referrer)}</td><td>${r.count}</td></tr>`
+        ).join('') || '<tr><td colspan="2" style="color:#52525b;text-align:center;">No data yet</td></tr>';
+
+      } catch (err) { console.error('Analytics error:', err); }
+    }
+
+    function startLiveRefresh() { stopLiveRefresh(); liveInterval = setInterval(loadAnalytics, 10000); }
+    function stopLiveRefresh() { if (liveInterval) { clearInterval(liveInterval); liveInterval = null; } }
+
+    // ============================================
+    // FUNNEL
+    // ============================================
+    async function loadFunnel() {
+      try {
+        const dateStr = document.getElementById('funnelDate').value;
+        const data = await apiFetch('/api/admin/analytics/funnel?date=' + dateStr);
+        const f = data.funnel || {};
+
+        const steps = [
+          { name: 'Page View', key: 'page_view', color: '#3b82f6' },
+          { name: 'Form Started', key: 'form_started', color: '#8b5cf6' },
+          { name: 'Step 1 (Experience)', key: 'step_1_complete', color: '#a855f7' },
+          { name: 'Step 2 (Interest)', key: 'step_2_complete', color: '#d946ef' },
+          { name: 'Step 3 (Goal)', key: 'step_3_complete', color: '#ec4899' },
+          { name: 'Submitted', key: 'form_submitted', color: '#10b981' },
+        ];
+
+        const maxVal = Math.max(f.page_view || 0, 1);
+
+        // Summary cards
+        const totalSub = f.form_submitted || 0;
+        const convRate = data.conversionRate || 0;
+        let biggestDrop = '-';
+        if (data.stepDropoff && data.stepDropoff.length > 0) {
+          const worst = data.stepDropoff.reduce((min, s) => s.rate < min.rate ? s : min, data.stepDropoff[0]);
+          biggestDrop = worst.step.split(' \u2192 ')[1] || worst.step;
+        }
+        document.getElementById('funnelSummary').innerHTML = `
+          <div class="funnel-summary-card"><div class="val" style="color:#10b981;">${convRate}%</div><div class="lbl">Conversion Rate</div></div>
+          <div class="funnel-summary-card"><div class="val" style="color:#3b82f6;">${totalSub}</div><div class="lbl">Submissions</div></div>
+          <div class="funnel-summary-card"><div class="val" style="color:#ef4444;">${esc(biggestDrop)}</div><div class="lbl">Biggest Drop-off</div></div>
+        `;
+
+        // Funnel bars
+        document.getElementById('funnelChart').innerHTML = steps.map(s => {
+          const val = f[s.key] || 0;
+          const pct = maxVal > 0 ? Math.max((val / maxVal) * 100, 3) : 3;
+          const pctOfTotal = maxVal > 0 ? Math.round((val / maxVal) * 1000) / 10 : 0;
+          return `<div class="funnel-bar-wrap"><div class="funnel-bar-header"><span class="funnel-bar-name">${s.name}</span><span class="funnel-bar-nums">${val} (${pctOfTotal}%)</span></div><div class="funnel-bar" style="width:${pct}%;border-left-color:${s.color};background:${s.color}22;"><span>${val}</span></div></div>`;
+        }).join('');
+
+        // Step table
+        const tbody = document.getElementById('funnelTableBody');
+        if (data.stepDropoff && data.stepDropoff.length > 0) {
+          tbody.innerHTML = data.stepDropoff.map(s => {
+            const dropoff = s.fromCount - s.toCount;
+            return `<tr><td>${esc(s.step)}</td><td>${s.fromCount}</td><td>${s.toCount}</td><td style="color:${s.rate>=50?'#10b981':'#ef4444'};font-weight:700;">${s.rate}%</td><td style="color:#ef4444;">${dropoff}</td></tr>`;
+          }).join('');
+        } else {
+          tbody.innerHTML = '<tr><td colspan="5" style="color:#52525b;text-align:center;">No funnel data for this date</td></tr>';
+        }
+      } catch (err) { console.error('Funnel error:', err); }
+    }
+
+    // ============================================
+    // ADMIN MANAGEMENT
+    // ============================================
+    async function loadAdmins() {
+      try {
+        const data = await apiFetch('/api/admin/admins');
+        document.getElementById('adminsBody').innerHTML = data.admins.map(a => {
+          const d = new Date(a.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+          return `<tr><td class="email-cell">${esc(a.email)}</td><td><span class="admin-role-badge">${a.role}</span></td><td class="date-cell">${d}</td><td>${a.role!=='owner'?`<button class="admin-delete-btn" onclick="removeAdmin('${a.id}')">Remove</button>`:'<span style="color:#52525b;font-size:13px;">-</span>'}</td></tr>`;
+        }).join('');
+      } catch(e){ console.error('Load admins error:',e); }
+    }
+    async function addAdmin() {
+      const email=document.getElementById('newAdminEmail').value.trim(), pw=document.getElementById('newAdminPassword').value;
+      if(!email||!pw) return showToast('Email and password required','error');
+      if(pw.length<6) return showToast('Password must be at least 6 characters','error');
+      try{ await apiFetch('/api/admin/admins',{method:'POST',body:JSON.stringify({email,password:pw})}); document.getElementById('newAdminEmail').value=''; document.getElementById('newAdminPassword').value=''; showToast('Admin added','success'); loadAdmins(); }catch(e){ showToast(e.message,'error'); }
+    }
+    async function removeAdmin(id) {
+      if(!confirm('Remove this admin?'))return;
+      try{ await apiFetch('/api/admin/admins/'+id,{method:'DELETE'}); showToast('Admin removed','success'); loadAdmins(); }catch(e){ showToast(e.message,'error'); }
+    }
+
+    // ============================================
+    // TABS
+    // ============================================
+    document.querySelectorAll('.admin-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.admin-tab-panel').forEach(p => p.classList.remove('active'));
+        tab.classList.add('active');
+        document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
+
+        stopLiveRefresh();
+        if (tab.dataset.tab === 'users') loadUsers();
+        if (tab.dataset.tab === 'disputes') { loadDisputes(); loadDisputeStats(); }
+        if (tab.dataset.tab === 'analytics') { loadAnalytics(); startLiveRefresh(); }
+        if (tab.dataset.tab === 'funnel') loadFunnel();
+        if (tab.dataset.tab === 'admins') loadAdmins();
+      });
+    });
+
+    // ============================================
+    // HELPERS
+    // ============================================
+    function esc(str) { const d=document.createElement('div'); d.textContent=str; return d.innerHTML; }
+    function showToast(msg, type) { const t=document.getElementById('toast'); t.textContent=msg; t.className='admin-toast '+type+' show'; setTimeout(()=>{t.classList.remove('show');},3000); }
+
+    // ============================================
+    // BOOT
+    // ============================================
+    init();
+  </script>
+
+</body>
+</html>

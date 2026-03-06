@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Odds Screen - Soldi</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon.png">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <script src="/soldi-analytics.js"></script>
+  <style>
+    .odds-page { padding: 120px 0 80px; min-height: 100vh; }
+
+    /* API Key Gate */
+    .odds-gate {
+      max-width: 480px;
+      margin: 80px auto 0;
+      text-align: center;
+    }
+    .odds-gate-icon {
+      width: 64px;
+      height: 64px;
+      background: rgba(168, 85, 247, 0.12);
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 24px;
+      color: #a855f7;
+    }
+    .odds-gate h2 {
+      font-size: 28px;
+      font-weight: 800;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+    .odds-gate p {
+      font-size: 14px;
+      color: #71717a;
+      line-height: 1.6;
+      margin-bottom: 28px;
+    }
+    .odds-gate-input {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .odds-gate-input input {
+      flex: 1;
+      padding: 14px 16px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 10px;
+      color: #fff;
+      font-size: 14px;
+      font-family: 'Inter', monospace;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .odds-gate-input input:focus { border-color: #a855f7; }
+    .odds-gate-input input::placeholder { color: #52525b; }
+    .odds-gate-error {
+      display: none;
+      padding: 10px 14px;
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.2);
+      border-radius: 8px;
+      color: #ef4444;
+      font-size: 13px;
+      margin-bottom: 16px;
+    }
+    .odds-gate-footer {
+      font-size: 13px;
+      color: #52525b;
+      margin-top: 20px;
+    }
+    .odds-gate-footer a { color: #22c55e; }
+
+    /* Odds Dashboard */
+    .odds-dashboard { display: none; }
+    .odds-dashboard.active { display: block; }
+    .odds-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 32px;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    .odds-header-left h2 {
+      font-size: clamp(24px, 3.5vw, 36px);
+      font-weight: 800;
+      color: #fff;
+      letter-spacing: -0.5px;
+    }
+    .odds-header-left p {
+      font-size: 14px;
+      color: #71717a;
+      margin-top: 4px;
+    }
+    .odds-header-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .odds-key-display {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(168, 85, 247, 0.08);
+      border: 1px solid rgba(168, 85, 247, 0.2);
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-family: 'Inter', monospace;
+      color: #a855f7;
+    }
+    .odds-refresh-label {
+      font-size: 12px;
+      color: #52525b;
+    }
+
+    /* Odds Table */
+    .odds-table-wrapper {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+    .odds-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .odds-table thead {
+      background: rgba(255,255,255,0.04);
+    }
+    .odds-table th {
+      padding: 14px 20px;
+      text-align: left;
+      font-size: 11px;
+      font-weight: 700;
+      color: #71717a;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .odds-table td {
+      padding: 16px 20px;
+      font-size: 14px;
+      color: #d4d4d8;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+    .odds-table tbody tr {
+      transition: background 0.2s;
+    }
+    .odds-table tbody tr:hover {
+      background: rgba(255,255,255,0.03);
+    }
+    .odds-table tbody tr:last-child td {
+      border-bottom: none;
+    }
+    .sport-badge {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+    .sport-nba { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
+    .sport-nfl { background: rgba(59, 130, 246, 0.1); color: #3b82f6; }
+    .sport-mlb { background: rgba(34, 197, 94, 0.1); color: #22c55e; }
+    .sport-nhl { background: rgba(168, 85, 247, 0.1); color: #a855f7; }
+    .edge-positive { color: #22c55e; font-weight: 600; }
+    .edge-high { color: #f59e0b; font-weight: 700; }
+    .odds-updated-time {
+      font-size: 11px;
+      color: #52525b;
+    }
+
+    /* Stats bar */
+    .odds-stats {
+      display: flex;
+      gap: 20px;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+    }
+    .odds-stat {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 12px;
+      padding: 16px 24px;
+      flex: 1;
+      min-width: 140px;
+    }
+    .odds-stat-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: #71717a;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .odds-stat-value {
+      font-size: 24px;
+      font-weight: 800;
+      color: #fff;
+    }
+    .odds-stat-value.green { color: #22c55e; }
+    .odds-stat-value.purple { color: #a855f7; }
+
+    /* Loading state */
+    .odds-loading {
+      display: none;
+      text-align: center;
+      padding: 60px 0;
+      color: #71717a;
+    }
+    .odds-loading.active { display: block; }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .odds-page { padding: 100px 0 60px; }
+      .odds-header { flex-direction: column; align-items: flex-start; }
+      .odds-table-wrapper { overflow-x: auto; }
+      .odds-table { min-width: 700px; }
+      .odds-gate { margin: 40px auto 0; padding: 0 20px; }
+      .odds-gate-input { flex-direction: column; }
+      .odds-gate-input .btn { width: 100%; justify-content: center; }
+      .odds-stats { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+
+  <nav class="nav">
+    <div class="nav-inner">
+      <div class="logo">
+        <div class="logo-icon">S</div>
+        <span class="logo-text">Soldi</span>
+      </div>
+      <div class="nav-links">
+        <a href="/">Home</a>
+        <a href="/#features">Features</a>
+        <a href="/#tools">Tools</a>
+        <a href="/odds.html" style="color: #a855f7;">Odds Screen</a>
+        <a href="/#apply" class="nav-cta">Apply Now</a>
+      </div>
+      <button class="mobile-menu" id="oddsMobileMenu">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </nav>
+
+  <div class="mobile-nav" id="oddsMobileNav">
+    <a href="/">Home</a>
+    <a href="/#features">Features</a>
+    <a href="/#tools">Tools</a>
+    <a href="/odds.html" style="color: #a855f7;">Odds Screen</a>
+    <a href="/#apply" class="nav-cta" style="text-align:center;">Apply Now</a>
+  </div>
+
+  <section class="odds-page">
+    <div class="container">
+
+      <!-- API Key Gate (shown when not authenticated) -->
+      <div class="odds-gate" id="oddsGate">
+        <div class="odds-gate-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+        </div>
+        <h2>Soldi Odds Screen</h2>
+        <p>Enter your API key to access the live odds screen. You can find your API key in your Soldi member dashboard.</p>
+        <div class="odds-gate-error" id="oddsGateError"></div>
+        <form id="oddsGateForm" onsubmit="validateOddsKey(event)">
+          <div class="odds-gate-input">
+            <input type="text" id="oddsKeyInput" placeholder="soldi_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" autocomplete="off" spellcheck="false">
+            <button type="submit" class="btn btn-primary" id="oddsGateBtn">
+              <span class="odds-gate-btn-text">Access</span>
+              <span class="login-btn-loading" style="display:none;">
+                <svg class="spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+              </span>
+            </button>
+          </div>
+        </form>
+        <p class="odds-gate-footer">
+          Not a member? <a href="https://whop.com/soldi-4def/soldi-a9/" target="_blank">Join Soldi</a> to get your API key.
+        </p>
+      </div>
+
+      <!-- Odds Dashboard (shown after valid key) -->
+      <div class="odds-dashboard" id="oddsDashboard">
+        <div class="odds-header">
+          <div class="odds-header-left">
+            <h2>Live Odds Screen</h2>
+            <p>Real-time odds scanning across all major sportsbooks</p>
+          </div>
+          <div class="odds-header-right">
+            <div class="odds-key-display">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+              <span id="oddsKeyDisplayText"></span>
+            </div>
+            <button class="btn btn-ghost" style="padding: 8px 14px; font-size: 13px;" onclick="logoutOdds()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+              Exit
+            </button>
+          </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="odds-stats">
+          <div class="odds-stat">
+            <div class="odds-stat-label">Active Plays</div>
+            <div class="odds-stat-value" id="oddsActiveCount">0</div>
+          </div>
+          <div class="odds-stat">
+            <div class="odds-stat-label">Avg Edge</div>
+            <div class="odds-stat-value green" id="oddsAvgEdge">0%</div>
+          </div>
+          <div class="odds-stat">
+            <div class="odds-stat-label">Sports Tracked</div>
+            <div class="odds-stat-value purple" id="oddsSportsCount">0</div>
+          </div>
+          <div class="odds-stat">
+            <div class="odds-stat-label">Last Updated</div>
+            <div class="odds-stat-value" id="oddsLastUpdated" style="font-size: 16px;">--</div>
+          </div>
+        </div>
+
+        <!-- Loading -->
+        <div class="odds-loading" id="oddsLoading">
+          <svg class="spin" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#a855f7" stroke-width="2" style="margin: 0 auto 12px; display: block;"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+          Loading odds data...
+        </div>
+
+        <!-- Odds Table -->
+        <div class="odds-table-wrapper" id="oddsTableWrapper" style="display:none;">
+          <table class="odds-table">
+            <thead>
+              <tr>
+                <th>Sport</th>
+                <th>Game</th>
+                <th>Line</th>
+                <th>Odds</th>
+                <th>Book</th>
+                <th>Edge</th>
+                <th>Updated</th>
+              </tr>
+            </thead>
+            <tbody id="oddsTableBody">
+            </tbody>
+          </table>
+        </div>
+
+        <p class="odds-refresh-label" style="margin-top: 16px; text-align: center;">
+          Auto-refreshes every 30 seconds
+        </p>
+      </div>
+
+    </div>
+  </section>
+
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-bottom" style="padding-top: 24px;">
+        <p>&copy; 2026 Soldi. All rights reserved.</p>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // Mobile menu
+    document.getElementById('oddsMobileMenu').addEventListener('click', function() {
+      this.classList.toggle('active');
+      document.getElementById('oddsMobileNav').classList.toggle('active');
+    });
+
+    // Nav scroll
+    window.addEventListener('scroll', () => {
+      document.querySelector('.nav').classList.toggle('scrolled', window.scrollY > 50);
+    });
+
+    let currentApiKey = sessionStorage.getItem('soldi_odds_key') || '';
+    let refreshInterval = null;
+
+    // Check if already has a valid key in session
+    if (currentApiKey) {
+      accessOddsScreen(currentApiKey);
+    }
+
+    async function validateOddsKey(e) {
+      e.preventDefault();
+      const key = document.getElementById('oddsKeyInput').value.trim();
+      const errorEl = document.getElementById('oddsGateError');
+      const btnText = document.querySelector('.odds-gate-btn-text');
+      const btnLoading = document.querySelector('#oddsGateBtn .login-btn-loading');
+      const btn = document.getElementById('oddsGateBtn');
+
+      if (!key) {
+        errorEl.textContent = 'Please enter your API key.';
+        errorEl.style.display = 'block';
+        return;
+      }
+
+      btnText.style.display = 'none';
+      btnLoading.style.display = 'inline-flex';
+      btn.disabled = true;
+      errorEl.style.display = 'none';
+
+      try {
+        const res = await fetch('/api/validate-key?key=' + encodeURIComponent(key));
+        const data = await res.json();
+
+        if (res.ok && data.success) {
+          sessionStorage.setItem('soldi_odds_key', key);
+          currentApiKey = key;
+          accessOddsScreen(key);
+        } else {
+          errorEl.textContent = 'Invalid or inactive API key. Check your member dashboard for your key.';
+          errorEl.style.display = 'block';
+        }
+      } catch (err) {
+        errorEl.textContent = 'Connection error. Please try again.';
+        errorEl.style.display = 'block';
+      } finally {
+        btnText.style.display = 'inline';
+        btnLoading.style.display = 'none';
+        btn.disabled = false;
+      }
+    }
+
+    function accessOddsScreen(key) {
+      document.getElementById('oddsGate').style.display = 'none';
+      document.getElementById('oddsDashboard').classList.add('active');
+
+      // Show masked key
+      const masked = key.substring(0, 10) + '...' + key.substring(key.length - 4);
+      document.getElementById('oddsKeyDisplayText').textContent = masked;
+
+      // Load data
+      loadOddsData(key);
+
+      // Auto-refresh
+      if (refreshInterval) clearInterval(refreshInterval);
+      refreshInterval = setInterval(() => loadOddsData(key), 30000);
+    }
+
+    async function loadOddsData(key) {
+      const loading = document.getElementById('oddsLoading');
+      const tableWrapper = document.getElementById('oddsTableWrapper');
+
+      // Show loading only on first load
+      if (tableWrapper.style.display === 'none') {
+        loading.classList.add('active');
+      }
+
+      try {
+        const res = await fetch('/api/odds-data?key=' + encodeURIComponent(key));
+        const data = await res.json();
+
+        if (!res.ok) {
+          if (res.status === 401) {
+            sessionStorage.removeItem('soldi_odds_key');
+            location.reload();
+          }
+          return;
+        }
+
+        renderOddsTable(data.odds);
+        updateOddsStats(data.odds, data.generatedAt);
+
+        loading.classList.remove('active');
+        tableWrapper.style.display = 'block';
+      } catch (err) {
+        console.error('Failed to load odds:', err);
+      }
+    }
+
+    function renderOddsTable(odds) {
+      const tbody = document.getElementById('oddsTableBody');
+      tbody.innerHTML = odds.map(row => {
+        const sportClass = 'sport-' + row.sport.toLowerCase();
+        const edgeNum = parseFloat(row.edge);
+        const edgeClass = edgeNum >= 4 ? 'edge-high' : 'edge-positive';
+        const time = new Date(row.updated);
+        const timeStr = time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+
+        return `
+          <tr>
+            <td><span class="sport-badge ${sportClass}">${row.sport}</span></td>
+            <td style="font-weight:500; color:#fff;">${row.game}</td>
+            <td>${row.line}</td>
+            <td style="font-weight:600;">${row.odds}</td>
+            <td>${row.book}</td>
+            <td class="${edgeClass}">${row.edge}</td>
+            <td class="odds-updated-time">${timeStr}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function updateOddsStats(odds, generatedAt) {
+      document.getElementById('oddsActiveCount').textContent = odds.length;
+
+      const avgEdge = odds.reduce((sum, o) => sum + parseFloat(o.edge), 0) / odds.length;
+      document.getElementById('oddsAvgEdge').textContent = avgEdge.toFixed(1) + '%';
+
+      const sports = new Set(odds.map(o => o.sport));
+      document.getElementById('oddsSportsCount').textContent = sports.size;
+
+      const time = new Date(generatedAt);
+      document.getElementById('oddsLastUpdated').textContent = time.toLocaleTimeString('en-US', {
+        hour: '2-digit', minute: '2-digit', second: '2-digit'
+      });
+    }
+
+    function logoutOdds() {
+      sessionStorage.removeItem('soldi_odds_key');
+      if (refreshInterval) clearInterval(refreshInterval);
+      currentApiKey = '';
+      document.getElementById('oddsDashboard').classList.remove('active');
+      document.getElementById('oddsGate').style.display = 'block';
+      document.getElementById('oddsTableWrapper').style.display = 'none';
+      document.getElementById('oddsKeyInput').value = '';
+    }
+  </script>
+
+</body>
+</html>

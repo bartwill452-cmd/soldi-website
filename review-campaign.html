@@ -1,0 +1,1137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Google Review Campaign - Soldi</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon.png">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <script src="/soldi-analytics.js"></script>
+  <style>
+    .rc-page { padding: 120px 0 80px; min-height: 100vh; }
+
+    /* API Key Gate */
+    .rc-gate {
+      max-width: 480px;
+      margin: 80px auto 0;
+      text-align: center;
+    }
+    .rc-gate-icon {
+      width: 64px;
+      height: 64px;
+      background: rgba(244, 63, 94, 0.12);
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 24px;
+      color: #f43f5e;
+    }
+    .rc-gate h2 {
+      font-size: 28px;
+      font-weight: 800;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+    .rc-gate p {
+      font-size: 14px;
+      color: #71717a;
+      line-height: 1.6;
+      margin-bottom: 28px;
+    }
+    .rc-gate-input {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .rc-gate-input input {
+      flex: 1;
+      padding: 14px 16px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 10px;
+      color: #fff;
+      font-size: 14px;
+      font-family: 'Inter', monospace;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .rc-gate-input input:focus { border-color: #f43f5e; }
+    .btn-rc {
+      padding: 14px 28px;
+      background: linear-gradient(135deg, #f43f5e, #e11d48);
+      border: none;
+      border-radius: 10px;
+      color: #fff;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: 'Inter', sans-serif;
+    }
+    .btn-rc:hover { transform: translateY(-1px); box-shadow: 0 4px 20px rgba(244, 63, 94, 0.3); }
+    .rc-gate-error { color: #ef4444; font-size: 13px; margin-top: 8px; display: none; }
+    .rc-gate-footer { margin-top: 24px; font-size: 13px; color: #52525b; }
+    .rc-gate-footer a { color: #f43f5e; text-decoration: none; }
+    .rc-gate-footer a:hover { text-decoration: underline; }
+
+    /* Dashboard */
+    .rc-dashboard { display: none; }
+    .rc-dashboard.active { display: block; }
+
+    .rc-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 32px;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    .rc-header h1 { font-size: 28px; font-weight: 800; color: #fff; }
+    .rc-header h1 span { color: #f43f5e; }
+    .rc-header-right { display: flex; align-items: center; gap: 12px; }
+    .rc-key-display {
+      font-size: 12px; color: #71717a; font-family: 'Inter', monospace;
+      padding: 8px 12px; background: rgba(255,255,255,0.03); border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+    .rc-exit-btn {
+      padding: 8px 16px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px; color: #a1a1aa; font-size: 13px; cursor: pointer;
+      transition: all 0.2s; font-family: 'Inter', sans-serif;
+    }
+    .rc-exit-btn:hover { background: rgba(255,255,255,0.08); color: #fff; }
+
+    /* Tabs */
+    .rc-tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 24px;
+      background: rgba(255,255,255,0.03);
+      border-radius: 12px;
+      padding: 4px;
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+    .rc-tab {
+      flex: 1;
+      padding: 12px 16px;
+      background: transparent;
+      border: none;
+      border-radius: 8px;
+      color: #71717a;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: 'Inter', sans-serif;
+    }
+    .rc-tab.active {
+      background: rgba(244, 63, 94, 0.12);
+      color: #fb7185;
+    }
+    .rc-tab:hover:not(.active) { color: #a1a1aa; }
+
+    /* Tab Panels */
+    .rc-panel { display: none; }
+    .rc-panel.active { display: block; }
+
+    /* Card */
+    .rc-card {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+    .rc-card-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: #e4e4e7;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .rc-card-title svg { stroke: #f43f5e; }
+
+    /* Form elements */
+    .rc-input-group { margin-bottom: 16px; }
+    .rc-input-group label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: #a1a1aa;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+    .rc-input {
+      width: 100%;
+      padding: 12px 14px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 10px;
+      color: #fff;
+      font-size: 14px;
+      font-family: 'Inter', sans-serif;
+      outline: none;
+      transition: border-color 0.2s;
+      box-sizing: border-box;
+    }
+    .rc-input:focus { border-color: #f43f5e; }
+    .rc-input::placeholder { color: #52525b; }
+
+    .rc-input-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    /* Review Link Output */
+    .rc-link-output {
+      margin-top: 20px;
+      display: none;
+    }
+    .rc-link-output.active { display: block; }
+    .rc-link-box {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 14px 16px;
+      background: rgba(244, 63, 94, 0.08);
+      border: 1px solid rgba(244, 63, 94, 0.2);
+      border-radius: 10px;
+      margin-bottom: 12px;
+    }
+    .rc-link-box input {
+      flex: 1;
+      background: none;
+      border: none;
+      color: #fb7185;
+      font-size: 13px;
+      font-family: 'Inter', monospace;
+      outline: none;
+    }
+    .rc-link-copy {
+      padding: 8px 14px;
+      background: rgba(244, 63, 94, 0.15);
+      border: none;
+      border-radius: 6px;
+      color: #fb7185;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: 'Inter', sans-serif;
+      white-space: nowrap;
+    }
+    .rc-link-copy:hover { background: rgba(244, 63, 94, 0.25); }
+
+    .rc-link-actions {
+      display: flex;
+      gap: 8px;
+    }
+    .rc-link-action-btn {
+      flex: 1;
+      padding: 10px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      color: #d4d4d8;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: 'Inter', sans-serif;
+      text-align: center;
+    }
+    .rc-link-action-btn:hover { background: rgba(255,255,255,0.08); color: #fff; }
+
+    /* Info callout */
+    .rc-info {
+      padding: 16px;
+      background: rgba(244, 63, 94, 0.06);
+      border: 1px solid rgba(244, 63, 94, 0.15);
+      border-radius: 10px;
+      font-size: 13px;
+      color: #a1a1aa;
+      line-height: 1.6;
+    }
+    .rc-info strong { color: #fb7185; }
+    .rc-info p { margin-bottom: 8px; }
+    .rc-info p:last-child { margin-bottom: 0; }
+
+    /* Customer Table */
+    .rc-customer-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      margin-top: 16px;
+    }
+    .rc-customer-table th {
+      text-align: left;
+      padding: 10px 12px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #71717a;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .rc-customer-table td {
+      padding: 12px;
+      font-size: 13px;
+      color: #d4d4d8;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+    .rc-customer-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+    .rc-remove-btn {
+      padding: 4px 10px;
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.2);
+      border-radius: 6px;
+      color: #ef4444;
+      font-size: 11px;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: 'Inter', sans-serif;
+    }
+    .rc-remove-btn:hover { background: rgba(239, 68, 68, 0.2); }
+
+    .rc-empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: #52525b;
+      font-size: 14px;
+    }
+
+    /* Schedule settings */
+    .rc-schedule-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .rc-select {
+      padding: 10px 12px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      color: #fff;
+      font-size: 13px;
+      font-family: 'Inter', sans-serif;
+      outline: none;
+      cursor: pointer;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .rc-select option { background: #1a1a2e; color: #fff; }
+
+    /* Schedule calendar */
+    .rc-schedule-list { margin-top: 16px; }
+    .rc-schedule-item {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 14px 16px;
+      background: rgba(255,255,255,0.02);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 10px;
+      margin-bottom: 8px;
+      transition: all 0.2s;
+    }
+    .rc-schedule-item.sent { opacity: 0.5; }
+    .rc-schedule-date {
+      font-size: 13px;
+      font-weight: 600;
+      color: #fb7185;
+      min-width: 100px;
+    }
+    .rc-schedule-customer {
+      flex: 1;
+      font-size: 14px;
+      color: #e4e4e7;
+    }
+    .rc-schedule-customer small {
+      display: block;
+      font-size: 12px;
+      color: #71717a;
+      margin-top: 2px;
+    }
+    .rc-schedule-actions {
+      display: flex;
+      gap: 6px;
+    }
+    .rc-schedule-action {
+      padding: 6px 12px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 6px;
+      color: #a1a1aa;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: 'Inter', sans-serif;
+    }
+    .rc-schedule-action:hover { background: rgba(255,255,255,0.08); color: #fff; }
+    .rc-schedule-action.done {
+      background: rgba(34, 197, 94, 0.12);
+      border-color: rgba(34, 197, 94, 0.3);
+      color: #22c55e;
+    }
+
+    /* Template cards */
+    .rc-template-card {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 16px;
+      transition: all 0.2s;
+    }
+    .rc-template-card:hover {
+      border-color: rgba(244, 63, 94, 0.2);
+    }
+    .rc-template-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .rc-template-name {
+      font-size: 14px;
+      font-weight: 700;
+      color: #e4e4e7;
+    }
+    .rc-template-type {
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-weight: 600;
+    }
+    .rc-template-type.email {
+      background: rgba(244, 63, 94, 0.12);
+      color: #fb7185;
+    }
+    .rc-template-type.sms {
+      background: rgba(168, 85, 247, 0.12);
+      color: #c084fc;
+    }
+    .rc-template-subject {
+      font-size: 13px;
+      color: #a1a1aa;
+      margin-bottom: 8px;
+      font-weight: 500;
+    }
+    .rc-template-body {
+      padding: 14px;
+      background: rgba(0,0,0,0.2);
+      border-radius: 8px;
+      font-size: 13px;
+      color: #a1a1aa;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      max-height: 200px;
+      overflow-y: auto;
+      margin-bottom: 12px;
+    }
+    .rc-template-copy {
+      padding: 8px 16px;
+      background: rgba(244, 63, 94, 0.12);
+      border: 1px solid rgba(244, 63, 94, 0.2);
+      border-radius: 8px;
+      color: #fb7185;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: 'Inter', sans-serif;
+    }
+    .rc-template-copy:hover { background: rgba(244, 63, 94, 0.2); }
+
+    /* Stats */
+    .rc-stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .rc-stat {
+      padding: 16px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 12px;
+      text-align: center;
+    }
+    .rc-stat-value {
+      font-size: 28px;
+      font-weight: 800;
+      color: #fb7185;
+    }
+    .rc-stat-label {
+      font-size: 11px;
+      color: #71717a;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-top: 4px;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .rc-input-row { grid-template-columns: 1fr; }
+      .rc-schedule-row { grid-template-columns: 1fr; }
+      .rc-stats { grid-template-columns: 1fr; }
+      .rc-schedule-item { flex-wrap: wrap; }
+    }
+  </style>
+</head>
+<body>
+  <nav>
+    <div class="nav-container">
+      <a href="/" class="nav-logo">
+        <svg class="nav-logo-icon" width="28" height="28" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="50" cy="50" r="48" stroke="#22c55e" stroke-width="4"/>
+          <text x="50" y="62" text-anchor="middle" fill="#22c55e" font-size="42" font-weight="800" font-family="Arial">S</text>
+        </svg>
+        <span class="nav-logo-text">Soldi</span>
+      </a>
+      <div class="nav-links">
+        <a href="/#features">Features</a>
+        <a href="/#pricing">Pricing</a>
+        <a href="/odds.html">Odds Screen</a>
+        <a href="/business-finder.html">Business Finder</a>
+        <a href="/review-campaign.html" style="color: #f43f5e;">Review Campaign</a>
+      </div>
+    </div>
+  </nav>
+
+  <section class="rc-page">
+    <div class="container">
+      <!-- API Key Gate -->
+      <div id="rcGate" class="rc-gate">
+        <div class="rc-gate-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+          </svg>
+        </div>
+        <h2>Google Review Campaign</h2>
+        <p>Build scheduled review request campaigns to grow your Google reviews naturally over time. Add real customers and space out requests so reviews don't look suspicious.</p>
+        <div class="rc-gate-input">
+          <input type="text" id="rcKeyInput" placeholder="Enter your Soldi API key" autocomplete="off" spellcheck="false">
+          <button class="btn-rc" onclick="validateRcKey()">Access</button>
+        </div>
+        <div id="rcGateError" class="rc-gate-error"></div>
+        <div class="rc-gate-footer">
+          Don't have a key? <a href="/">Get access on the dashboard</a>
+        </div>
+      </div>
+
+      <!-- Main Dashboard -->
+      <div id="rcDashboard" class="rc-dashboard">
+        <div class="rc-header">
+          <h1>Review <span>Campaign</span></h1>
+          <div class="rc-header-right">
+            <span class="rc-key-display" id="rcKeyDisplay"></span>
+            <button class="rc-exit-btn" onclick="logoutRc()">Exit</button>
+          </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="rc-tabs">
+          <button class="rc-tab active" onclick="switchTab('setup')">Review Link</button>
+          <button class="rc-tab" onclick="switchTab('campaign')">Campaign Builder</button>
+          <button class="rc-tab" onclick="switchTab('templates')">Email Templates</button>
+        </div>
+
+        <!-- Tab 1: Review Link Setup -->
+        <div id="panelSetup" class="rc-panel active">
+          <div class="rc-card">
+            <div class="rc-card-title">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+              Generate Your Review Link
+            </div>
+            <div class="rc-input-row">
+              <div class="rc-input-group">
+                <label>Business Name</label>
+                <input type="text" class="rc-input" id="rcBusinessName" placeholder="e.g., Joe's Plumbing">
+              </div>
+              <div class="rc-input-group">
+                <label>City, State</label>
+                <input type="text" class="rc-input" id="rcBusinessLocation" placeholder="e.g., Miami, FL">
+              </div>
+            </div>
+            <button class="btn-rc" onclick="generateReviewLink()" style="width:100%;padding:14px;">Generate Review Link</button>
+
+            <div class="rc-link-output" id="rcLinkOutput">
+              <div style="margin-top:16px;">
+                <label style="font-size:12px;font-weight:600;color:#a1a1aa;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;display:block;">Your Google Review Link</label>
+                <div class="rc-link-box">
+                  <input type="text" id="rcReviewLink" readonly>
+                  <button class="rc-link-copy" onclick="copyReviewLink()">Copy</button>
+                </div>
+                <div class="rc-link-actions">
+                  <button class="rc-link-action-btn" onclick="testReviewLink()">Test Link</button>
+                  <button class="rc-link-action-btn" onclick="saveReviewLink()">Save to Campaign</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="rc-info">
+            <p><strong>How to get your direct Google review link:</strong></p>
+            <p>1. Search for your business on Google Maps</p>
+            <p>2. Click on your business listing</p>
+            <p>3. Click "Write a review" or share your profile</p>
+            <p>4. Copy the URL from your browser &mdash; that's your direct review link!</p>
+            <p style="margin-top:8px;"><strong>Or paste your Google Place ID</strong> and we'll build the link for you. You can find your Place ID at <a href="https://developers.google.com/maps/documentation/places/web-service/place-id" target="_blank" style="color:#fb7185;">Google's Place ID Finder</a>.</p>
+          </div>
+
+          <div class="rc-card" style="margin-top:20px;">
+            <div class="rc-card-title">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M12 2a10 10 0 100 20 10 10 0 000-20z"/><path d="M12 8v4l3 3"/></svg>
+              Or Paste a Direct Link / Place ID
+            </div>
+            <div class="rc-input-group">
+              <label>Google Review Link or Place ID</label>
+              <input type="text" class="rc-input" id="rcDirectLink" placeholder="Paste your Google review URL or Place ID (e.g., ChIJ...)">
+            </div>
+            <button class="btn-rc" onclick="saveDirectLink()" style="width:100%;padding:12px;">Use This Link</button>
+          </div>
+        </div>
+
+        <!-- Tab 2: Campaign Builder -->
+        <div id="panelCampaign" class="rc-panel">
+          <div class="rc-stats" id="rcStats">
+            <div class="rc-stat">
+              <div class="rc-stat-value" id="rcStatTotal">0</div>
+              <div class="rc-stat-label">Total Customers</div>
+            </div>
+            <div class="rc-stat">
+              <div class="rc-stat-value" id="rcStatSent">0</div>
+              <div class="rc-stat-label">Requests Sent</div>
+            </div>
+            <div class="rc-stat">
+              <div class="rc-stat-value" id="rcStatPending">0</div>
+              <div class="rc-stat-label">Pending</div>
+            </div>
+          </div>
+
+          <div class="rc-card">
+            <div class="rc-card-title">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4-4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+              Add Customers
+            </div>
+            <div class="rc-input-row" style="grid-template-columns:2fr 2fr 1fr auto;">
+              <div class="rc-input-group" style="margin-bottom:0;">
+                <input type="text" class="rc-input" id="rcCustName" placeholder="Customer name">
+              </div>
+              <div class="rc-input-group" style="margin-bottom:0;">
+                <input type="email" class="rc-input" id="rcCustEmail" placeholder="Email (optional)">
+              </div>
+              <div class="rc-input-group" style="margin-bottom:0;">
+                <input type="tel" class="rc-input" id="rcCustPhone" placeholder="Phone (optional)">
+              </div>
+              <button class="btn-rc" onclick="addCustomer()" style="padding:12px 20px;height:fit-content;">Add</button>
+            </div>
+
+            <div id="rcCustomerList"></div>
+          </div>
+
+          <div class="rc-card">
+            <div class="rc-card-title">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              Schedule Settings
+            </div>
+            <div class="rc-schedule-row">
+              <div class="rc-input-group" style="margin-bottom:0;">
+                <label>Start Date</label>
+                <input type="date" class="rc-input" id="rcStartDate">
+              </div>
+              <div class="rc-input-group" style="margin-bottom:0;">
+                <label>Frequency</label>
+                <select class="rc-select" id="rcFrequency">
+                  <option value="7">Weekly (every 7 days)</option>
+                  <option value="14">Bi-weekly (every 14 days)</option>
+                  <option value="30">Monthly (every 30 days)</option>
+                  <option value="3">Every 3 days</option>
+                  <option value="5">Every 5 days</option>
+                </select>
+              </div>
+              <div class="rc-input-group" style="margin-bottom:0;">
+                <label>Time of Day</label>
+                <select class="rc-select" id="rcTimeOfDay">
+                  <option value="morning">Morning (9-11 AM)</option>
+                  <option value="afternoon">Afternoon (1-3 PM)</option>
+                  <option value="evening">Evening (5-7 PM)</option>
+                </select>
+              </div>
+            </div>
+            <button class="btn-rc" onclick="generateSchedule()" style="width:100%;padding:14px;">Generate Schedule</button>
+          </div>
+
+          <div id="rcScheduleView"></div>
+        </div>
+
+        <!-- Tab 3: Email Templates -->
+        <div id="panelTemplates" class="rc-panel">
+          <div class="rc-info" style="margin-bottom:20px;">
+            <p><strong>How to use templates:</strong> Click "Copy Template" on any template below. The template will be copied with your business name and review link already filled in. Paste it into your email client and customize the customer name.</p>
+          </div>
+          <div id="rcTemplatesList"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer style="text-align:center;padding:40px 20px;border-top:1px solid rgba(255,255,255,0.06);">
+    <p style="font-size:13px;color:#52525b;">&copy; 2025 Soldi. All rights reserved.</p>
+  </footer>
+
+  <script>
+    let currentApiKey = '';
+    let campaign = {
+      businessName: '',
+      reviewLink: '',
+      customers: [],
+      schedule: { startDate: '', frequency: 7, timeOfDay: 'morning' },
+    };
+    let emailTemplates = [];
+    let smsTemplates = [];
+
+    // Init
+    window.addEventListener('DOMContentLoaded', () => {
+      const savedKey = sessionStorage.getItem('soldi_reviews_key');
+      if (savedKey) {
+        currentApiKey = savedKey;
+        accessRcScreen();
+      }
+
+      // Load campaign from localStorage
+      try {
+        const saved = localStorage.getItem('soldi_review_campaign');
+        if (saved) campaign = JSON.parse(saved);
+      } catch(e) {}
+
+      // Set default start date to tomorrow
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      document.getElementById('rcStartDate').value = tomorrow.toISOString().split('T')[0];
+    });
+
+    function saveCampaign() {
+      localStorage.setItem('soldi_review_campaign', JSON.stringify(campaign));
+    }
+
+    async function validateRcKey() {
+      const keyInput = document.getElementById('rcKeyInput');
+      const errorEl = document.getElementById('rcGateError');
+      const key = keyInput.value.trim();
+      if (!key) {
+        errorEl.textContent = 'Please enter your API key';
+        errorEl.style.display = 'block';
+        return;
+      }
+      try {
+        const res = await fetch(`/api/validate-key?key=${encodeURIComponent(key)}`);
+        const data = await res.json();
+        if (data.valid) {
+          currentApiKey = key;
+          sessionStorage.setItem('soldi_reviews_key', key);
+          errorEl.style.display = 'none';
+          accessRcScreen();
+        } else {
+          errorEl.textContent = 'Invalid API key.';
+          errorEl.style.display = 'block';
+        }
+      } catch (err) {
+        errorEl.textContent = 'Connection error. Please try again.';
+        errorEl.style.display = 'block';
+      }
+    }
+
+    async function accessRcScreen() {
+      document.getElementById('rcGate').style.display = 'none';
+      document.getElementById('rcDashboard').classList.add('active');
+      const masked = currentApiKey.slice(0, 10) + '...' + currentApiKey.slice(-4);
+      document.getElementById('rcKeyDisplay').textContent = masked;
+
+      // Load templates
+      try {
+        const res = await fetch(`/api/review-campaign/templates?key=${encodeURIComponent(currentApiKey)}`);
+        const data = await res.json();
+        if (data.success) {
+          emailTemplates = data.emailTemplates || [];
+          smsTemplates = data.smsTemplates || [];
+        }
+      } catch(e) {}
+
+      // Restore saved data
+      if (campaign.businessName) {
+        document.getElementById('rcBusinessName').value = campaign.businessName;
+      }
+      if (campaign.reviewLink) {
+        document.getElementById('rcReviewLink').value = campaign.reviewLink;
+        document.getElementById('rcLinkOutput').classList.add('active');
+      }
+
+      renderCustomers();
+      renderTemplates();
+      updateStats();
+    }
+
+    function switchTab(tab) {
+      document.querySelectorAll('.rc-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.rc-panel').forEach(p => p.classList.remove('active'));
+      event.target.classList.add('active');
+      document.getElementById('panel' + tab.charAt(0).toUpperCase() + tab.slice(1)).classList.add('active');
+    }
+
+    // ---- Tab 1: Review Link ----
+    function generateReviewLink() {
+      const name = document.getElementById('rcBusinessName').value.trim();
+      const location = document.getElementById('rcBusinessLocation').value.trim();
+      if (!name) {
+        document.getElementById('rcBusinessName').focus();
+        return;
+      }
+
+      const searchQuery = location ? `${name} ${location}` : name;
+      const reviewLink = `https://search.google.com/local/reviews?placeid=&q=${encodeURIComponent(searchQuery)}`;
+      const mapsLink = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(searchQuery)}`;
+
+      // Use maps search link as the review link (user can find "Write a review" from there)
+      document.getElementById('rcReviewLink').value = mapsLink;
+      document.getElementById('rcLinkOutput').classList.add('active');
+
+      campaign.businessName = name;
+      campaign.reviewLink = mapsLink;
+      saveCampaign();
+    }
+
+    function saveDirectLink() {
+      const input = document.getElementById('rcDirectLink').value.trim();
+      if (!input) return;
+
+      let link = input;
+      // If it looks like a Place ID, build the proper URL
+      if (input.startsWith('ChIJ') || input.startsWith('Eh')) {
+        link = `https://search.google.com/local/writereview?placeid=${encodeURIComponent(input)}`;
+      }
+
+      campaign.reviewLink = link;
+      document.getElementById('rcReviewLink').value = link;
+      document.getElementById('rcLinkOutput').classList.add('active');
+      saveCampaign();
+    }
+
+    function copyReviewLink() {
+      const input = document.getElementById('rcReviewLink');
+      navigator.clipboard.writeText(input.value).then(() => {
+        const btn = input.nextElementSibling;
+        btn.textContent = 'Copied!';
+        setTimeout(() => btn.textContent = 'Copy', 2000);
+      });
+    }
+
+    function testReviewLink() {
+      const link = document.getElementById('rcReviewLink').value;
+      if (link) window.open(link, '_blank');
+    }
+
+    function saveReviewLink() {
+      const link = document.getElementById('rcReviewLink').value;
+      if (link) {
+        campaign.reviewLink = link;
+        saveCampaign();
+        switchTab('campaign');
+        document.querySelectorAll('.rc-tab')[1].click();
+      }
+    }
+
+    // ---- Tab 2: Campaign Builder ----
+    function addCustomer() {
+      const name = document.getElementById('rcCustName').value.trim();
+      const email = document.getElementById('rcCustEmail').value.trim();
+      const phone = document.getElementById('rcCustPhone').value.trim();
+
+      if (!name) {
+        document.getElementById('rcCustName').focus();
+        return;
+      }
+
+      campaign.customers.push({
+        id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+        name,
+        email,
+        phone,
+        sent: false,
+        scheduledDate: '',
+      });
+
+      document.getElementById('rcCustName').value = '';
+      document.getElementById('rcCustEmail').value = '';
+      document.getElementById('rcCustPhone').value = '';
+      document.getElementById('rcCustName').focus();
+
+      saveCampaign();
+      renderCustomers();
+      updateStats();
+    }
+
+    function removeCustomer(id) {
+      campaign.customers = campaign.customers.filter(c => c.id !== id);
+      saveCampaign();
+      renderCustomers();
+      updateStats();
+    }
+
+    function renderCustomers() {
+      const container = document.getElementById('rcCustomerList');
+      if (campaign.customers.length === 0) {
+        container.innerHTML = '<div class="rc-empty-state">No customers added yet. Add customers above to start building your campaign.</div>';
+        return;
+      }
+
+      container.innerHTML = `
+        <table class="rc-customer-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Phone</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${campaign.customers.map(c => `
+              <tr>
+                <td>${escapeHtml(c.name)}</td>
+                <td>${c.email ? escapeHtml(c.email) : '<span style="color:#52525b;">-</span>'}</td>
+                <td>${c.phone ? escapeHtml(c.phone) : '<span style="color:#52525b;">-</span>'}</td>
+                <td>${c.sent
+                  ? '<span style="color:#22c55e;font-size:12px;font-weight:600;">Sent</span>'
+                  : '<span style="color:#71717a;font-size:12px;">Pending</span>'}</td>
+                <td><button class="rc-remove-btn" onclick="removeCustomer('${c.id}')">Remove</button></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+    }
+
+    function generateSchedule() {
+      const startDate = document.getElementById('rcStartDate').value;
+      const frequency = parseInt(document.getElementById('rcFrequency').value);
+      const timeOfDay = document.getElementById('rcTimeOfDay').value;
+
+      if (!startDate) return;
+      if (campaign.customers.length === 0) {
+        alert('Add at least one customer before generating a schedule.');
+        return;
+      }
+
+      campaign.schedule = { startDate, frequency, timeOfDay };
+
+      // Assign dates to unsent customers
+      let currentDate = new Date(startDate + 'T12:00:00');
+      campaign.customers.forEach(c => {
+        if (!c.sent) {
+          c.scheduledDate = currentDate.toISOString().split('T')[0];
+          currentDate = new Date(currentDate.getTime() + frequency * 24 * 60 * 60 * 1000);
+        }
+      });
+
+      saveCampaign();
+      renderSchedule();
+    }
+
+    function renderSchedule() {
+      const container = document.getElementById('rcScheduleView');
+      const scheduled = campaign.customers.filter(c => c.scheduledDate);
+
+      if (scheduled.length === 0) {
+        container.innerHTML = '';
+        return;
+      }
+
+      // Sort by date
+      scheduled.sort((a, b) => new Date(a.scheduledDate) - new Date(b.scheduledDate));
+
+      const timeHint = {
+        morning: '9-11 AM',
+        afternoon: '1-3 PM',
+        evening: '5-7 PM',
+      }[campaign.schedule.timeOfDay] || '';
+
+      container.innerHTML = `
+        <div class="rc-card" style="margin-top:20px;">
+          <div class="rc-card-title">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            Campaign Schedule ${timeHint ? `(${timeHint})` : ''}
+          </div>
+          <div class="rc-schedule-list">
+            ${scheduled.map(c => {
+              const date = new Date(c.scheduledDate + 'T12:00:00');
+              const dateStr = date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+              const isPast = new Date(c.scheduledDate) < new Date();
+
+              return `
+                <div class="rc-schedule-item ${c.sent ? 'sent' : ''}">
+                  <div class="rc-schedule-date">${dateStr}</div>
+                  <div class="rc-schedule-customer">
+                    ${escapeHtml(c.name)}
+                    <small>${c.email || c.phone || 'No contact info'}</small>
+                  </div>
+                  <div class="rc-schedule-actions">
+                    ${c.email ? `<button class="rc-schedule-action" onclick="copyEmailForCustomer('${c.id}')">Copy Email</button>` : ''}
+                    <button class="rc-schedule-action ${c.sent ? 'done' : ''}" onclick="toggleSent('${c.id}')">
+                      ${c.sent ? 'Sent' : 'Mark Sent'}
+                    </button>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    function toggleSent(id) {
+      const customer = campaign.customers.find(c => c.id === id);
+      if (customer) {
+        customer.sent = !customer.sent;
+        saveCampaign();
+        renderCustomers();
+        renderSchedule();
+        updateStats();
+      }
+    }
+
+    function copyEmailForCustomer(id) {
+      const customer = campaign.customers.find(c => c.id === id);
+      if (!customer || emailTemplates.length === 0) return;
+
+      const template = emailTemplates[0]; // Use first template
+      const body = template.body
+        .replace(/\{customer_name\}/g, customer.name)
+        .replace(/\{business_name\}/g, campaign.businessName || 'Our Business')
+        .replace(/\{review_link\}/g, campaign.reviewLink || '[Your Review Link]');
+
+      navigator.clipboard.writeText(body).then(() => {
+        // Find the button and show feedback
+        const btn = event.target;
+        btn.textContent = 'Copied!';
+        setTimeout(() => btn.textContent = 'Copy Email', 2000);
+      });
+    }
+
+    function updateStats() {
+      const total = campaign.customers.length;
+      const sent = campaign.customers.filter(c => c.sent).length;
+      document.getElementById('rcStatTotal').textContent = total;
+      document.getElementById('rcStatSent').textContent = sent;
+      document.getElementById('rcStatPending').textContent = total - sent;
+    }
+
+    // ---- Tab 3: Templates ----
+    function renderTemplates() {
+      const container = document.getElementById('rcTemplatesList');
+      const businessName = campaign.businessName || '{business_name}';
+      const reviewLink = campaign.reviewLink || '{review_link}';
+
+      let html = '<h3 style="font-size:16px;font-weight:700;color:#e4e4e7;margin-bottom:16px;">Email Templates</h3>';
+
+      emailTemplates.forEach(t => {
+        const previewBody = t.body
+          .replace(/\{customer_name\}/g, 'John')
+          .replace(/\{business_name\}/g, businessName)
+          .replace(/\{review_link\}/g, reviewLink);
+        const previewSubject = t.subject
+          .replace(/\{customer_name\}/g, 'John')
+          .replace(/\{business_name\}/g, businessName);
+
+        html += `
+          <div class="rc-template-card">
+            <div class="rc-template-header">
+              <span class="rc-template-name">${escapeHtml(t.name)}</span>
+              <span class="rc-template-type email">EMAIL</span>
+            </div>
+            <div class="rc-template-subject">Subject: ${escapeHtml(previewSubject)}</div>
+            <div class="rc-template-body">${escapeHtml(previewBody)}</div>
+            <button class="rc-template-copy" onclick="copyTemplate('email', '${t.id}')">Copy Template</button>
+          </div>
+        `;
+      });
+
+      html += '<h3 style="font-size:16px;font-weight:700;color:#e4e4e7;margin:24px 0 16px;">SMS Templates</h3>';
+
+      smsTemplates.forEach(t => {
+        const previewBody = t.body
+          .replace(/\{customer_name\}/g, 'John')
+          .replace(/\{business_name\}/g, businessName)
+          .replace(/\{review_link\}/g, reviewLink);
+
+        html += `
+          <div class="rc-template-card">
+            <div class="rc-template-header">
+              <span class="rc-template-name">${escapeHtml(t.name)}</span>
+              <span class="rc-template-type sms">SMS</span>
+            </div>
+            <div class="rc-template-body">${escapeHtml(previewBody)}</div>
+            <button class="rc-template-copy" onclick="copyTemplate('sms', '${t.id}')">Copy Template</button>
+          </div>
+        `;
+      });
+
+      container.innerHTML = html;
+    }
+
+    function copyTemplate(type, id) {
+      const templates = type === 'email' ? emailTemplates : smsTemplates;
+      const template = templates.find(t => t.id === id);
+      if (!template) return;
+
+      let text = template.body
+        .replace(/\{customer_name\}/g, '{customer_name}')
+        .replace(/\{business_name\}/g, campaign.businessName || '{business_name}')
+        .replace(/\{review_link\}/g, campaign.reviewLink || '{review_link}');
+
+      if (type === 'email' && template.subject) {
+        const subject = template.subject
+          .replace(/\{customer_name\}/g, '{customer_name}')
+          .replace(/\{business_name\}/g, campaign.businessName || '{business_name}');
+        text = `Subject: ${subject}\n\n${text}`;
+      }
+
+      navigator.clipboard.writeText(text).then(() => {
+        const btn = event.target;
+        btn.textContent = 'Copied!';
+        setTimeout(() => btn.textContent = 'Copy Template', 2000);
+      });
+    }
+
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    function logoutRc() {
+      sessionStorage.removeItem('soldi_reviews_key');
+      currentApiKey = '';
+      document.getElementById('rcDashboard').classList.remove('active');
+      document.getElementById('rcGate').style.display = 'block';
+      document.getElementById('rcKeyInput').value = '';
+    }
+
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' && document.activeElement.id === 'rcKeyInput') {
+        validateRcKey();
+      }
+    });
+  </script>
+</body>
+</html>

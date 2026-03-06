@@ -1,5 +1,6 @@
 .env
 node_modules/
+data/
 _frames/
 soldi-*.png
 soldi-*.mp4
