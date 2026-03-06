@@ -35,6 +35,24 @@ const WHOP_PRODUCT_PATH = process.env.WHOP_PRODUCT_PATH || 'soldi-a9';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'bartwill452@gmail.com';
 
 // ============================================
+// 2FA VERIFICATION CODE STORE (in-memory)
+// ============================================
+const verificationCodes = new Map(); // key: email (lowercase), value: { code, expiresAt }
+const CODE_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
+const CODE_COOLDOWN_MS = 60 * 1000;   // 1 minute between sends
+
+function generateVerificationCode() {
+  return crypto.randomInt(100000, 999999).toString();
+}
+
+function cleanupExpiredCodes() {
+  const now = Date.now();
+  for (const [email, data] of verificationCodes) {
+    if (now > data.expiresAt) verificationCodes.delete(email);
+  }
+}
+
+// ============================================
 // API KEY STORAGE (file-based)
 // ============================================
 const DATA_DIR = path.join(__dirname, 'data');
@@ -356,7 +374,199 @@ function requireOwner(req, res, next) {
 }
 
 // ============================================
-// POST /api/verify-membership
+// POST /api/send-verification  (Step 1 of 2FA login)
+// Validates membership, then sends 6-digit code to email
+// ============================================
+app.post('/api/send-verification', async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: 'Email is required' });
+
+  const emailLower = email.toLowerCase();
+  cleanupExpiredCodes();
+
+  // Rate limit: 1 code per minute per email
+  const existing = verificationCodes.get(emailLower);
+  if (existing && Date.now() < existing.sentAt + CODE_COOLDOWN_MS) {
+    const waitSec = Math.ceil((existing.sentAt + CODE_COOLDOWN_MS - Date.now()) / 1000);
+    return res.status(429).json({ error: 'cooldown', message: `Please wait ${waitSec}s before requesting another code` });
+  }
+
+  // For non-admin emails, verify Whop membership FIRST (don't send code to non-members)
+  if (emailLower !== ADMIN_EMAIL.toLowerCase()) {
+    if (!WHOP_API_KEY || WHOP_API_KEY === 'YOUR_API_KEY_HERE') {
+      return res.status(500).json({ error: 'Server not configured. API key missing.' });
+    }
+    try {
+      let page = 1;
+      let found = false;
+      const maxPages = 20;
+      while (!found && page <= maxPages) {
+        const url = `https://api.whop.com/api/v1/memberships?company_id=${WHOP_COMPANY_ID}&page=${page}&per=50`;
+        const response = await fetch(url, { headers: { Authorization: `Bearer ${WHOP_API_KEY}` } });
+        if (!response.ok) return res.status(502).json({ error: 'Failed to verify membership' });
+        const data = await response.json();
+        const memberships = data.data || [];
+        if (memberships.length === 0) break;
+        const match = memberships.find(m => {
+          const memberEmail = m.user?.email || m.email;
+          return memberEmail && memberEmail.toLowerCase() === emailLower;
+        });
+        if (match) {
+          const activeStatuses = ['active', 'trialing', 'canceling'];
+          if (!activeStatuses.includes(match.status)) {
+            return res.status(403).json({
+              error: 'inactive_membership',
+              message: `Membership status: ${match.status}`,
+              purchaseUrl: 'https://whop.com/checkout/plan_Q93fIRTfIo5g7/'
+            });
+          }
+          found = true;
+          break;
+        }
+        if (!data.page_info || !data.page_info.has_next_page) break;
+        page++;
+      }
+      if (!found) {
+        return res.status(404).json({
+          error: 'no_membership',
+          message: 'No membership found for this email',
+          purchaseUrl: 'https://whop.com/checkout/plan_Q93fIRTfIo5g7/'
+        });
+      }
+    } catch (err) {
+      console.error('Membership check error:', err);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+
+  // Generate and store 6-digit code
+  const code = generateVerificationCode();
+  verificationCodes.set(emailLower, { code, expiresAt: Date.now() + CODE_EXPIRY_MS, sentAt: Date.now() });
+
+  // Send code via email
+  if (resend) {
+    try {
+      await resend.emails.send({
+        from: 'Soldi <onboarding@resend.dev>',
+        to: email,
+        subject: `${code} — Your Soldi verification code`,
+        html: buildVerificationCodeEmailHtml(code)
+      });
+      console.log(`[2FA] Verification code sent to ${email}`);
+    } catch (emailErr) {
+      console.error('[2FA] Email send error:', emailErr);
+      verificationCodes.delete(emailLower);
+      return res.status(500).json({ error: 'Failed to send verification email. Please try again.' });
+    }
+  } else {
+    console.log(`[2FA] Resend not configured — code for ${email}: ${code}`);
+  }
+
+  return res.json({ success: true, message: 'Verification code sent to your email' });
+});
+
+// ============================================
+// POST /api/verify-code  (Step 2 of 2FA login)
+// Validates code, then issues JWT + API key
+// ============================================
+app.post('/api/verify-code', async (req, res) => {
+  const { email, code } = req.body;
+  if (!email || !code) return res.status(400).json({ error: 'Email and code are required' });
+
+  const emailLower = email.toLowerCase();
+  const stored = verificationCodes.get(emailLower);
+
+  if (!stored) {
+    return res.status(400).json({ error: 'no_code', message: 'No verification code found. Please request a new one.' });
+  }
+
+  if (Date.now() > stored.expiresAt) {
+    verificationCodes.delete(emailLower);
+    return res.status(400).json({ error: 'expired', message: 'Verification code expired. Please request a new one.' });
+  }
+
+  if (stored.code !== code.trim()) {
+    return res.status(400).json({ error: 'invalid_code', message: 'Invalid verification code. Please try again.' });
+  }
+
+  // Code is valid — delete it (single use)
+  verificationCodes.delete(emailLower);
+
+  // Admin bypass
+  if (emailLower === ADMIN_EMAIL.toLowerCase()) {
+    let apiKey;
+    const existingKey = findKeyByMembershipId('admin');
+    if (existingKey) {
+      apiKey = existingKey.key;
+    } else {
+      apiKey = generateApiKey();
+      const keys = loadApiKeys();
+      keys[apiKey] = { email: ADMIN_EMAIL, membershipId: 'admin', createdAt: new Date().toISOString(), status: 'active' };
+      saveApiKeys(keys);
+    }
+    const token = jwt.sign(
+      { membershipId: 'admin', email: ADMIN_EMAIL, name: 'Admin', firstName: 'Admin', status: 'active', affiliateLink: null, affiliateUsername: null, createdAt: new Date().toISOString() },
+      JWT_SECRET, { expiresIn: '14d' }
+    );
+    return res.json({ success: true, token, apiKey, user: { email: ADMIN_EMAIL, name: 'Admin', firstName: 'Admin', status: 'active', affiliateLink: null, affiliateUsername: null, memberSince: 'Owner' } });
+  }
+
+  // Regular member — look up Whop membership and issue JWT
+  try {
+    let page = 1;
+    let found = null;
+    const maxPages = 20;
+    while (!found && page <= maxPages) {
+      const url = `https://api.whop.com/api/v1/memberships?company_id=${WHOP_COMPANY_ID}&page=${page}&per=50`;
+      const response = await fetch(url, { headers: { Authorization: `Bearer ${WHOP_API_KEY}` } });
+      if (!response.ok) return res.status(502).json({ error: 'Failed to verify membership' });
+      const data = await response.json();
+      const memberships = data.data || [];
+      if (memberships.length === 0) break;
+      found = memberships.find(m => {
+        const memberEmail = m.user?.email || m.email;
+        return memberEmail && memberEmail.toLowerCase() === emailLower;
+      });
+      if (!data.page_info || !data.page_info.has_next_page) break;
+      page++;
+    }
+
+    if (!found) return res.status(404).json({ error: 'no_membership', message: 'No membership found' });
+
+    const affiliateUsername = found.user?.username || null;
+    const affiliateLink = affiliateUsername ? `https://whop.com/${WHOP_STORE_SLUG}/?a=${affiliateUsername}` : null;
+
+    let apiKey;
+    const existingKey = findKeyByMembershipId(found.id);
+    if (existingKey) {
+      apiKey = existingKey.key;
+    } else {
+      apiKey = generateApiKey();
+      const keys = loadApiKeys();
+      keys[apiKey] = { email: found.user?.email || found.email, membershipId: found.id, createdAt: new Date().toISOString(), status: 'active' };
+      saveApiKeys(keys);
+    }
+
+    const fullName = found.user?.name || found.user?.username || null;
+    const firstName = fullName ? fullName.split(' ')[0] : null;
+
+    const token = jwt.sign(
+      { membershipId: found.id, email: found.user?.email || found.email, name: fullName, firstName, status: found.status, affiliateLink, affiliateUsername, createdAt: found.created_at },
+      JWT_SECRET, { expiresIn: '14d' }
+    );
+
+    return res.json({
+      success: true, token, apiKey,
+      user: { email: found.user?.email || found.email, name: fullName, firstName, status: found.status, affiliateLink, affiliateUsername, memberSince: found.created_at }
+    });
+  } catch (err) {
+    console.error('Verify-code membership error:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ============================================
+// POST /api/verify-membership  (legacy — kept for backward compatibility)
 // Body: { email: "user@example.com" }
 // ============================================
 app.post('/api/verify-membership', async (req, res) => {
@@ -690,6 +900,29 @@ function buildWelcomeEmailHtml(firstName, email) {
     <a href="https://soldi-website.onrender.com" style="display:inline-block;padding:14px 40px;background:linear-gradient(135deg,#22c55e,#10b981);color:#050507;font-weight:700;border-radius:10px;text-decoration:none;font-size:15px;">Go to Dashboard</a>
   </div>
 
+  <p style="text-align:center;color:#52525b;font-size:12px;margin:0;">&copy; 2026 Soldi. All rights reserved.</p>
+</div>
+</body></html>`;
+}
+
+// ============================================
+// VERIFICATION CODE EMAIL TEMPLATE
+// ============================================
+function buildVerificationCodeEmailHtml(code) {
+  const digits = code.split('').join(' &nbsp; ');
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;padding:0;background:#050507;font-family:'Inter',system-ui,-apple-system,sans-serif;">
+<div style="max-width:600px;margin:0 auto;background:#111;color:#fff;padding:40px;border-radius:16px;margin-top:20px;">
+  <div style="text-align:center;margin-bottom:32px;">
+    <div style="display:inline-block;width:60px;height:60px;background:linear-gradient(135deg,#22c55e,#10b981);border-radius:16px;line-height:60px;font-size:32px;font-weight:900;color:#050507;">S</div>
+  </div>
+  <h1 style="font-size:24px;font-weight:800;text-align:center;margin:0 0 8px;">Your Verification Code</h1>
+  <p style="color:#a1a1aa;text-align:center;margin:0 0 32px;font-size:15px;">Enter this code on the Soldi login page to continue:</p>
+  <div style="background:rgba(34,197,94,0.08);border:2px solid rgba(34,197,94,0.3);border-radius:16px;padding:28px;text-align:center;margin-bottom:24px;">
+    <span style="font-family:'Courier New',monospace;font-size:40px;font-weight:900;letter-spacing:12px;color:#22c55e;">${digits}</span>
+  </div>
+  <p style="text-align:center;color:#71717a;font-size:13px;margin:0 0 8px;">This code expires in <strong style="color:#a1a1aa;">5 minutes</strong>.</p>
+  <p style="text-align:center;color:#52525b;font-size:12px;margin:24px 0 0;">If you didn't request this code, you can safely ignore this email.</p>
+  <hr style="border:none;border-top:1px solid rgba(255,255,255,0.06);margin:24px 0;">
   <p style="text-align:center;color:#52525b;font-size:12px;margin:0;">&copy; 2026 Soldi. All rights reserved.</p>
 </div>
 </body></html>`;

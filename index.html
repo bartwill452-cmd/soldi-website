@@ -84,23 +84,50 @@
       <div class="login-modal-icon">
         <div class="logo-icon" style="width:48px;height:48px;font-size:22px;">S</div>
       </div>
-      <h3 class="login-modal-title">Member Login</h3>
-      <p class="login-modal-sub">Enter the email associated with your Whop membership to access your dashboard.</p>
-      <form id="loginForm" onsubmit="handleLogin(event)">
-        <div class="login-input-group">
-          <input type="email" id="loginEmail" placeholder="your@email.com" required autocomplete="email">
-          <button type="submit" class="btn btn-primary login-submit" id="loginSubmitBtn">
-            <span class="login-btn-text">Verify Membership</span>
-            <span class="login-btn-loading" style="display:none;">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="spin"><circle cx="12" cy="12" r="10" stroke-dasharray="31.4" stroke-dashoffset="10"/></svg>
-              Verifying...
-            </span>
-          </button>
+
+      <!-- STEP 1: Email Input -->
+      <div id="loginStep1">
+        <h3 class="login-modal-title">Member Login</h3>
+        <p class="login-modal-sub">Enter the email associated with your Whop membership.</p>
+        <form id="loginForm" onsubmit="handleSendCode(event)">
+          <div class="login-input-group">
+            <input type="email" id="loginEmail" placeholder="your@email.com" required autocomplete="email">
+            <button type="submit" class="btn btn-primary login-submit" id="loginSubmitBtn">
+              <span class="login-btn-text">Send Code</span>
+              <span class="login-btn-loading" style="display:none;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="spin"><circle cx="12" cy="12" r="10" stroke-dasharray="31.4" stroke-dashoffset="10"/></svg>
+                Sending...
+              </span>
+            </button>
+          </div>
+          <div class="login-error" id="loginError" style="display:none;"></div>
+        </form>
+        <div class="login-modal-footer">
+          <p>Not a member yet? <a href="https://whop.com/checkout/plan_Q93fIRTfIo5g7/" target="_blank">Join Soldi here</a></p>
         </div>
-        <div class="login-error" id="loginError" style="display:none;"></div>
-      </form>
-      <div class="login-modal-footer">
-        <p>Not a member yet? <a href="https://whop.com/checkout/plan_Q93fIRTfIo5g7/" target="_blank">Join Soldi here</a></p>
+      </div>
+
+      <!-- STEP 2: Verification Code -->
+      <div id="loginStep2" style="display:none;">
+        <h3 class="login-modal-title">Enter Verification Code</h3>
+        <p class="login-modal-sub">We sent a 6-digit code to <strong id="codeEmailDisplay"></strong></p>
+        <form id="codeForm" onsubmit="handleVerifyCode(event)">
+          <div class="login-input-group">
+            <input type="text" id="codeInput" placeholder="000000" required maxlength="6" pattern="[0-9]{6}" inputmode="numeric" autocomplete="one-time-code" style="text-align:center;font-size:24px;font-weight:700;letter-spacing:8px;font-family:'Courier New',monospace;">
+            <button type="submit" class="btn btn-primary login-submit" id="codeSubmitBtn">
+              <span class="code-btn-text">Verify</span>
+              <span class="code-btn-loading" style="display:none;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="spin"><circle cx="12" cy="12" r="10" stroke-dasharray="31.4" stroke-dashoffset="10"/></svg>
+                Verifying...
+              </span>
+            </button>
+          </div>
+          <div class="login-error" id="codeError" style="display:none;"></div>
+        </form>
+        <div class="login-modal-footer" style="display:flex;justify-content:space-between;align-items:center;">
+          <a href="#" onclick="backToEmail(event)" style="color:#a1a1aa;font-size:13px;text-decoration:none;">← Different email</a>
+          <a href="#" id="resendCodeLink" onclick="handleResendCode(event)" style="color:#22c55e;font-size:13px;text-decoration:none;">Resend Code</a>
+        </div>
       </div>
     </div>
   </div>
@@ -1241,6 +1268,9 @@
       document.getElementById('loginModal').classList.remove('active');
       document.getElementById('loginError').style.display = 'none';
       document.getElementById('loginForm').reset();
+      // Reset to step 1
+      document.getElementById('loginStep1').style.display = 'block';
+      document.getElementById('loginStep2').style.display = 'none';
     }
 
     document.getElementById('loginModal').addEventListener('click', function(e) {
@@ -1251,7 +1281,11 @@
       if (e.key === 'Escape') closeLoginModal();
     });
 
-    async function handleLogin(e) {
+    let pendingLoginEmail = '';
+    let resendCooldown = false;
+
+    // STEP 1: Send verification code
+    async function handleSendCode(e) {
       e.preventDefault();
       const email = document.getElementById('loginEmail').value.trim();
       const errorEl = document.getElementById('loginError');
@@ -1265,27 +1299,28 @@
       errorEl.style.display = 'none';
 
       try {
-        const res = await fetch('/api/verify-membership', {
+        const res = await fetch('/api/send-verification', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email })
         });
-
         const data = await res.json();
 
         if (res.ok && data.success) {
-          localStorage.setItem('soldi_token', data.token);
-          localStorage.setItem('soldi_user', JSON.stringify(data.user));
-          if (data.apiKey) localStorage.setItem('soldi_api_key', data.apiKey);
-          closeLoginModal();
-          showDashboard(data.user, data.apiKey);
-          trackEvent('member_login', { email: data.user.email, status: data.user.status });
+          pendingLoginEmail = email;
+          document.getElementById('codeEmailDisplay').textContent = email;
+          document.getElementById('loginStep1').style.display = 'none';
+          document.getElementById('loginStep2').style.display = 'block';
+          document.getElementById('codeInput').value = '';
+          document.getElementById('codeError').style.display = 'none';
+          document.getElementById('codeInput').focus();
+          trackEvent('verification_code_sent', { email });
         } else {
-          let errorMsg = 'Verification failed. Please try again.';
+          let errorMsg = data.message || 'Failed to send code. Please try again.';
           if (data.error === 'no_membership') {
-            errorMsg = 'No membership found for this email. <a href="' + data.purchaseUrl + '" target="_blank">Join Soldi here</a>.';
+            errorMsg = 'No membership found for this email. <a href="' + (data.purchaseUrl || 'https://whop.com/checkout/plan_Q93fIRTfIo5g7/') + '" target="_blank">Join Soldi here</a>.';
           } else if (data.error === 'inactive_membership') {
-            errorMsg = 'Your membership is ' + data.status + '. <a href="' + data.purchaseUrl + '" target="_blank">Reactivate here</a>.';
+            errorMsg = 'Your membership is ' + (data.status || 'inactive') + '. <a href="' + (data.purchaseUrl || 'https://whop.com/checkout/plan_Q93fIRTfIo5g7/') + '" target="_blank">Reactivate here</a>.';
           }
           errorEl.innerHTML = errorMsg;
           errorEl.style.display = 'block';
@@ -1299,6 +1334,114 @@
         btnLoading.style.display = 'none';
         submitBtn.disabled = false;
       }
+    }
+
+    // STEP 2: Verify the code
+    async function handleVerifyCode(e) {
+      e.preventDefault();
+      const code = document.getElementById('codeInput').value.trim();
+      const errorEl = document.getElementById('codeError');
+      const btnText = document.querySelector('.code-btn-text');
+      const btnLoading = document.querySelector('.code-btn-loading');
+      const submitBtn = document.getElementById('codeSubmitBtn');
+
+      btnText.style.display = 'none';
+      btnLoading.style.display = 'inline-flex';
+      submitBtn.disabled = true;
+      errorEl.style.display = 'none';
+
+      try {
+        const res = await fetch('/api/verify-code', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: pendingLoginEmail, code })
+        });
+        const data = await res.json();
+
+        if (res.ok && data.success) {
+          localStorage.setItem('soldi_token', data.token);
+          localStorage.setItem('soldi_user', JSON.stringify(data.user));
+          if (data.apiKey) localStorage.setItem('soldi_api_key', data.apiKey);
+          closeLoginModal();
+          showDashboard(data.user, data.apiKey);
+          trackEvent('member_login', { email: data.user.email, status: data.user.status });
+          // Reset modal to step 1 for next use
+          document.getElementById('loginStep1').style.display = 'block';
+          document.getElementById('loginStep2').style.display = 'none';
+        } else {
+          errorEl.textContent = data.message || 'Invalid code. Please try again.';
+          errorEl.style.display = 'block';
+          trackEvent('code_verify_failed', { error: data.error });
+        }
+      } catch (err) {
+        errorEl.textContent = 'Connection error. Please try again.';
+        errorEl.style.display = 'block';
+      } finally {
+        btnText.style.display = 'inline';
+        btnLoading.style.display = 'none';
+        submitBtn.disabled = false;
+      }
+    }
+
+    // Back to email step
+    function backToEmail(e) {
+      e.preventDefault();
+      document.getElementById('loginStep1').style.display = 'block';
+      document.getElementById('loginStep2').style.display = 'none';
+      document.getElementById('loginError').style.display = 'none';
+    }
+
+    // Resend code with cooldown
+    async function handleResendCode(e) {
+      e.preventDefault();
+      if (resendCooldown) return;
+      const link = document.getElementById('resendCodeLink');
+      const errorEl = document.getElementById('codeError');
+
+      resendCooldown = true;
+      link.style.opacity = '0.5';
+      link.textContent = 'Sending...';
+
+      try {
+        const res = await fetch('/api/send-verification', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: pendingLoginEmail })
+        });
+        const data = await res.json();
+
+        if (res.ok && data.success) {
+          link.textContent = 'Code sent!';
+          errorEl.style.display = 'none';
+        } else {
+          link.textContent = 'Resend Code';
+          errorEl.textContent = data.message || 'Failed to resend. Try again.';
+          errorEl.style.display = 'block';
+          resendCooldown = false;
+          link.style.opacity = '1';
+          return;
+        }
+      } catch {
+        link.textContent = 'Resend Code';
+        errorEl.textContent = 'Connection error.';
+        errorEl.style.display = 'block';
+        resendCooldown = false;
+        link.style.opacity = '1';
+        return;
+      }
+
+      // 60s cooldown
+      let seconds = 60;
+      const timer = setInterval(() => {
+        seconds--;
+        link.textContent = `Resend (${seconds}s)`;
+        if (seconds <= 0) {
+          clearInterval(timer);
+          link.textContent = 'Resend Code';
+          link.style.opacity = '1';
+          resendCooldown = false;
+        }
+      }, 1000);
     }
 
     function showDashboard(user, apiKey) {
