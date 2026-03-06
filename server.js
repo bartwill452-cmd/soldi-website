@@ -340,7 +340,10 @@ app.post('/api/verify-membership', async (req, res) => {
       if (memberships.length === 0) break;
 
       const match = memberships.find(
-        m => m.email && m.email.toLowerCase() === email.toLowerCase()
+        m => {
+          const memberEmail = m.user?.email || m.email;
+          return memberEmail && memberEmail.toLowerCase() === email.toLowerCase();
+        }
       );
 
       if (match) {
@@ -348,7 +351,7 @@ app.post('/api/verify-membership', async (req, res) => {
         break;
       }
 
-      if (!data.pagination || page >= data.pagination.total_pages) break;
+      if (!data.page_info || !data.page_info.has_next_page) break;
       page++;
     }
 
@@ -356,7 +359,7 @@ app.post('/api/verify-membership', async (req, res) => {
       return res.status(404).json({
         error: 'no_membership',
         message: 'No membership found for this email',
-        purchaseUrl: `https://whop.com/${WHOP_STORE_SLUG}/${WHOP_PRODUCT_PATH}/`
+        purchaseUrl: 'https://whop.com/checkout/plan_Q93fIRTfIo5g7/'
       });
     }
 
@@ -368,7 +371,7 @@ app.post('/api/verify-membership', async (req, res) => {
         error: 'inactive_membership',
         message: `Membership status: ${found.status}`,
         status: found.status,
-        purchaseUrl: `https://whop.com/${WHOP_STORE_SLUG}/${WHOP_PRODUCT_PATH}/`
+        purchaseUrl: 'https://whop.com/checkout/plan_Q93fIRTfIo5g7/'
       });
     }
 
@@ -387,7 +390,7 @@ app.post('/api/verify-membership', async (req, res) => {
       apiKey = generateApiKey();
       const keys = loadApiKeys();
       keys[apiKey] = {
-        email: found.email,
+        email: found.user?.email || found.email,
         membershipId: found.id,
         createdAt: new Date().toISOString(),
         status: 'active'
@@ -399,7 +402,7 @@ app.post('/api/verify-membership', async (req, res) => {
     const token = jwt.sign(
       {
         membershipId: found.id,
-        email: found.email,
+        email: found.user?.email || found.email,
         status: found.status,
         affiliateLink,
         affiliateUsername,
@@ -414,7 +417,7 @@ app.post('/api/verify-membership', async (req, res) => {
       token,
       apiKey,
       user: {
-        email: found.email,
+        email: found.user?.email || found.email,
         status: found.status,
         affiliateLink,
         affiliateUsername,

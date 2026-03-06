@@ -438,7 +438,7 @@ client.on('messageCreate', async (message) => {
       await message.reply(
         `❌ **No active membership found** for \`${email}\`.\n\n` +
         `${result.reason || 'Please make sure you\'re using the same email as your Whop purchase.'}\n\n` +
-        `Not a member yet? Join here: https://whop.com/officialsoldi/officalsoldi/`
+        `Not a member yet? Join here: https://whop.com/checkout/plan_Q93fIRTfIo5g7/`
       );
     }
     return;
