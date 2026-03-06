@@ -336,6 +336,42 @@
             Open Review Campaign
           </a>
         </div>
+
+        <div class="dash-card dash-card-chatbot">
+          <div class="dash-card-header">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#06b6d4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            <span>AI Chatbot Builder</span>
+          </div>
+          <p class="dash-affiliate-info">Build AI support chatbots for any website &mdash; powered by AI, embeddable anywhere.</p>
+          <a href="/chatbot-builder.html" class="dash-link" style="margin-top: 12px;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#06b6d4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            Open Chatbot Builder
+          </a>
+        </div>
+
+        <div class="dash-card dash-card-tiktok">
+          <div class="dash-card-header">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ec4899" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            <span>TikTok Shop Guide</span>
+          </div>
+          <p class="dash-affiliate-info">Complete affiliate guide &mdash; learn how to find winning products, create viral content, and scale revenue.</p>
+          <a href="/tiktok-guide.html" class="dash-link" style="margin-top: 12px;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ec4899" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            Open TikTok Guide
+          </a>
+        </div>
+
+        <div class="dash-card dash-card-tiktok-analytics">
+          <div class="dash-card-header">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f43f5e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+            <span>TikTok Shop Analytics</span>
+          </div>
+          <p class="dash-affiliate-info">Discover top-performing TikTok Shop videos by revenue &mdash; with AI-powered viral analysis.</p>
+          <a href="/tiktok-analytics.html" class="dash-link" style="margin-top: 12px;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f43f5e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+            Open TikTok Analytics
+          </a>
+        </div>
       </div>
     </div>
   </section>
@@ -1258,7 +1294,7 @@
       // Show API key + set odds screen link
       if (apiKey) {
         document.getElementById('dashApiKeyInput').value = apiKey;
-        document.getElementById('oddsScreenLink').href = 'http://localhost:3000?key=' + encodeURIComponent(apiKey);
+        document.getElementById('oddsScreenLink').href = 'odds.html?key=' + encodeURIComponent(apiKey);
       }
 
       // Show affiliate link
@@ -1386,7 +1422,7 @@
         if (res.ok && data.success) {
           document.getElementById('dashApiKeyInput').value = data.apiKey;
           localStorage.setItem('soldi_api_key', data.apiKey);
-          document.getElementById('oddsScreenLink').href = 'http://localhost:3000?key=' + encodeURIComponent(data.apiKey);
+          document.getElementById('oddsScreenLink').href = 'odds.html?key=' + encodeURIComponent(data.apiKey);
           btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Done!';
           setTimeout(() => {
             btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg> Regenerate';

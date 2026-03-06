@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TikTok Shop Analytics | Soldi</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Inter', -apple-system, sans-serif; background: #050507; color: #e4e4e7; line-height: 1.6; min-height: 100vh; }
+    a { color: inherit; text-decoration: none; }
+
+    /* Gate */
+    .tt-gate { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 24px; }
+    .tt-gate-box { background: rgba(255,255,255,0.03); border: 1px solid rgba(244,63,94,0.2); border-radius: 16px; padding: 40px; max-width: 420px; width: 100%; text-align: center; }
+    .tt-gate-box h1 { font-size: 22px; font-weight: 700; margin-bottom: 6px; color: #f43f5e; }
+    .tt-gate-box p { font-size: 13px; color: #a1a1aa; margin-bottom: 20px; }
+    .tt-gate-input { width: 100%; padding: 10px 14px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e7; font-size: 14px; outline: none; margin-bottom: 12px; }
+    .tt-gate-input:focus { border-color: #f43f5e; }
+    .tt-gate-btn { width: 100%; padding: 10px; background: linear-gradient(135deg, #f43f5e, #ec4899); border: none; border-radius: 8px; color: #fff; font-weight: 600; font-size: 14px; cursor: pointer; }
+    .tt-gate-btn:hover { opacity: 0.9; }
+    .tt-gate-err { color: #ef4444; font-size: 12px; margin-top: 8px; display: none; }
+
+    /* App */
+    .tt-app { display: none; max-width: 1300px; margin: 0 auto; padding: 24px; }
+    .tt-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
+    .tt-header h1 { font-size: 22px; font-weight: 700; color: #f43f5e; }
+    .tt-back { font-size: 13px; color: #a1a1aa; transition: color 0.2s; }
+    .tt-back:hover { color: #f43f5e; }
+
+    /* Controls */
+    .tt-controls { display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; align-items: center; }
+    .tt-tabs { display: flex; gap: 4px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 4px; }
+    .tt-tab { padding: 8px 16px; border: none; background: transparent; color: #a1a1aa; font-size: 13px; font-weight: 500; border-radius: 7px; cursor: pointer; transition: all 0.2s; }
+    .tt-tab.active { background: rgba(244,63,94,0.15); color: #f43f5e; }
+    .tt-tab:hover:not(.active) { color: #e4e4e7; }
+    .tt-sort { padding: 8px 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e7; font-size: 13px; outline: none; cursor: pointer; }
+    .tt-sort option { background: #18181b; }
+    .tt-refresh { padding: 8px 14px; background: rgba(244,63,94,0.1); border: 1px solid rgba(244,63,94,0.2); border-radius: 8px; color: #f43f5e; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
+    .tt-refresh:hover { background: rgba(244,63,94,0.2); }
+
+    /* Results Grid */
+    .tt-results-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
+    .tt-card { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 20px; transition: border-color 0.2s; }
+    .tt-card:hover { border-color: rgba(244,63,94,0.3); }
+    .tt-card-title { font-size: 14px; font-weight: 600; color: #e4e4e7; margin-bottom: 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .tt-card-title a { color: #e4e4e7; text-decoration: none; transition: color 0.2s; }
+    .tt-card-title a:hover { color: #f43f5e; }
+    .tt-card-creator { font-size: 12px; color: #f43f5e; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+    .tt-badge-ugc { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; padding: 2px 6px; border-radius: 4px; background: rgba(34,197,94,0.15); color: #22c55e; border: 1px solid rgba(34,197,94,0.25); }
+    .tt-badge-agg { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; padding: 2px 6px; border-radius: 4px; background: rgba(168,85,247,0.15); color: #a855f7; border: 1px solid rgba(168,85,247,0.25); }
+    .tt-card-stats { display: flex; gap: 16px; margin-bottom: 10px; flex-wrap: wrap; }
+    .tt-stat { font-size: 12px; display: flex; align-items: center; gap: 4px; }
+    .tt-stat-revenue { color: #22c55e; font-weight: 600; }
+    .tt-stat-views { color: #a1a1aa; }
+    .tt-stat-likes { color: #a1a1aa; }
+    .tt-card-snippet { font-size: 12px; color: #71717a; margin-bottom: 12px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .tt-card-actions { display: flex; gap: 8px; }
+    .tt-analyze-btn { padding: 6px 14px; background: rgba(244,63,94,0.1); border: 1px solid rgba(244,63,94,0.2); border-radius: 6px; color: #f43f5e; font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
+    .tt-analyze-btn:hover { background: rgba(244,63,94,0.2); }
+    .tt-analyze-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .tt-card-link { padding: 6px 14px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; color: #a1a1aa; font-size: 12px; text-decoration: none; transition: all 0.2s; }
+    .tt-card-link:hover { color: #e4e4e7; }
+    .tt-analysis { margin-top: 12px; padding: 12px; background: rgba(244,63,94,0.05); border: 1px solid rgba(244,63,94,0.15); border-radius: 8px; font-size: 12px; color: #d4d4d8; line-height: 1.7; display: none; }
+    .tt-analysis-label { font-size: 11px; font-weight: 600; color: #f43f5e; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+
+    /* Loading & Empty */
+    .tt-loading { text-align: center; padding: 60px 20px; color: #71717a; }
+    .tt-spinner { width: 32px; height: 32px; border: 3px solid rgba(244,63,94,0.2); border-top-color: #f43f5e; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 12px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .tt-empty { text-align: center; padding: 60px 20px; color: #71717a; font-size: 14px; }
+
+    /* Source badge */
+    .tt-source { font-size: 10px; color: #52525b; background: rgba(255,255,255,0.04); padding: 2px 6px; border-radius: 4px; margin-left: auto; }
+
+    @media (max-width: 600px) {
+      .tt-results-grid { grid-template-columns: 1fr; }
+      .tt-header { flex-direction: column; align-items: flex-start; }
+    }
+  </style>
+</head>
+<body>
+  <!-- GATE -->
+  <div class="tt-gate" id="ttGate">
+    <div class="tt-gate-box">
+      <h1>TikTok Shop Analytics</h1>
+      <p>Discover top-performing TikTok Shop videos and get AI-powered analysis on why they went viral. Paid members only.</p>
+      <input class="tt-gate-input" id="ttKeyInput" type="text" placeholder="Enter your API key">
+      <button class="tt-gate-btn" onclick="validateKey()">Access Analytics</button>
+      <div class="tt-gate-err" id="ttGateErr">Invalid API key. Please try again.</div>
+    </div>
+  </div>
+
+  <!-- APP -->
+  <div class="tt-app" id="ttApp">
+    <div class="tt-header">
+      <h1>TikTok Shop Analytics</h1>
+      <a href="/index.html" class="tt-back">&larr; Back to Dashboard</a>
+    </div>
+
+    <div class="tt-controls">
+      <div class="tt-tabs">
+        <button class="tt-tab active" data-period="hour" onclick="switchPeriod('hour', this)">Hour</button>
+        <button class="tt-tab" data-period="today" onclick="switchPeriod('today', this)">Today</button>
+        <button class="tt-tab" data-period="week" onclick="switchPeriod('week', this)">Week</button>
+        <button class="tt-tab" data-period="month" onclick="switchPeriod('month', this)">Month</button>
+      </div>
+      <select class="tt-sort" id="ttSort" onchange="sortResults()">
+        <option value="revenue">Sort: Revenue</option>
+        <option value="views">Sort: Views</option>
+        <option value="likes">Sort: Engagement</option>
+      </select>
+      <button class="tt-refresh" onclick="fetchTrending(true)">Refresh</button>
+    </div>
+
+    <div id="ttContent">
+      <div class="tt-loading" id="ttLoading">
+        <div class="tt-spinner"></div>
+        <p>Finding top-performing TikTok Shop videos...</p>
+      </div>
+      <div class="tt-results-grid" id="ttGrid" style="display:none;"></div>
+      <div class="tt-empty" id="ttEmpty" style="display:none;">No trending videos found for this period. Try another time range.</div>
+    </div>
+  </div>
+
+  <script>
+    let API_KEY = '';
+    let currentPeriod = 'hour';
+    let currentVideos = [];
+
+    // Gate
+    async function validateKey() {
+      const key = document.getElementById('ttKeyInput').value.trim();
+      if (!key) return;
+      try {
+        const res = await fetch('/api/validate-key?key=' + encodeURIComponent(key));
+        const data = await res.json();
+        if (data.success) {
+          API_KEY = key;
+          sessionStorage.setItem('soldi_tiktok_analytics_key', key);
+          document.getElementById('ttGate').style.display = 'none';
+          document.getElementById('ttApp').style.display = 'block';
+          fetchTrending();
+        } else {
+          document.getElementById('ttGateErr').style.display = 'block';
+        }
+      } catch {
+        document.getElementById('ttGateErr').style.display = 'block';
+      }
+    }
+
+    // Auto-login
+    (function() {
+      const saved = sessionStorage.getItem('soldi_tiktok_analytics_key');
+      if (saved) {
+        API_KEY = saved;
+        document.getElementById('ttGate').style.display = 'none';
+        document.getElementById('ttApp').style.display = 'block';
+        fetchTrending();
+      }
+    })();
+
+    document.getElementById('ttKeyInput').addEventListener('keydown', e => { if (e.key === 'Enter') validateKey(); });
+
+    // Fetch trending
+    async function fetchTrending(forceRefresh) {
+      const grid = document.getElementById('ttGrid');
+      const loading = document.getElementById('ttLoading');
+      const empty = document.getElementById('ttEmpty');
+
+      grid.style.display = 'none';
+      empty.style.display = 'none';
+      loading.style.display = 'block';
+
+      try {
+        const url = `/api/tiktok-shop/trending?key=${encodeURIComponent(API_KEY)}&period=${currentPeriod}` + (forceRefresh ? '&bust=' + Date.now() : '');
+        const res = await fetch(url);
+        const data = await res.json();
+
+        if (!data.success) throw new Error(data.error || 'Failed');
+
+        currentVideos = data.videos || [];
+        loading.style.display = 'none';
+
+        if (currentVideos.length === 0) {
+          empty.style.display = 'block';
+          return;
+        }
+
+        sortResults();
+      } catch (err) {
+        loading.style.display = 'none';
+        empty.textContent = 'Error loading data: ' + err.message;
+        empty.style.display = 'block';
+      }
+    }
+
+    // Sort
+    function sortResults() {
+      const sortBy = document.getElementById('ttSort').value;
+      const sorted = [...currentVideos];
+
+      sorted.sort((a, b) => {
+        if (sortBy === 'revenue') return parseNum(b.estimatedRevenue) - parseNum(a.estimatedRevenue);
+        if (sortBy === 'views') return parseNum(b.views) - parseNum(a.views);
+        if (sortBy === 'likes') return parseNum(b.likes) - parseNum(a.likes);
+        return 0;
+      });
+
+      renderGrid(sorted);
+    }
+
+    function parseNum(str) {
+      if (!str) return 0;
+      const cleaned = str.replace(/[^0-9.kmb]/gi, '');
+      let num = parseFloat(cleaned) || 0;
+      if (/b/i.test(str)) num *= 1000000000;
+      else if (/m/i.test(str)) num *= 1000000;
+      else if (/k/i.test(str)) num *= 1000;
+      return num;
+    }
+
+    // Render
+    function renderGrid(videos) {
+      const grid = document.getElementById('ttGrid');
+      grid.innerHTML = '';
+
+      videos.forEach((v, i) => {
+        const card = document.createElement('div');
+        card.className = 'tt-card';
+        const hasUrl = v.url && v.url !== '#';
+        const isUgc = v.type === 'ugc';
+        const isTiktokUrl = v.url && v.url.includes('tiktok.com');
+        card.innerHTML = `
+          <div class="tt-card-title">${hasUrl ? `<a href="${esc(v.url)}" target="_blank" rel="noopener">${esc(v.title)}</a>` : esc(v.title)}</div>
+          <div class="tt-card-creator">
+            ${esc(v.creator)}
+            ${isUgc ? '<span class="tt-badge-ugc">UGC</span>' : '<span class="tt-badge-agg">Data</span>'}
+          </div>
+          <div class="tt-card-stats">
+            <span class="tt-stat tt-stat-revenue">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+              ${esc(v.estimatedRevenue)}
+            </span>
+            <span class="tt-stat tt-stat-views">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              ${esc(v.views)}
+            </span>
+            <span class="tt-stat tt-stat-likes">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+              ${esc(v.likes)}
+            </span>
+            <span class="tt-source">${esc(v.source)}</span>
+          </div>
+          <div class="tt-card-snippet">${esc(v.snippet)}</div>
+          <div class="tt-card-actions">
+            <button class="tt-analyze-btn" id="analyzeBtn${i}" onclick="analyzeVideo(${i})">Analyze with AI</button>
+            ${isTiktokUrl ? `<a href="${esc(v.url)}" target="_blank" rel="noopener" class="tt-card-link">Watch on TikTok</a>` : (hasUrl ? `<a href="${esc(v.url)}" target="_blank" rel="noopener" class="tt-card-link">View Source</a>` : '')}
+          </div>
+          <div class="tt-analysis" id="analysis${i}">
+            <div class="tt-analysis-label">AI Analysis</div>
+            <div class="tt-analysis-text" id="analysisText${i}"></div>
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+
+      grid.style.display = 'grid';
+    }
+
+    // Analyze
+    async function analyzeVideo(index) {
+      const btn = document.getElementById('analyzeBtn' + index);
+      const box = document.getElementById('analysis' + index);
+      const text = document.getElementById('analysisText' + index);
+      const video = currentVideos[index];
+
+      if (box.style.display === 'block') { box.style.display = 'none'; return; }
+
+      btn.disabled = true;
+      btn.textContent = 'Analyzing...';
+
+      try {
+        const res = await fetch('/api/tiktok-shop/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: API_KEY, video })
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error);
+
+        text.textContent = data.analysis;
+        box.style.display = 'block';
+        btn.textContent = 'Hide Analysis';
+        btn.disabled = false;
+      } catch (err) {
+        text.textContent = 'Analysis failed: ' + err.message;
+        box.style.display = 'block';
+        btn.textContent = 'Retry Analysis';
+        btn.disabled = false;
+      }
+    }
+
+    function switchPeriod(period, el) {
+      currentPeriod = period;
+      document.querySelectorAll('.tt-tab').forEach(t => t.classList.remove('active'));
+      el.classList.add('active');
+      fetchTrending();
+    }
+
+    function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+  </script>
+</body>
+</html>

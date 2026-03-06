@@ -12,6 +12,8 @@
 //
 
 require('dotenv').config();
+const fs = require('fs');
+const path = require('path');
 const { sendNotification, createEmbed, COLORS } = require('./discord-utils');
 
 // ============================================
@@ -75,6 +77,54 @@ const TARGET_ADDRESSES = [
 const processedBets = new Set();
 const traderNameCache = {};
 const traderProfitCache = {};
+
+// ============================================
+// USER TRACKING (loaded from shared JSON file)
+// ============================================
+const USER_TRACKING_FILE = path.join(__dirname, 'data', 'user-tracking.json');
+let userTrackingData = {};       // { discordUserId: { addresses: [...], dmChannelId: "..." } }
+let addressToUsers = new Map();  // address → [{ userId, dmChannelId }]
+let allAddresses = [];           // merged: defaults + custom (deduplicated)
+let lastTrackingLoad = 0;
+const TRACKING_RELOAD_INTERVAL = 5 * 60 * 1000; // reload every 5 minutes
+
+function loadUserTrackingData() {
+  try {
+    if (!fs.existsSync(USER_TRACKING_FILE)) {
+      userTrackingData = {};
+    } else {
+      userTrackingData = JSON.parse(fs.readFileSync(USER_TRACKING_FILE, 'utf8'));
+    }
+  } catch {
+    userTrackingData = {};
+  }
+
+  // Build reverse map: address → [users]
+  addressToUsers = new Map();
+  for (const [userId, data] of Object.entries(userTrackingData)) {
+    for (const addr of (data.addresses || [])) {
+      if (!addressToUsers.has(addr)) addressToUsers.set(addr, []);
+      addressToUsers.get(addr).push({ userId, dmChannelId: data.dmChannelId });
+    }
+  }
+
+  // Build merged address list (defaults + custom, deduplicated)
+  const customAddrs = [...addressToUsers.keys()];
+  const allSet = new Set([...TARGET_ADDRESSES, ...customAddrs]);
+  allAddresses = [...allSet];
+
+  lastTrackingLoad = Date.now();
+  return customAddrs.length;
+}
+
+function maybeReloadTracking() {
+  if (Date.now() - lastTrackingLoad > TRACKING_RELOAD_INTERVAL) {
+    const customCount = loadUserTrackingData();
+    if (customCount > 0) {
+      console.log(`  [Tracking] Reloaded: ${customCount} custom address(es) from ${Object.keys(userTrackingData).length} user(s)`);
+    }
+  }
+}
 
 // ============================================
 // HELPERS
@@ -298,18 +348,30 @@ async function checkTrader(addr) {
   const buttonText = `[\u{1F4CA} View Market](${marketUrl}) \u2022 [\u{1F464} Trader Profile](${traderUrl})`;
   fields.unshift({ name: '\u{1F517} Quick Actions', value: buttonText, inline: false });
 
-  // Send Discord notification via Soldi bot
-  if (POLYMARKET_CHANNEL_ID) {
-    const embed = createEmbed({
-      title: '\u{1F514} New Whale Bet Detected!',
-      description: `**${traderName}** placed a new bet${priceChange ? `\n${priceChange.formatted} since entry` : ''}`,
-      color: COLORS.POLYMARKET,
-      fields,
-      thumbnail: marketImage || undefined,
-      footer: { text: 'Soldi \u2022 Polymarket Whale Tracker' },
-    });
+  // Build the embed once
+  const embed = createEmbed({
+    title: '\u{1F514} New Whale Bet Detected!',
+    description: `**${traderName}** placed a new bet${priceChange ? `\n${priceChange.formatted} since entry` : ''}`,
+    color: COLORS.POLYMARKET,
+    fields,
+    thumbnail: marketImage || undefined,
+    footer: { text: 'Soldi \u2022 Polymarket Whale Tracker' },
+  });
 
+  // Route notification: public channel for defaults, DM for custom, both if overlap
+  const isDefault = TARGET_ADDRESSES.includes(addr);
+  const trackedBy = addressToUsers.get(addr) || [];
+
+  // Post to public channel if it's a default whale
+  if (isDefault && POLYMARKET_CHANNEL_ID) {
     await sendNotification(POLYMARKET_CHANNEL_ID, null, [embed]);
+  }
+
+  // DM users who track this address
+  for (const { dmChannelId } of trackedBy) {
+    if (dmChannelId) {
+      await sendNotification(dmChannelId, null, [embed]);
+    }
   }
 
   processedBets.add(betId);
@@ -324,10 +386,13 @@ async function checkTrader(addr) {
 }
 
 // ============================================
-// CHECK ALL TRADERS
+// CHECK ALL TRADERS (defaults + user-tracked)
 // ============================================
 async function checkAllTraders() {
-  for (const addr of TARGET_ADDRESSES) {
+  // Periodically reload user tracking data
+  maybeReloadTracking();
+
+  for (const addr of allAddresses) {
     try {
       await checkTrader(addr);
     } catch (err) {
@@ -350,15 +415,21 @@ async function main() {
     process.exit(1);
   }
 
+  // Load user-customized tracking data
+  const customCount = loadUserTrackingData();
+  const userCount = Object.keys(userTrackingData).length;
+
   console.log('\n' + '='.repeat(60));
   console.log('  SOLDI POLYMARKET WHALE TRACKER');
   console.log('='.repeat(60));
-  console.log(`  Tracking: ${TARGET_ADDRESSES.length} whale wallets`);
+  console.log(`  Default whales: ${TARGET_ADDRESSES.length}`);
+  console.log(`  Custom tracked: ${customCount} address(es) from ${userCount} user(s)`);
+  console.log(`  Total tracking: ${allAddresses.length} addresses`);
   console.log(`  Check interval: ${REFRESH_INTERVAL}s`);
   console.log(`  Discord channel: ${POLYMARKET_CHANNEL_ID}`);
   console.log('='.repeat(60));
 
-  // Pre-load trader names
+  // Pre-load trader names (defaults only — custom will be cached on first check)
   console.log('\nLoading trader profiles...');
   for (let i = 0; i < TARGET_ADDRESSES.length; i++) {
     const name = await getProfileName(TARGET_ADDRESSES[i]);
@@ -369,7 +440,7 @@ async function main() {
   // Pre-load existing bets to avoid spam on startup
   console.log('\nPre-loading existing bets...');
   let preloaded = 0;
-  for (const addr of TARGET_ADDRESSES) {
+  for (const addr of allAddresses) {
     try {
       const latest = await getLatestBet(addr);
       if (latest) {
@@ -386,13 +457,18 @@ async function main() {
     TARGET_ADDRESSES.slice(0, 10).map(async (addr, i) => `${i + 1}. ${await getProfileName(addr)}`)
   )).join('\n') + (TARGET_ADDRESSES.length > 10 ? `\n... and ${TARGET_ADDRESSES.length - 10} more` : '');
 
+  const startupFields = [
+    { name: '\u{1F4CA} Default Whales', value: traderList.slice(0, 1000), inline: false },
+  ];
+  if (customCount > 0) {
+    startupFields.push({ name: '\u{1F464} Custom Tracked', value: `${customCount} address(es) from ${userCount} user(s)`, inline: false });
+  }
+
   await sendNotification(POLYMARKET_CHANNEL_ID, null, [createEmbed({
     title: '\u{1F916} Whale Tracker Started',
-    description: `Now monitoring **${TARGET_ADDRESSES.length} whale wallets**\nChecking every **${REFRESH_INTERVAL}s**`,
+    description: `Now monitoring **${allAddresses.length} total addresses**\nChecking every **${REFRESH_INTERVAL}s**`,
     color: COLORS.POLYMARKET,
-    fields: [
-      { name: '\u{1F4CA} Tracking', value: traderList.slice(0, 1000), inline: false },
-    ],
+    fields: startupFields,
     footer: { text: 'Soldi \u2022 Polymarket Whale Tracker' },
   })]);
 
@@ -434,7 +510,7 @@ async function main() {
       fields: [
         { name: 'Total Checks', value: String(checkCount), inline: true },
         { name: 'Runtime', value: `${runtime}s`, inline: true },
-        { name: 'Whales Tracked', value: String(TARGET_ADDRESSES.length), inline: true },
+        { name: 'Addresses Tracked', value: String(allAddresses.length), inline: true },
       ],
       footer: { text: 'Soldi \u2022 Polymarket Whale Tracker' },
     })]);

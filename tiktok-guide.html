@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TikTok Shop Affiliate Guide - Soldi</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon.png">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <script src="/soldi-analytics.js"></script>
+  <style>
+    .ttg-page { padding: 120px 0 80px; min-height: 100vh; }
+
+    /* Gate */
+    .ttg-gate {
+      max-width: 480px;
+      margin: 80px auto 0;
+      text-align: center;
+    }
+    .ttg-gate-icon {
+      width: 64px;
+      height: 64px;
+      background: rgba(236, 72, 153, 0.12);
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 24px;
+      color: #ec4899;
+    }
+    .ttg-gate h2 { font-size: 28px; font-weight: 800; color: #fff; margin-bottom: 8px; }
+    .ttg-gate p { font-size: 14px; color: #71717a; line-height: 1.6; margin-bottom: 28px; }
+    .ttg-gate-input { display: flex; gap: 8px; margin-bottom: 12px; }
+    .ttg-gate-input input {
+      flex: 1; padding: 14px 16px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 10px; color: #fff; font-size: 14px;
+      font-family: 'Inter', monospace; outline: none;
+    }
+    .ttg-gate-input input:focus { border-color: #ec4899; }
+    .btn-ttg {
+      padding: 14px 28px;
+      background: linear-gradient(135deg, #ec4899, #db2777);
+      border: none; border-radius: 10px; color: #fff;
+      font-size: 14px; font-weight: 600; cursor: pointer;
+      transition: all 0.2s; font-family: 'Inter', sans-serif;
+    }
+    .btn-ttg:hover { transform: translateY(-1px); box-shadow: 0 4px 20px rgba(236, 72, 153, 0.3); }
+    .ttg-gate-error { color: #ef4444; font-size: 13px; margin-top: 8px; display: none; }
+    .ttg-gate-footer { margin-top: 24px; font-size: 13px; color: #52525b; }
+    .ttg-gate-footer a { color: #ec4899; text-decoration: none; }
+
+    /* Dashboard */
+    .ttg-dashboard { display: none; }
+    .ttg-dashboard.active { display: block; }
+    .ttg-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 32px; flex-wrap: wrap; gap: 16px;
+    }
+    .ttg-header h1 { font-size: 28px; font-weight: 800; color: #fff; }
+    .ttg-header h1 span { color: #ec4899; }
+    .ttg-header-right { display: flex; align-items: center; gap: 12px; }
+    .ttg-key-display {
+      font-size: 12px; color: #71717a; font-family: 'Inter', monospace;
+      padding: 8px 12px; background: rgba(255,255,255,0.03);
+      border-radius: 8px; border: 1px solid rgba(255,255,255,0.06);
+    }
+    .ttg-exit-btn {
+      padding: 8px 16px; background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;
+      color: #a1a1aa; font-size: 13px; cursor: pointer;
+      font-family: 'Inter', sans-serif;
+    }
+    .ttg-exit-btn:hover { background: rgba(255,255,255,0.08); color: #fff; }
+
+    /* Guide content */
+    .ttg-content {
+      max-width: 800px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 12px;
+      padding: 32px;
+      font-size: 14px;
+      line-height: 1.8;
+      color: #a1a1aa;
+    }
+    .ttg-content h2 {
+      font-size: 22px; font-weight: 800; color: #fff;
+      margin: 32px 0 12px; padding-top: 24px;
+      border-top: 1px solid rgba(255,255,255,0.06);
+    }
+    .ttg-content h2:first-child { margin-top: 0; padding-top: 0; border-top: none; }
+    .ttg-content h3 { font-size: 16px; font-weight: 700; color: #d4d4d8; margin: 20px 0 8px; }
+    .ttg-content p { margin-bottom: 12px; }
+    .ttg-content ul { margin: 0 0 16px 20px; }
+    .ttg-content li { margin-bottom: 6px; }
+    .ttg-content strong { color: #ec4899; }
+    .ttg-content em { color: #d4d4d8; font-style: normal; }
+    .ttg-content .tip-box {
+      background: rgba(236, 72, 153, 0.06);
+      border: 1px solid rgba(236, 72, 153, 0.15);
+      border-radius: 8px; padding: 16px; margin: 16px 0;
+    }
+    .ttg-content .tip-box strong { color: #ec4899; }
+  </style>
+</head>
+<body>
+  <nav class="navbar">
+    <div class="container nav-container">
+      <a href="/" class="logo">
+        <img src="/images/soldi-logo-transparent.png" alt="Soldi" width="32" height="32">
+        <span>Soldi</span>
+      </a>
+      <a href="/" class="nav-link" style="color: #ec4899;">Dashboard</a>
+    </div>
+  </nav>
+
+  <section class="ttg-page">
+    <div class="container">
+      <div id="ttgGate" class="ttg-gate">
+        <div class="ttg-gate-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        </div>
+        <h2>TikTok Shop Affiliate Guide</h2>
+        <p>The complete guide to earning commissions as a TikTok Shop affiliate &mdash; from finding products to creating viral content.</p>
+        <div class="ttg-gate-input">
+          <input type="text" id="ttgKeyInput" placeholder="Enter your Soldi API key" autocomplete="off" spellcheck="false">
+          <button class="btn-ttg" onclick="validateTtgKey()">Access</button>
+        </div>
+        <div id="ttgGateError" class="ttg-gate-error"></div>
+        <div class="ttg-gate-footer">
+          Don't have a key? <a href="/">Get access on the dashboard</a>
+        </div>
+      </div>
+
+      <div id="ttgDashboard" class="ttg-dashboard">
+        <div class="ttg-header">
+          <h1>TikTok Shop <span>Affiliate Guide</span></h1>
+          <div class="ttg-header-right">
+            <span class="ttg-key-display" id="ttgKeyDisplay"></span>
+            <button class="ttg-exit-btn" onclick="logoutTtg()">Exit</button>
+          </div>
+        </div>
+
+        <div class="ttg-content">
+          <h2>1. Getting Started</h2>
+          <p>TikTok Shop's affiliate program lets you earn commissions by promoting products through short-form video content. Here's how to get set up:</p>
+
+          <h3>Requirements</h3>
+          <ul>
+            <li>TikTok account with at least <strong>1,000 followers</strong> (some regions require 5,000)</li>
+            <li>Must be <strong>18 years or older</strong></li>
+            <li>Account in good standing &mdash; no community guideline violations</li>
+            <li>Based in a country where TikTok Shop is available (US, UK, Southeast Asia, etc.)</li>
+          </ul>
+
+          <h3>How to Sign Up</h3>
+          <ul>
+            <li>Open TikTok &gt; Profile &gt; Menu &gt; <strong>Creator tools</strong> &gt; <strong>TikTok Shop</strong></li>
+            <li>Or go directly to <em>affiliate.tiktok.com</em> and apply</li>
+            <li>Fill in your info, agree to terms, and submit</li>
+            <li>Approval typically takes <strong>1-3 business days</strong></li>
+            <li>Once approved, you can browse the product marketplace and add items to promote</li>
+          </ul>
+
+          <div class="tip-box">
+            <strong>Pro tip:</strong> If you don't have 1,000 followers yet, focus on posting 2-3 videos per day in a specific niche. Most creators hit 1K within 2-4 weeks of consistent posting.
+          </div>
+
+          <h2>2. Finding Winning Products</h2>
+          <p>Product selection is the #1 factor in TikTok Shop success. Here's how to find products that actually sell:</p>
+
+          <h3>What Makes a Winning Product</h3>
+          <ul>
+            <li><strong>Visual appeal</strong> &mdash; Products that look impressive on camera (before/after, satisfying to watch)</li>
+            <li><strong>$15-60 price range</strong> &mdash; Low enough for impulse buys, high enough for decent commission</li>
+            <li><strong>Problem-solver</strong> &mdash; Products that fix a common annoyance perform best</li>
+            <li><strong>High commission rate</strong> &mdash; Look for 15-30% rates (avoid anything under 10%)</li>
+            <li><strong>Good reviews</strong> &mdash; 4+ stars with real customer photos</li>
+          </ul>
+
+          <h3>Research Strategies</h3>
+          <ul>
+            <li><strong>TikTok Shop Marketplace</strong> &mdash; Sort by "best sellers" and filter by commission rate</li>
+            <li><strong>Trending hashtags</strong> &mdash; Search #TikTokMadeMeBuyIt, #TikTokFinds, #AmazonFinds for product ideas</li>
+            <li><strong>Competitor analysis</strong> &mdash; Find successful affiliate creators in your niche and see what they're promoting</li>
+            <li><strong>Seasonal trends</strong> &mdash; Summer products in spring, holiday gifts in October, back-to-school in July</li>
+            <li><strong>Analytics tools</strong> &mdash; Use Kalodata, FastMoss, or Shoplus to see what's actually generating revenue</li>
+          </ul>
+
+          <h3>Top-Performing Niches</h3>
+          <ul>
+            <li><strong>Beauty & skincare</strong> &mdash; Always high demand, great visual content</li>
+            <li><strong>Home & kitchen</strong> &mdash; Gadgets, organizers, cleaning tools</li>
+            <li><strong>Health & fitness</strong> &mdash; Supplements, workout gear, recovery tools</li>
+            <li><strong>Fashion accessories</strong> &mdash; Jewelry, bags, sunglasses</li>
+            <li><strong>Tech gadgets</strong> &mdash; Phone accessories, LED lights, portable chargers</li>
+          </ul>
+
+          <h2>3. Creating Viral Content</h2>
+          <p>Your content is your storefront. Here's how to create videos that convert viewers into buyers:</p>
+
+          <h3>Video Formats That Work</h3>
+          <ul>
+            <li><strong>Product demo/unboxing</strong> &mdash; Show the product in action, highlight features</li>
+            <li><strong>Before/after</strong> &mdash; Show the problem, then the solution. Most shareable format</li>
+            <li><strong>"Things you didn't know you needed"</strong> &mdash; Listicle format, 3-5 products per video</li>
+            <li><strong>Day in my life + product plug</strong> &mdash; Natural integration feels less salesy</li>
+            <li><strong>Review/honest opinion</strong> &mdash; Trust-building content that converts long-term</li>
+            <li><strong>Comparison videos</strong> &mdash; "Amazon version vs TikTok Shop version"</li>
+          </ul>
+
+          <h3>The Perfect Hook (First 2 Seconds)</h3>
+          <ul>
+            <li>"Stop scrolling if you..." &mdash; Calls out a specific audience</li>
+            <li>"I can't believe this only costs $__" &mdash; Price anchor creates curiosity</li>
+            <li>"This changed my ___" &mdash; Implies transformation</li>
+            <li>Show the end result first &mdash; Visual hook, then explain how</li>
+            <li>Use text overlay + voiceover &mdash; Multi-sensory engagement</li>
+          </ul>
+
+          <h3>Posting Strategy</h3>
+          <ul>
+            <li>Post <strong>2-3 videos per day</strong> minimum</li>
+            <li>Best posting times: <strong>7-9 AM</strong>, <strong>12-2 PM</strong>, <strong>7-11 PM</strong> (your audience's timezone)</li>
+            <li>Use <strong>3-5 relevant hashtags</strong> per video (mix of popular + niche)</li>
+            <li>Engage with comments in the first 30 minutes &mdash; boosts algorithm visibility</li>
+            <li>Repost top performers with slight variations &mdash; the algorithm shows it to new people</li>
+          </ul>
+
+          <div class="tip-box">
+            <strong>Pro tip:</strong> Film 10-15 videos in one batch session. Use different angles, outfits, and backgrounds so they don't look repetitive. Schedule them throughout the week.
+          </div>
+
+          <h2>4. Commission Structures</h2>
+
+          <h3>How Commissions Work</h3>
+          <ul>
+            <li>Sellers set commission rates per product (typically <strong>5-30%</strong>)</li>
+            <li>You earn commission when someone buys through your video's product link</li>
+            <li>The tracking window is <strong>7 days</strong> after a viewer clicks your link</li>
+            <li>Commissions are confirmed after the return window closes (usually 14-30 days)</li>
+          </ul>
+
+          <h3>Typical Commission Rates by Category</h3>
+          <ul>
+            <li><strong>Beauty & skincare:</strong> 10-25%</li>
+            <li><strong>Fashion:</strong> 10-20%</li>
+            <li><strong>Home & kitchen:</strong> 10-20%</li>
+            <li><strong>Electronics:</strong> 5-15%</li>
+            <li><strong>Health supplements:</strong> 15-30%</li>
+          </ul>
+
+          <h3>Getting Paid</h3>
+          <ul>
+            <li>Payments are processed <strong>monthly</strong></li>
+            <li>Minimum payout threshold: <strong>$10</strong></li>
+            <li>Payment methods: bank transfer, PayPal (varies by region)</li>
+            <li>You can track earnings in real-time in the TikTok Shop affiliate dashboard</li>
+          </ul>
+
+          <h2>5. Scaling Strategies</h2>
+
+          <h3>Level 1: Optimize What's Working</h3>
+          <ul>
+            <li>Double down on your top 3 performing products</li>
+            <li>Create multiple video variations for each winning product</li>
+            <li>Analyze your analytics &mdash; which hooks, formats, and posting times work best</li>
+            <li>Increase posting frequency to 3-5 videos per day</li>
+          </ul>
+
+          <h3>Level 2: Expand Your Reach</h3>
+          <ul>
+            <li><strong>Cross-post</strong> to Instagram Reels, YouTube Shorts, and Facebook Reels</li>
+            <li><strong>Build an email list</strong> &mdash; capture followers for product drops</li>
+            <li><strong>Collaborate</strong> with other creators for duets and stitches</li>
+            <li>Go live on TikTok &mdash; <strong>live shopping</strong> converts at 3-5x the rate of regular videos</li>
+          </ul>
+
+          <h3>Level 3: Build a Business</h3>
+          <ul>
+            <li><strong>Hire content creators</strong> on Fiverr or through your network to produce videos at scale</li>
+            <li><strong>Run multiple niche accounts</strong> &mdash; each focused on a different product category</li>
+            <li>Negotiate <strong>higher commission rates</strong> directly with sellers (leverage your sales data)</li>
+            <li>Consider <strong>launching your own product</strong> once you understand what sells</li>
+            <li>Reinvest profits into <strong>TikTok ads</strong> to amplify your best organic content</li>
+          </ul>
+
+          <h2>6. Tools & Resources</h2>
+
+          <h3>Analytics & Research</h3>
+          <ul>
+            <li><strong>Kalodata</strong> &mdash; TikTok Shop analytics, product research, creator insights</li>
+            <li><strong>FastMoss</strong> &mdash; Real-time trending products and revenue tracking</li>
+            <li><strong>Shoplus</strong> &mdash; Product discovery and trend analysis</li>
+            <li><strong>TikTok Analytics</strong> (built-in) &mdash; Your own video performance data</li>
+          </ul>
+
+          <h3>Content Creation</h3>
+          <ul>
+            <li><strong>CapCut</strong> &mdash; Free video editing (made by TikTok's parent company)</li>
+            <li><strong>Canva</strong> &mdash; Thumbnails, text overlays, graphics</li>
+            <li><strong>InShot</strong> &mdash; Quick mobile editing with transitions</li>
+            <li><strong>Good lighting</strong> &mdash; A $20 ring light makes a huge difference</li>
+          </ul>
+
+          <h3>Productivity</h3>
+          <ul>
+            <li><strong>Later or Buffer</strong> &mdash; Schedule posts across platforms</li>
+            <li><strong>Google Sheets</strong> &mdash; Track your products, commissions, and posting schedule</li>
+            <li><strong>Notion</strong> &mdash; Content calendar and idea bank</li>
+          </ul>
+
+          <div class="tip-box">
+            <strong>Remember:</strong> Consistency beats perfection. Your first 50 videos are practice. Focus on volume, learn from analytics, and double down on what works. Most successful TikTok Shop affiliates didn't go viral until their 3rd or 4th month of daily posting.
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    let currentApiKey = '';
+
+    window.addEventListener('DOMContentLoaded', () => {
+      const savedKey = sessionStorage.getItem('soldi_tiktok_guide_key');
+      if (savedKey) { currentApiKey = savedKey; enterDashboard(); }
+      document.getElementById('ttgKeyInput').addEventListener('keydown', e => {
+        if (e.key === 'Enter') validateTtgKey();
+      });
+    });
+
+    async function validateTtgKey() {
+      const keyInput = document.getElementById('ttgKeyInput');
+      const errorEl = document.getElementById('ttgGateError');
+      const key = keyInput.value.trim();
+      if (!key) { errorEl.textContent = 'Please enter your API key'; errorEl.style.display = 'block'; return; }
+      try {
+        const res = await fetch(`/api/validate-key?key=${encodeURIComponent(key)}`);
+        const data = await res.json();
+        if (data.success) {
+          currentApiKey = key;
+          sessionStorage.setItem('soldi_tiktok_guide_key', key);
+          errorEl.style.display = 'none';
+          enterDashboard();
+        } else {
+          errorEl.textContent = 'Invalid or expired API key';
+          errorEl.style.display = 'block';
+        }
+      } catch { errorEl.textContent = 'Connection error. Try again.'; errorEl.style.display = 'block'; }
+    }
+
+    function enterDashboard() {
+      document.getElementById('ttgGate').style.display = 'none';
+      document.getElementById('ttgDashboard').classList.add('active');
+      document.getElementById('ttgKeyDisplay').textContent = currentApiKey.substring(0, 10) + '...';
+    }
+
+    function logoutTtg() {
+      sessionStorage.removeItem('soldi_tiktok_guide_key');
+      currentApiKey = '';
+      document.getElementById('ttgDashboard').classList.remove('active');
+      document.getElementById('ttgGate').style.display = '';
+      document.getElementById('ttgKeyInput').value = '';
+    }
+  </script>
+</body>
+</html>

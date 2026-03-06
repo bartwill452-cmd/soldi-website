@@ -1,0 +1,1353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Chatbot Builder - Soldi</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon.png">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <script src="/soldi-analytics.js"></script>
+  <style>
+    .cb-page { padding: 120px 0 80px; min-height: 100vh; }
+
+    /* API Key Gate */
+    .cb-gate {
+      max-width: 480px;
+      margin: 80px auto 0;
+      text-align: center;
+    }
+    .cb-gate-icon {
+      width: 64px;
+      height: 64px;
+      background: rgba(6, 182, 212, 0.12);
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 24px;
+      color: #06b6d4;
+    }
+    .cb-gate h2 {
+      font-size: 28px;
+      font-weight: 800;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+    .cb-gate p {
+      font-size: 14px;
+      color: #71717a;
+      line-height: 1.6;
+      margin-bottom: 28px;
+    }
+    .cb-gate-input {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .cb-gate-input input {
+      flex: 1;
+      padding: 14px 16px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 10px;
+      color: #fff;
+      font-size: 14px;
+      font-family: 'Inter', monospace;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .cb-gate-input input:focus { border-color: #06b6d4; }
+    .btn-cb {
+      padding: 14px 28px;
+      background: linear-gradient(135deg, #06b6d4, #0891b2);
+      border: none;
+      border-radius: 10px;
+      color: #fff;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: 'Inter', sans-serif;
+    }
+    .btn-cb:hover { transform: translateY(-1px); box-shadow: 0 4px 20px rgba(6, 182, 212, 0.3); }
+    .btn-cb:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+    .cb-gate-error {
+      color: #ef4444;
+      font-size: 13px;
+      margin-top: 8px;
+      display: none;
+    }
+    .cb-gate-footer {
+      margin-top: 24px;
+      font-size: 13px;
+      color: #52525b;
+    }
+    .cb-gate-footer a { color: #06b6d4; text-decoration: none; }
+    .cb-gate-footer a:hover { text-decoration: underline; }
+
+    /* Dashboard */
+    .cb-dashboard { display: none; }
+    .cb-dashboard.active { display: block; }
+
+    .cb-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    .cb-header h1 {
+      font-size: 28px;
+      font-weight: 800;
+      color: #fff;
+    }
+    .cb-header h1 span { color: #06b6d4; }
+    .cb-header-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .cb-key-display {
+      font-size: 12px;
+      color: #71717a;
+      font-family: 'Inter', monospace;
+      padding: 8px 12px;
+      background: rgba(255,255,255,0.03);
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+    .cb-exit-btn {
+      padding: 8px 16px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      color: #a1a1aa;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: 'Inter', sans-serif;
+    }
+    .cb-exit-btn:hover { background: rgba(255,255,255,0.08); color: #fff; }
+
+    /* 3-column layout */
+    .cb-layout {
+      display: grid;
+      grid-template-columns: 200px 1fr 380px;
+      gap: 20px;
+      min-height: 600px;
+    }
+
+    /* Sidebar */
+    .cb-sidebar {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .cb-sidebar-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #71717a;
+      margin-bottom: 4px;
+    }
+    .cb-new-btn {
+      width: 100%;
+      padding: 10px;
+      background: rgba(6, 182, 212, 0.1);
+      border: 1px dashed rgba(6, 182, 212, 0.3);
+      border-radius: 8px;
+      color: #06b6d4;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: 'Inter', sans-serif;
+    }
+    .cb-new-btn:hover { background: rgba(6, 182, 212, 0.15); }
+    .cb-bot-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex: 1;
+      overflow-y: auto;
+    }
+    .cb-bot-item {
+      padding: 10px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.15s;
+      position: relative;
+    }
+    .cb-bot-item:hover { background: rgba(255,255,255,0.04); }
+    .cb-bot-item.active { background: rgba(6, 182, 212, 0.1); border: 1px solid rgba(6, 182, 212, 0.2); }
+    .cb-bot-item-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: #e4e4e7;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .cb-bot-item-date {
+      font-size: 11px;
+      color: #52525b;
+      margin-top: 2px;
+    }
+    .cb-bot-item-del {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      width: 20px;
+      height: 20px;
+      border: none;
+      background: rgba(239, 68, 68, 0.1);
+      border-radius: 4px;
+      color: #ef4444;
+      font-size: 12px;
+      cursor: pointer;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
+    }
+    .cb-bot-item:hover .cb-bot-item-del { display: flex; }
+
+    /* Builder Form */
+    .cb-builder {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 12px;
+      padding: 24px;
+      overflow-y: auto;
+    }
+    .cb-form-group {
+      margin-bottom: 20px;
+    }
+    .cb-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: #a1a1aa;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 6px;
+      display: block;
+    }
+    .cb-input, .cb-textarea, .cb-select {
+      width: 100%;
+      padding: 10px 14px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 8px;
+      color: #fff;
+      font-size: 14px;
+      font-family: 'Inter', sans-serif;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .cb-input:focus, .cb-textarea:focus, .cb-select:focus { border-color: #06b6d4; }
+    .cb-textarea { resize: vertical; min-height: 70px; }
+    .cb-select { cursor: pointer; }
+    .cb-select option { background: #18181b; color: #fff; }
+
+    /* Tags input */
+    .cb-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 8px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 8px;
+      min-height: 42px;
+      align-items: center;
+    }
+    .cb-tag {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 10px;
+      background: rgba(6, 182, 212, 0.15);
+      border-radius: 6px;
+      font-size: 12px;
+      color: #06b6d4;
+      font-weight: 500;
+    }
+    .cb-tag-x {
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+      opacity: 0.7;
+    }
+    .cb-tag-x:hover { opacity: 1; }
+    .cb-tags input {
+      border: none;
+      background: transparent;
+      color: #fff;
+      font-size: 13px;
+      outline: none;
+      flex: 1;
+      min-width: 100px;
+      font-family: 'Inter', sans-serif;
+    }
+
+    /* FAQs */
+    .cb-faq-list { display: flex; flex-direction: column; gap: 12px; }
+    .cb-faq-item {
+      padding: 12px;
+      background: rgba(255,255,255,0.02);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 8px;
+      position: relative;
+    }
+    .cb-faq-item input, .cb-faq-item textarea {
+      width: 100%;
+      padding: 8px 10px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 6px;
+      color: #fff;
+      font-size: 13px;
+      font-family: 'Inter', sans-serif;
+      outline: none;
+      margin-bottom: 6px;
+    }
+    .cb-faq-item textarea { resize: vertical; min-height: 50px; margin-bottom: 0; }
+    .cb-faq-del {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      border: none;
+      background: none;
+      color: #ef4444;
+      cursor: pointer;
+      font-size: 16px;
+      padding: 2px 6px;
+    }
+    .cb-add-faq {
+      padding: 8px 14px;
+      background: rgba(255,255,255,0.04);
+      border: 1px dashed rgba(255,255,255,0.15);
+      border-radius: 8px;
+      color: #a1a1aa;
+      font-size: 13px;
+      cursor: pointer;
+      font-family: 'Inter', sans-serif;
+      transition: all 0.15s;
+      margin-top: 8px;
+    }
+    .cb-add-faq:hover { background: rgba(255,255,255,0.06); color: #fff; }
+
+    /* Color picker row */
+    .cb-color-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .cb-color-picker {
+      width: 40px;
+      height: 40px;
+      border: 2px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      cursor: pointer;
+      background: none;
+      padding: 2px;
+    }
+    .cb-color-hex {
+      font-size: 13px;
+      color: #71717a;
+      font-family: 'Inter', monospace;
+    }
+
+    /* Save button */
+    .cb-save-row {
+      display: flex;
+      gap: 12px;
+      margin-top: 24px;
+    }
+
+    /* Right Panel */
+    .cb-right {
+      display: flex;
+      flex-direction: column;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .cb-tabs {
+      display: flex;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .cb-tab {
+      flex: 1;
+      padding: 12px;
+      text-align: center;
+      font-size: 12px;
+      font-weight: 600;
+      color: #71717a;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all 0.15s;
+      background: none;
+      border-top: none;
+      border-left: none;
+      border-right: none;
+      font-family: 'Inter', sans-serif;
+    }
+    .cb-tab:hover { color: #a1a1aa; }
+    .cb-tab.active { color: #06b6d4; border-bottom-color: #06b6d4; }
+    .cb-tab-content { display: none; flex: 1; overflow-y: auto; }
+    .cb-tab-content.active { display: flex; flex-direction: column; }
+
+    /* Preview tab */
+    .cb-preview-chat {
+      flex: 1;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      overflow-y: auto;
+      min-height: 300px;
+    }
+    .cb-preview-msg {
+      max-width: 85%;
+      padding: 10px 14px;
+      border-radius: 12px;
+      font-size: 13px;
+      line-height: 1.5;
+      word-wrap: break-word;
+    }
+    .cb-preview-msg.bot {
+      background: rgba(255,255,255,0.06);
+      color: #d4d4d8;
+      align-self: flex-start;
+      border-bottom-left-radius: 4px;
+    }
+    .cb-preview-msg.user {
+      background: #06b6d4;
+      color: #fff;
+      align-self: flex-end;
+      border-bottom-right-radius: 4px;
+    }
+    .cb-preview-msg.typing {
+      background: rgba(255,255,255,0.06);
+      color: #71717a;
+      font-style: italic;
+      align-self: flex-start;
+      border-bottom-left-radius: 4px;
+    }
+    .cb-preview-input {
+      display: flex;
+      border-top: 1px solid rgba(255,255,255,0.06);
+    }
+    .cb-preview-input input {
+      flex: 1;
+      padding: 12px 14px;
+      background: transparent;
+      border: none;
+      color: #fff;
+      font-size: 13px;
+      outline: none;
+      font-family: 'Inter', sans-serif;
+    }
+    .cb-preview-input button {
+      padding: 0 16px;
+      background: #06b6d4;
+      border: none;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: 'Inter', sans-serif;
+    }
+    .cb-preview-input button:hover { background: #0891b2; }
+
+    /* Embed tab */
+    .cb-embed-content {
+      padding: 20px;
+    }
+    .cb-embed-content h3 {
+      font-size: 15px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+    .cb-embed-content p {
+      font-size: 13px;
+      color: #71717a;
+      line-height: 1.6;
+      margin-bottom: 16px;
+    }
+    .cb-embed-code {
+      background: rgba(0,0,0,0.3);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 8px;
+      padding: 14px;
+      font-family: 'Inter', monospace;
+      font-size: 12px;
+      color: #06b6d4;
+      word-break: break-all;
+      position: relative;
+      margin-bottom: 16px;
+    }
+    .cb-copy-btn {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      padding: 4px 10px;
+      background: rgba(6, 182, 212, 0.15);
+      border: 1px solid rgba(6, 182, 212, 0.3);
+      border-radius: 6px;
+      color: #06b6d4;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: 'Inter', sans-serif;
+    }
+    .cb-copy-btn:hover { background: rgba(6, 182, 212, 0.25); }
+    .cb-embed-note {
+      font-size: 12px;
+      color: #52525b;
+      line-height: 1.6;
+    }
+    .cb-no-bot-msg {
+      padding: 40px 20px;
+      text-align: center;
+      color: #52525b;
+      font-size: 13px;
+    }
+
+    /* Sales Guide tab */
+    .cb-guide {
+      padding: 20px;
+      font-size: 13px;
+      line-height: 1.7;
+      color: #a1a1aa;
+    }
+    .cb-guide h3 {
+      font-size: 16px;
+      font-weight: 700;
+      color: #fff;
+      margin: 20px 0 8px;
+    }
+    .cb-guide h3:first-child { margin-top: 0; }
+    .cb-guide p { margin-bottom: 10px; }
+    .cb-guide ul {
+      margin: 0 0 12px 20px;
+    }
+    .cb-guide li {
+      margin-bottom: 4px;
+    }
+    .cb-guide h4 {
+      font-size: 14px;
+      font-weight: 600;
+      color: #d4d4d8;
+      margin: 14px 0 6px;
+    }
+    .cb-guide code {
+      background: rgba(6, 182, 212, 0.1);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 12px;
+      color: #06b6d4;
+    }
+    .cb-guide ol {
+      margin: 0 0 12px 20px;
+    }
+    .cb-guide ol li {
+      margin-bottom: 4px;
+    }
+    .cb-guide strong { color: #06b6d4; }
+
+    /* Status message */
+    .cb-status {
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      margin-bottom: 16px;
+      display: none;
+    }
+    .cb-status.success {
+      background: rgba(34, 197, 94, 0.1);
+      border: 1px solid rgba(34, 197, 94, 0.2);
+      color: #22c55e;
+      display: block;
+    }
+    .cb-status.error {
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.2);
+      color: #ef4444;
+      display: block;
+    }
+
+    /* Responsive */
+    @media (max-width: 1024px) {
+      .cb-layout {
+        grid-template-columns: 1fr;
+        gap: 16px;
+      }
+      .cb-sidebar {
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      .cb-sidebar-title { width: 100%; }
+      .cb-new-btn { width: auto; }
+      .cb-bot-list { flex-direction: row; flex-wrap: wrap; }
+      .cb-bot-item { min-width: 140px; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Navbar -->
+  <nav class="navbar">
+    <div class="container nav-container">
+      <a href="/" class="logo">
+        <img src="/images/soldi-logo-transparent.png" alt="Soldi" width="32" height="32">
+        <span>Soldi</span>
+      </a>
+      <a href="/" class="nav-link" style="color: #06b6d4;">Dashboard</a>
+    </div>
+  </nav>
+
+  <section class="cb-page">
+    <div class="container">
+      <!-- API Key Gate -->
+      <div id="cbGate" class="cb-gate">
+        <div class="cb-gate-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          </svg>
+        </div>
+        <h2>AI Chatbot Builder</h2>
+        <p>Build AI-powered support chatbots for any website. Configure, preview, and embed &mdash; all in one place.</p>
+        <div class="cb-gate-input">
+          <input type="text" id="cbKeyInput" placeholder="Enter your Soldi API key" autocomplete="off" spellcheck="false">
+          <button class="btn-cb" onclick="validateCbKey()">Access</button>
+        </div>
+        <div id="cbGateError" class="cb-gate-error"></div>
+        <div class="cb-gate-footer">
+          Don't have a key? <a href="/">Get access on the dashboard</a>
+        </div>
+      </div>
+
+      <!-- Main Dashboard -->
+      <div id="cbDashboard" class="cb-dashboard">
+        <div class="cb-header">
+          <h1>AI Chatbot <span>Builder</span></h1>
+          <div class="cb-header-right">
+            <span class="cb-key-display" id="cbKeyDisplay"></span>
+            <button class="cb-exit-btn" onclick="logoutCb()">Exit</button>
+          </div>
+        </div>
+
+        <div id="cbStatus" class="cb-status"></div>
+
+        <div class="cb-layout">
+          <!-- Sidebar -->
+          <div class="cb-sidebar">
+            <div class="cb-sidebar-title">Your Chatbots</div>
+            <button class="cb-new-btn" onclick="newChatbot()">+ New</button>
+            <div class="cb-bot-list" id="cbBotList"></div>
+          </div>
+
+          <!-- Builder Form -->
+          <div class="cb-builder">
+            <div class="cb-form-group">
+              <label class="cb-label">Chatbot Name</label>
+              <input class="cb-input" id="cbName" placeholder="e.g. Acme Support Bot">
+            </div>
+            <div class="cb-form-group">
+              <label class="cb-label">Business Name</label>
+              <input class="cb-input" id="cbBusinessName" placeholder="e.g. Acme Corp">
+            </div>
+            <div class="cb-form-group">
+              <label class="cb-label">Business Description</label>
+              <textarea class="cb-textarea" id="cbDescription" placeholder="Describe what this business does..."></textarea>
+            </div>
+            <div class="cb-form-group">
+              <label class="cb-label">Services (press Enter to add)</label>
+              <div class="cb-tags" id="cbServicesContainer">
+                <input type="text" id="cbServiceInput" placeholder="Add a service...">
+              </div>
+            </div>
+            <div class="cb-form-group">
+              <label class="cb-label">FAQs</label>
+              <div class="cb-faq-list" id="cbFaqList"></div>
+              <button class="cb-add-faq" onclick="addFaq()">+ Add FAQ</button>
+            </div>
+            <div class="cb-form-group">
+              <label class="cb-label">Tone</label>
+              <select class="cb-select" id="cbTone">
+                <option value="friendly">Friendly</option>
+                <option value="professional">Professional</option>
+                <option value="casual">Casual</option>
+                <option value="technical">Technical</option>
+              </select>
+            </div>
+            <div class="cb-form-group">
+              <label class="cb-label">Brand Color</label>
+              <div class="cb-color-row">
+                <input type="color" class="cb-color-picker" id="cbColor" value="#06b6d4">
+                <span class="cb-color-hex" id="cbColorHex">#06b6d4</span>
+              </div>
+            </div>
+            <div class="cb-form-group">
+              <label class="cb-label">Welcome Message</label>
+              <input class="cb-input" id="cbWelcome" placeholder="Hi! How can I help you today?">
+            </div>
+            <div class="cb-form-group">
+              <label class="cb-label">Custom Instructions (optional)</label>
+              <textarea class="cb-textarea" id="cbInstructions" placeholder="e.g. Never discuss competitor pricing, always suggest booking a call for complex questions..."></textarea>
+            </div>
+            <div style="border-top: 1px solid rgba(255,255,255,0.06); margin: 24px 0; padding-top: 20px;">
+              <div style="font-size: 13px; font-weight: 700; color: #06b6d4; margin-bottom: 4px;">Account & Support Info</div>
+              <p style="font-size: 12px; color: #71717a; margin-bottom: 16px;">Help your chatbot answer account-related questions like password resets, support contacts, and policies.</p>
+            </div>
+            <div class="cb-form-group">
+              <label class="cb-label">Login / Signup URL</label>
+              <input class="cb-input" id="cbLoginUrl" placeholder="https://example.com/login">
+            </div>
+            <div class="cb-form-group">
+              <label class="cb-label">Password Reset URL</label>
+              <input class="cb-input" id="cbResetUrl" placeholder="https://example.com/reset-password">
+            </div>
+            <div class="cb-form-group">
+              <label class="cb-label">Support Email</label>
+              <input class="cb-input" id="cbSupportEmail" placeholder="support@example.com">
+            </div>
+            <div class="cb-form-group">
+              <label class="cb-label">Support Phone</label>
+              <input class="cb-input" id="cbSupportPhone" placeholder="(555) 123-4567">
+            </div>
+            <div class="cb-form-group">
+              <label class="cb-label">Business Hours</label>
+              <input class="cb-input" id="cbBusinessHours" placeholder="Mon-Fri 9am-5pm EST">
+            </div>
+            <div class="cb-form-group">
+              <label class="cb-label">Return / Refund Policy</label>
+              <textarea class="cb-textarea" id="cbRefundPolicy" placeholder="e.g. 30-day money back guarantee, no questions asked..."></textarea>
+            </div>
+            <div class="cb-form-group">
+              <label class="cb-label">Billing FAQ</label>
+              <textarea class="cb-textarea" id="cbBillingFaq" placeholder="Common billing questions and answers..." style="min-height: 90px;"></textarea>
+            </div>
+            <div class="cb-save-row">
+              <button class="btn-cb" onclick="saveChatbot()">Save Chatbot</button>
+            </div>
+          </div>
+
+          <!-- Right Panel -->
+          <div class="cb-right">
+            <div class="cb-tabs">
+              <button class="cb-tab active" onclick="switchTab('preview')">Preview</button>
+              <button class="cb-tab" onclick="switchTab('embed')">Embed</button>
+              <button class="cb-tab" onclick="switchTab('guide')">Sales Guide</button>
+              <button class="cb-tab" onclick="switchTab('install')">Install</button>
+            </div>
+
+            <!-- Preview Tab -->
+            <div class="cb-tab-content active" id="tabPreview">
+              <div class="cb-preview-chat" id="cbPreviewChat"></div>
+              <div class="cb-preview-input">
+                <input type="text" id="cbPreviewInput" placeholder="Type a message..." disabled>
+                <button id="cbPreviewSend" onclick="sendPreview()" disabled>Send</button>
+              </div>
+            </div>
+
+            <!-- Embed Tab -->
+            <div class="cb-tab-content" id="tabEmbed">
+              <div id="cbEmbedInner"></div>
+            </div>
+
+            <!-- Sales Guide Tab -->
+            <div class="cb-tab-content" id="tabGuide">
+              <div class="cb-guide">
+                <h3>1. What You're Selling</h3>
+                <p>You're offering businesses a <strong>24/7 AI-powered customer support chatbot</strong> that sits on their website and instantly answers visitor questions. No hiring, no training, no missed messages. The chatbot learns from the business info you provide and handles FAQs, service inquiries, and basic support automatically.</p>
+
+                <h3>2. Who to Sell To</h3>
+                <ul>
+                  <li><strong>Local businesses</strong> &mdash; dentists, plumbers, HVAC, salons, gyms</li>
+                  <li><strong>E-commerce stores</strong> &mdash; product questions, shipping info, returns</li>
+                  <li><strong>Real estate agents</strong> &mdash; property inquiries, scheduling showings</li>
+                  <li><strong>SaaS companies</strong> &mdash; feature questions, onboarding help</li>
+                  <li><strong>Restaurants</strong> &mdash; hours, menu, reservations, catering</li>
+                  <li><strong>Professional services</strong> &mdash; lawyers, accountants, consultants</li>
+                </ul>
+
+                <h3>3. How to Pitch</h3>
+                <p>Lead with the pain points:</p>
+                <ul>
+                  <li>"How many calls do you miss after hours?"</li>
+                  <li>"How long does it take to respond to website inquiries?"</li>
+                  <li>"What if every visitor got an instant response, 24/7?"</li>
+                </ul>
+                <p>Then offer a <strong>free live demo</strong> &mdash; build their chatbot right in front of them in under 5 minutes. Seeing it work with their actual business info is the strongest close.</p>
+
+                <h3>4. Pricing Guide</h3>
+                <ul>
+                  <li><strong>Setup fee:</strong> $200 - $500 (one-time)</li>
+                  <li><strong>Monthly maintenance:</strong> $50 - $150/month</li>
+                  <li>Update FAQs, adjust tone, add new services as needed</li>
+                  <li>For agencies: charge per chatbot and manage a portfolio</li>
+                  <li>Your cost: $0 (included in your Soldi membership)</li>
+                </ul>
+
+                <h3>5. The 5-Minute Demo Script</h3>
+                <ul>
+                  <li>Open the Chatbot Builder, click "New"</li>
+                  <li>Type in the prospect's business name and description</li>
+                  <li>Add 3-5 of their most common services</li>
+                  <li>Add 3-5 FAQs from their website or Google listing</li>
+                  <li>Pick a tone and their brand color</li>
+                  <li>Hit Save, switch to Preview, and ask it a question</li>
+                  <li>Show them the embed code &mdash; "One line of code, works on any website"</li>
+                </ul>
+
+                <h3>6. Handling Objections</h3>
+                <ul>
+                  <li><strong>"We already have live chat"</strong> &mdash; "Great, this handles the 80% of questions that are repetitive, so your team can focus on complex issues"</li>
+                  <li><strong>"AI gives wrong answers"</strong> &mdash; "We configure it with your exact business info and FAQs. It only answers what it knows and tells customers to contact you for anything else"</li>
+                  <li><strong>"Our customers won't use it"</strong> &mdash; "Studies show 70%+ of website visitors prefer instant chat over filling out contact forms or calling"</li>
+                  <li><strong>"It's too expensive"</strong> &mdash; "One converted lead from a midnight inquiry pays for months of the service"</li>
+                </ul>
+
+                <h3>7. Getting Started Checklist</h3>
+                <ul>
+                  <li>Identify 5-10 local businesses with websites but no chat widget</li>
+                  <li>Gather their business info from their website/Google listing</li>
+                  <li>Build a demo chatbot for each before reaching out</li>
+                  <li>Screen-record a demo showing the chatbot in action</li>
+                  <li>Email/DM the business owner with the recording</li>
+                  <li>Offer a free trial week to get them hooked</li>
+                  <li>Close the deal with setup + monthly maintenance</li>
+                </ul>
+              </div>
+            </div>
+
+            <!-- Install Tab -->
+            <div class="cb-tab-content" id="tabInstall">
+              <div class="cb-guide">
+                <h3>Installation Guide</h3>
+                <p>Once you've built and saved your chatbot, grab the embed code from the <strong>Embed</strong> tab. Then follow the instructions below for your platform.</p>
+
+                <h3>For Businesses WITH a Website</h3>
+
+                <h4>WordPress</h4>
+                <p><strong>Option A &mdash; Theme Editor:</strong></p>
+                <ol>
+                  <li>Go to <strong>Appearance &gt; Theme File Editor</strong></li>
+                  <li>Select <code>footer.php</code> from the file list on the right</li>
+                  <li>Paste the embed code right before the <code>&lt;/body&gt;</code> tag</li>
+                  <li>Click "Update File"</li>
+                </ol>
+                <p><strong>Option B &mdash; Plugin (recommended):</strong></p>
+                <ol>
+                  <li>Install the free <strong>WPCode</strong> or <strong>Insert Headers and Footers</strong> plugin</li>
+                  <li>Go to the plugin settings and paste the embed code in the "Footer" section</li>
+                  <li>Save &mdash; the chatbot will appear on every page</li>
+                </ol>
+
+                <h4>Shopify</h4>
+                <ol>
+                  <li>Go to <strong>Online Store &gt; Themes &gt; Edit Code</strong></li>
+                  <li>Open <code>theme.liquid</code></li>
+                  <li>Paste the embed code right before <code>&lt;/body&gt;</code></li>
+                  <li>Click Save</li>
+                </ol>
+
+                <h4>Squarespace</h4>
+                <ol>
+                  <li>Go to <strong>Settings &gt; Advanced &gt; Code Injection</strong></li>
+                  <li>Paste the embed code in the <strong>Footer</strong> field</li>
+                  <li>Click Save</li>
+                </ol>
+
+                <h4>Wix</h4>
+                <ol>
+                  <li>Go to <strong>Settings &gt; Custom Code</strong></li>
+                  <li>Click <strong>"+ Add Code"</strong></li>
+                  <li>Paste the embed code, set placement to <strong>"Body - End"</strong></li>
+                  <li>Apply to <strong>All Pages</strong> and Save</li>
+                </ol>
+
+                <h4>Plain HTML</h4>
+                <ol>
+                  <li>Open your HTML file in any text editor</li>
+                  <li>Find the <code>&lt;/body&gt;</code> closing tag</li>
+                  <li>Paste the embed code on the line right above it</li>
+                  <li>Save and upload the file</li>
+                </ol>
+
+                <h3>For Businesses WITHOUT a Website</h3>
+
+                <h4>Carrd (Free)</h4>
+                <ol>
+                  <li>Sign up at <strong>carrd.co</strong> (free plan works)</li>
+                  <li>Create a simple one-page site with the business info</li>
+                  <li>Add an <strong>Embed</strong> element, switch to "Code", paste the embed code</li>
+                  <li>Publish &mdash; they now have a website with a chatbot</li>
+                </ol>
+
+                <h4>Google Sites (Free)</h4>
+                <ol>
+                  <li>Go to <strong>sites.google.com</strong> and create a new site</li>
+                  <li>Add business info, images, contact details</li>
+                  <li>Click <strong>Insert &gt; Embed &gt; Embed code</strong> and paste the script</li>
+                  <li>Publish the site</li>
+                </ol>
+
+                <h4>Standalone Hosted Page</h4>
+                <ol>
+                  <li>Create a simple HTML file with the business info and the embed code</li>
+                  <li>Host it for free on <strong>Netlify</strong>, <strong>Vercel</strong>, or <strong>GitHub Pages</strong></li>
+                  <li>Point a custom domain if the client has one, or use the free subdomain</li>
+                </ol>
+
+                <h3>Tips for Installation</h3>
+                <ul>
+                  <li>The chatbot widget loads asynchronously and won't slow down the website</li>
+                  <li>It works on all devices &mdash; desktop, tablet, and mobile</li>
+                  <li>The chat button appears in the bottom-right corner by default</li>
+                  <li>Brand color and welcome message are pulled from your chatbot config</li>
+                  <li>Test on the client's staging site before pushing to production</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    let currentApiKey = '';
+    let chatbots = [];
+    let currentBotId = null;
+    let services = [];
+    let faqs = [];
+    let previewHistory = [];
+
+    // ---- Gate ----
+    window.addEventListener('DOMContentLoaded', () => {
+      const savedKey = sessionStorage.getItem('soldi_chatbot_key');
+      if (savedKey) {
+        currentApiKey = savedKey;
+        enterDashboard();
+      }
+
+      document.getElementById('cbKeyInput').addEventListener('keydown', e => {
+        if (e.key === 'Enter') validateCbKey();
+      });
+
+      document.getElementById('cbServiceInput').addEventListener('keydown', e => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          const val = e.target.value.trim();
+          if (val && !services.includes(val)) {
+            services.push(val);
+            renderServices();
+          }
+          e.target.value = '';
+        }
+      });
+
+      document.getElementById('cbColor').addEventListener('input', e => {
+        document.getElementById('cbColorHex').textContent = e.target.value;
+      });
+
+      document.getElementById('cbPreviewInput').addEventListener('keydown', e => {
+        if (e.key === 'Enter') sendPreview();
+      });
+    });
+
+    async function validateCbKey() {
+      const keyInput = document.getElementById('cbKeyInput');
+      const errorEl = document.getElementById('cbGateError');
+      const key = keyInput.value.trim();
+      if (!key) {
+        errorEl.textContent = 'Please enter your API key';
+        errorEl.style.display = 'block';
+        return;
+      }
+      try {
+        const res = await fetch(`/api/validate-key?key=${encodeURIComponent(key)}`);
+        const data = await res.json();
+        if (data.success) {
+          currentApiKey = key;
+          sessionStorage.setItem('soldi_chatbot_key', key);
+          errorEl.style.display = 'none';
+          enterDashboard();
+        } else {
+          errorEl.textContent = 'Invalid or expired API key';
+          errorEl.style.display = 'block';
+        }
+      } catch {
+        errorEl.textContent = 'Connection error. Try again.';
+        errorEl.style.display = 'block';
+      }
+    }
+
+    function enterDashboard() {
+      document.getElementById('cbGate').style.display = 'none';
+      document.getElementById('cbDashboard').classList.add('active');
+      const display = document.getElementById('cbKeyDisplay');
+      display.textContent = currentApiKey.substring(0, 10) + '...';
+      loadBots();
+    }
+
+    function logoutCb() {
+      sessionStorage.removeItem('soldi_chatbot_key');
+      currentApiKey = '';
+      chatbots = [];
+      currentBotId = null;
+      document.getElementById('cbDashboard').classList.remove('active');
+      document.getElementById('cbGate').style.display = '';
+      document.getElementById('cbKeyInput').value = '';
+    }
+
+    // ---- Data ----
+    async function loadBots() {
+      try {
+        const res = await fetch(`/api/chatbot/list?key=${encodeURIComponent(currentApiKey)}`);
+        const data = await res.json();
+        chatbots = data.chatbots || [];
+        renderBotList();
+        if (chatbots.length > 0 && !currentBotId) {
+          selectBot(chatbots[0].id);
+        } else if (chatbots.length === 0) {
+          newChatbot();
+        }
+      } catch {
+        showStatus('Failed to load chatbots', 'error');
+      }
+    }
+
+    function renderBotList() {
+      const list = document.getElementById('cbBotList');
+      list.innerHTML = '';
+      for (const bot of chatbots) {
+        const div = document.createElement('div');
+        div.className = 'cb-bot-item' + (bot.id === currentBotId ? ' active' : '');
+        div.innerHTML = `
+          <div class="cb-bot-item-name">${esc(bot.name || bot.businessName)}</div>
+          <div class="cb-bot-item-date">${new Date(bot.updatedAt || bot.createdAt).toLocaleDateString()}</div>
+          <button class="cb-bot-item-del" onclick="event.stopPropagation(); deleteBot('${bot.id}')">&times;</button>
+        `;
+        div.onclick = () => selectBot(bot.id);
+        list.appendChild(div);
+      }
+    }
+
+    function selectBot(id) {
+      currentBotId = id;
+      const bot = chatbots.find(b => b.id === id);
+      if (!bot) return;
+
+      document.getElementById('cbName').value = bot.name || '';
+      document.getElementById('cbBusinessName').value = bot.businessName || '';
+      document.getElementById('cbDescription').value = bot.businessDescription || '';
+      services = [...(bot.services || [])];
+      renderServices();
+      faqs = (bot.faqs || []).map(f => ({ ...f }));
+      renderFaqs();
+      document.getElementById('cbTone').value = bot.tone || 'friendly';
+      document.getElementById('cbColor').value = bot.brandColor || '#06b6d4';
+      document.getElementById('cbColorHex').textContent = bot.brandColor || '#06b6d4';
+      document.getElementById('cbWelcome').value = bot.welcomeMessage || '';
+      document.getElementById('cbInstructions').value = bot.customInstructions || '';
+      const acct = bot.accountInfo || {};
+      document.getElementById('cbLoginUrl').value = acct.loginUrl || '';
+      document.getElementById('cbResetUrl').value = acct.resetUrl || '';
+      document.getElementById('cbSupportEmail').value = acct.supportEmail || '';
+      document.getElementById('cbSupportPhone').value = acct.supportPhone || '';
+      document.getElementById('cbBusinessHours').value = acct.businessHours || '';
+      document.getElementById('cbRefundPolicy').value = acct.refundPolicy || '';
+      document.getElementById('cbBillingFaq').value = acct.billingFaq || '';
+
+      renderBotList();
+      resetPreview();
+      renderEmbed();
+    }
+
+    function newChatbot() {
+      currentBotId = null;
+      document.getElementById('cbName').value = '';
+      document.getElementById('cbBusinessName').value = '';
+      document.getElementById('cbDescription').value = '';
+      services = [];
+      renderServices();
+      faqs = [];
+      renderFaqs();
+      document.getElementById('cbTone').value = 'friendly';
+      document.getElementById('cbColor').value = '#06b6d4';
+      document.getElementById('cbColorHex').textContent = '#06b6d4';
+      document.getElementById('cbWelcome').value = '';
+      document.getElementById('cbInstructions').value = '';
+      document.getElementById('cbLoginUrl').value = '';
+      document.getElementById('cbResetUrl').value = '';
+      document.getElementById('cbSupportEmail').value = '';
+      document.getElementById('cbSupportPhone').value = '';
+      document.getElementById('cbBusinessHours').value = '';
+      document.getElementById('cbRefundPolicy').value = '';
+      document.getElementById('cbBillingFaq').value = '';
+      renderBotList();
+      resetPreview();
+      renderEmbed();
+    }
+
+    async function saveChatbot() {
+      const businessName = document.getElementById('cbBusinessName').value.trim();
+      if (!businessName) {
+        showStatus('Business name is required', 'error');
+        return;
+      }
+
+      const chatbot = {
+        id: currentBotId || undefined,
+        name: document.getElementById('cbName').value.trim() || businessName + ' Bot',
+        businessName,
+        businessDescription: document.getElementById('cbDescription').value.trim(),
+        services: [...services],
+        faqs: faqs.map(f => ({ q: f.q, a: f.a })),
+        tone: document.getElementById('cbTone').value,
+        brandColor: document.getElementById('cbColor').value,
+        welcomeMessage: document.getElementById('cbWelcome').value.trim() || 'Hi! How can I help you today?',
+        customInstructions: document.getElementById('cbInstructions').value.trim(),
+        accountInfo: {
+          loginUrl: document.getElementById('cbLoginUrl').value.trim(),
+          resetUrl: document.getElementById('cbResetUrl').value.trim(),
+          supportEmail: document.getElementById('cbSupportEmail').value.trim(),
+          supportPhone: document.getElementById('cbSupportPhone').value.trim(),
+          businessHours: document.getElementById('cbBusinessHours').value.trim(),
+          refundPolicy: document.getElementById('cbRefundPolicy').value.trim(),
+          billingFaq: document.getElementById('cbBillingFaq').value.trim(),
+        },
+      };
+
+      try {
+        const res = await fetch('/api/chatbot/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: currentApiKey, chatbot }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          chatbots = data.chatbots;
+          // Select the newly created/updated bot
+          if (!currentBotId && chatbots.length > 0) {
+            currentBotId = chatbots[chatbots.length - 1].id;
+          }
+          renderBotList();
+          renderEmbed();
+          resetPreview();
+          showStatus('Chatbot saved!', 'success');
+        } else {
+          showStatus(data.error || 'Failed to save', 'error');
+        }
+      } catch {
+        showStatus('Connection error', 'error');
+      }
+    }
+
+    async function deleteBot(id) {
+      if (!confirm('Delete this chatbot?')) return;
+      try {
+        const res = await fetch(`/api/chatbot/delete?key=${encodeURIComponent(currentApiKey)}&id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+        const data = await res.json();
+        chatbots = data.chatbots || [];
+        if (currentBotId === id) {
+          currentBotId = chatbots.length > 0 ? chatbots[0].id : null;
+          if (currentBotId) selectBot(currentBotId);
+          else newChatbot();
+        }
+        renderBotList();
+        showStatus('Chatbot deleted', 'success');
+      } catch {
+        showStatus('Failed to delete', 'error');
+      }
+    }
+
+    // ---- Services tags ----
+    function renderServices() {
+      const container = document.getElementById('cbServicesContainer');
+      const input = document.getElementById('cbServiceInput');
+      container.querySelectorAll('.cb-tag').forEach(t => t.remove());
+      for (let i = 0; i < services.length; i++) {
+        const tag = document.createElement('span');
+        tag.className = 'cb-tag';
+        tag.innerHTML = `${esc(services[i])} <span class="cb-tag-x" onclick="removeService(${i})">&times;</span>`;
+        container.insertBefore(tag, input);
+      }
+    }
+
+    function removeService(i) {
+      services.splice(i, 1);
+      renderServices();
+    }
+
+    // ---- FAQs ----
+    function renderFaqs() {
+      const list = document.getElementById('cbFaqList');
+      list.innerHTML = '';
+      for (let i = 0; i < faqs.length; i++) {
+        const div = document.createElement('div');
+        div.className = 'cb-faq-item';
+        div.innerHTML = `
+          <button class="cb-faq-del" onclick="removeFaq(${i})">&times;</button>
+          <input type="text" placeholder="Question" value="${esc(faqs[i].q)}" onchange="faqs[${i}].q=this.value">
+          <textarea placeholder="Answer" onchange="faqs[${i}].a=this.value">${esc(faqs[i].a)}</textarea>
+        `;
+        list.appendChild(div);
+      }
+    }
+
+    function addFaq() {
+      faqs.push({ q: '', a: '' });
+      renderFaqs();
+    }
+
+    function removeFaq(i) {
+      faqs.splice(i, 1);
+      renderFaqs();
+    }
+
+    // ---- Tabs ----
+    function switchTab(tab) {
+      document.querySelectorAll('.cb-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.cb-tab-content').forEach(t => t.classList.remove('active'));
+      document.getElementById('tab' + tab.charAt(0).toUpperCase() + tab.slice(1)).classList.add('active');
+      event.target.classList.add('active');
+    }
+
+    // ---- Preview ----
+    function resetPreview() {
+      previewHistory = [];
+      const chat = document.getElementById('cbPreviewChat');
+      chat.innerHTML = '';
+      const input = document.getElementById('cbPreviewInput');
+      const sendBtn = document.getElementById('cbPreviewSend');
+
+      if (currentBotId) {
+        const bot = chatbots.find(b => b.id === currentBotId);
+        if (bot) {
+          addPreviewMsg(bot.welcomeMessage || 'Hi! How can I help you today?', 'bot');
+        }
+        input.disabled = false;
+        sendBtn.disabled = false;
+        input.placeholder = 'Type a message...';
+      } else {
+        addPreviewMsg('Save a chatbot first to preview it here.', 'bot');
+        input.disabled = true;
+        sendBtn.disabled = true;
+        input.placeholder = 'Save a chatbot first...';
+      }
+    }
+
+    function addPreviewMsg(text, cls) {
+      const chat = document.getElementById('cbPreviewChat');
+      const div = document.createElement('div');
+      div.className = 'cb-preview-msg ' + cls;
+      div.textContent = text;
+      chat.appendChild(div);
+      chat.scrollTop = chat.scrollHeight;
+      return div;
+    }
+
+    async function sendPreview() {
+      const input = document.getElementById('cbPreviewInput');
+      const text = input.value.trim();
+      if (!text || !currentBotId) return;
+      input.value = '';
+
+      addPreviewMsg(text, 'user');
+      previewHistory.push({ role: 'user', content: text });
+
+      const typing = addPreviewMsg('Typing...', 'typing');
+      document.getElementById('cbPreviewSend').disabled = true;
+
+      try {
+        const res = await fetch('/api/chatbot/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chatbotId: currentBotId,
+            message: text,
+            history: previewHistory,
+          }),
+        });
+        const data = await res.json();
+        typing.remove();
+        const reply = data.reply || 'Sorry, I could not process that.';
+        addPreviewMsg(reply, 'bot');
+        previewHistory.push({ role: 'assistant', content: reply });
+      } catch {
+        typing.remove();
+        addPreviewMsg('Error getting response. Try again.', 'bot');
+      }
+      document.getElementById('cbPreviewSend').disabled = false;
+      input.focus();
+    }
+
+    // ---- Embed ----
+    function renderEmbed() {
+      const inner = document.getElementById('cbEmbedInner');
+      if (!currentBotId) {
+        inner.innerHTML = '<div class="cb-no-bot-msg">Save a chatbot first to get embed code.</div>';
+        return;
+      }
+      const origin = window.location.origin;
+      const scriptTag = `<script src="${origin}/api/chatbot/widget/${currentBotId}"><\/script>`;
+      inner.innerHTML = `
+        <div class="cb-embed-content">
+          <h3>Embed on Any Website</h3>
+          <p>Copy the code below and paste it right before the closing <code>&lt;/body&gt;</code> tag on any HTML page.</p>
+          <div class="cb-embed-code" id="cbEmbedCode">
+            ${esc(scriptTag)}
+            <button class="cb-copy-btn" onclick="copyEmbed()">Copy</button>
+          </div>
+          <h3>How It Works</h3>
+          <p>Once embedded, a chat button appears in the bottom-right corner of the website. Visitors click it to open the chat window and get instant AI-powered answers based on your chatbot configuration.</p>
+          <div class="cb-embed-note">
+            <strong>Tip:</strong> Works on any website &mdash; WordPress, Shopify, Squarespace, Wix, custom HTML, etc. Just paste the script tag and you're done.
+          </div>
+        </div>
+      `;
+    }
+
+    function copyEmbed() {
+      const origin = window.location.origin;
+      const code = `<script src="${origin}/api/chatbot/widget/${currentBotId}"><\/script>`;
+      navigator.clipboard.writeText(code).then(() => {
+        const btn = document.querySelector('.cb-copy-btn');
+        btn.textContent = 'Copied!';
+        setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
+      });
+    }
+
+    // ---- Helpers ----
+    function showStatus(msg, type) {
+      const el = document.getElementById('cbStatus');
+      el.textContent = msg;
+      el.className = 'cb-status ' + type;
+      setTimeout(() => { el.className = 'cb-status'; }, 4000);
+    }
+
+    function esc(str) {
+      const d = document.createElement('div');
+      d.textContent = str || '';
+      return d.innerHTML;
+    }
+  </script>
+</body>
+</html>
