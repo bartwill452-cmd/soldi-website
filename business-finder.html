@@ -49,7 +49,7 @@
     .finder-gate-input input {
       flex: 1;
       padding: 14px 16px;
-      background: rgba(255,255,255,0.04);
+      background: rgba(255,255,255,0.05);
       border: 1px solid rgba(255,255,255,0.1);
       border-radius: 10px;
       color: #fff;
@@ -219,7 +219,7 @@
       flex: 1;
       min-width: 200px;
       padding: 14px 16px;
-      background: rgba(255,255,255,0.04);
+      background: rgba(255,255,255,0.05);
       border: 1px solid rgba(255,255,255,0.1);
       border-radius: 10px;
       color: #fff;
@@ -232,7 +232,7 @@
     .search-bar input::placeholder { color: #52525b; }
     .search-bar .btn-finder {
       padding: 14px 28px;
-      background: linear-gradient(135deg, #3b82f6, #2563eb);
+      background: linear-gradient(135deg, #22c55e, #16a34a);
       color: #fff;
       border: none;
       border-radius: 10px;
@@ -244,7 +244,7 @@
     }
     .search-bar .btn-finder:hover:not(:disabled) {
       transform: translateY(-1px);
-      box-shadow: 0 4px 20px rgba(59, 130, 246, 0.3);
+      box-shadow: 0 4px 20px rgba(34, 197, 94, 0.3);
     }
     .search-bar .btn-finder:disabled { opacity: 0.5; cursor: not-allowed; }
 
@@ -413,6 +413,7 @@
       .finder-stats { flex-direction: column; }
       .search-bar { flex-direction: column; }
       .search-bar input { min-width: unset; width: 100%; }
+      .search-bar select { width: 100%; }
       .search-bar .btn-finder { width: 100%; text-align: center; }
       .category-grid { grid-template-columns: repeat(2, 1fr); }
     }
@@ -461,7 +462,7 @@
         <form id="finderGateForm" onsubmit="validateFinderKey(event)">
           <div class="finder-gate-input">
             <input type="text" id="finderKeyInput" placeholder="soldi_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" autocomplete="off" spellcheck="false">
-            <button type="submit" class="btn btn-primary" id="finderGateBtn" style="background: linear-gradient(135deg, #3b82f6, #2563eb);">
+            <button type="submit" class="btn btn-primary" id="finderGateBtn" style="background: linear-gradient(135deg, #22c55e, #16a34a);">
               <span class="finder-gate-btn-text">Access</span>
               <span class="finder-btn-loading" style="display:none;">
                 <svg class="spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
@@ -512,7 +513,61 @@
               <span id="selectedNicheText"></span>
               <span class="niche-clear" onclick="clearNiche()">&#10005;</span>
             </div>
-            <input type="text" id="locationInput" placeholder="Enter city, state or zip code (e.g., Miami, FL)" autocomplete="off" spellcheck="false">
+            <input type="text" id="cityInput" placeholder="City (optional)" autocomplete="off" spellcheck="false" style="flex: 0.7; min-width: 140px;">
+            <select id="stateSelect" style="padding: 14px 16px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; color: #fff; font-size: 14px; font-family: 'Inter', sans-serif; outline: none; min-width: 160px; cursor: pointer; transition: border-color 0.2s; appearance: none; -webkit-appearance: none; background-image: url('data:image/svg+xml;utf8,<svg fill=\'%2371717a\' viewBox=\'0 0 24 24\' xmlns=\'http://www.w3.org/2000/svg\'><path d=\'M7 10l5 5 5-5z\'/></svg>'); background-repeat: no-repeat; background-position: right 12px center; background-size: 18px; padding-right: 36px;">
+              <option value="" style="background: #18181b; color: #71717a;">Select State</option>
+              <option value="AL" style="background: #18181b;">Alabama</option>
+              <option value="AK" style="background: #18181b;">Alaska</option>
+              <option value="AZ" style="background: #18181b;">Arizona</option>
+              <option value="AR" style="background: #18181b;">Arkansas</option>
+              <option value="CA" style="background: #18181b;">California</option>
+              <option value="CO" style="background: #18181b;">Colorado</option>
+              <option value="CT" style="background: #18181b;">Connecticut</option>
+              <option value="DE" style="background: #18181b;">Delaware</option>
+              <option value="FL" style="background: #18181b;">Florida</option>
+              <option value="GA" style="background: #18181b;">Georgia</option>
+              <option value="HI" style="background: #18181b;">Hawaii</option>
+              <option value="ID" style="background: #18181b;">Idaho</option>
+              <option value="IL" style="background: #18181b;">Illinois</option>
+              <option value="IN" style="background: #18181b;">Indiana</option>
+              <option value="IA" style="background: #18181b;">Iowa</option>
+              <option value="KS" style="background: #18181b;">Kansas</option>
+              <option value="KY" style="background: #18181b;">Kentucky</option>
+              <option value="LA" style="background: #18181b;">Louisiana</option>
+              <option value="ME" style="background: #18181b;">Maine</option>
+              <option value="MD" style="background: #18181b;">Maryland</option>
+              <option value="MA" style="background: #18181b;">Massachusetts</option>
+              <option value="MI" style="background: #18181b;">Michigan</option>
+              <option value="MN" style="background: #18181b;">Minnesota</option>
+              <option value="MS" style="background: #18181b;">Mississippi</option>
+              <option value="MO" style="background: #18181b;">Missouri</option>
+              <option value="MT" style="background: #18181b;">Montana</option>
+              <option value="NE" style="background: #18181b;">Nebraska</option>
+              <option value="NV" style="background: #18181b;">Nevada</option>
+              <option value="NH" style="background: #18181b;">New Hampshire</option>
+              <option value="NJ" style="background: #18181b;">New Jersey</option>
+              <option value="NM" style="background: #18181b;">New Mexico</option>
+              <option value="NY" style="background: #18181b;">New York</option>
+              <option value="NC" style="background: #18181b;">North Carolina</option>
+              <option value="ND" style="background: #18181b;">North Dakota</option>
+              <option value="OH" style="background: #18181b;">Ohio</option>
+              <option value="OK" style="background: #18181b;">Oklahoma</option>
+              <option value="OR" style="background: #18181b;">Oregon</option>
+              <option value="PA" style="background: #18181b;">Pennsylvania</option>
+              <option value="RI" style="background: #18181b;">Rhode Island</option>
+              <option value="SC" style="background: #18181b;">South Carolina</option>
+              <option value="SD" style="background: #18181b;">South Dakota</option>
+              <option value="TN" style="background: #18181b;">Tennessee</option>
+              <option value="TX" style="background: #18181b;">Texas</option>
+              <option value="UT" style="background: #18181b;">Utah</option>
+              <option value="VT" style="background: #18181b;">Vermont</option>
+              <option value="VA" style="background: #18181b;">Virginia</option>
+              <option value="WA" style="background: #18181b;">Washington</option>
+              <option value="WV" style="background: #18181b;">West Virginia</option>
+              <option value="WI" style="background: #18181b;">Wisconsin</option>
+              <option value="WY" style="background: #18181b;">Wyoming</option>
+              <option value="DC" style="background: #18181b;">Washington DC</option>
+            </select>
             <button class="btn-finder" id="searchBtn" onclick="searchBusinesses()">
               <span id="searchBtnText">Search</span>
               <span id="searchBtnLoading" style="display:none;">
@@ -521,6 +576,7 @@
               </span>
             </button>
           </div>
+          <p style="font-size: 12px; color: #52525b; margin-top: -20px; margin-bottom: 24px;">City is optional. You can search by state only for broader results.</p>
           <div class="search-error" id="searchError"></div>
         </div>
 
@@ -712,8 +768,8 @@
       document.getElementById('searchSection').style.display = 'block';
       document.getElementById('selectedNicheText').textContent = selectedNiche.icon + ' ' + selectedNiche.name;
 
-      // Focus location input
-      document.getElementById('locationInput').focus();
+      // Focus city input
+      document.getElementById('cityInput').focus();
 
       // Hide previous results
       document.getElementById('finderResults').classList.remove('active');
@@ -728,11 +784,23 @@
 
     async function searchBusinesses() {
       if (!selectedNiche) return;
-      const location = document.getElementById('locationInput').value.trim();
-      if (!location) {
-        document.getElementById('searchError').textContent = 'Please enter a city, state, or zip code.';
+      const city = document.getElementById('cityInput').value.trim();
+      const state = document.getElementById('stateSelect').value;
+
+      if (!city && !state) {
+        document.getElementById('searchError').textContent = 'Please select a state, enter a city, or both.';
         document.getElementById('searchError').style.display = 'block';
         return;
+      }
+
+      // Build location string
+      let location = '';
+      if (city && state) {
+        location = city + ', ' + state;
+      } else if (state) {
+        location = state;
+      } else {
+        location = city;
       }
 
       const btn = document.getElementById('searchBtn');
@@ -824,7 +892,7 @@
             <td><span class="website-badge ${badgeClass}">${badgeText}</span></td>
             <td style="font-weight:500; color:#fff;">${biz.name}</td>
             <td>${biz.address}</td>
-            <td>${biz.phone || '--'}</td>
+            <td>${biz.phone ? '<a href="tel:' + biz.phone.replace(/[^0-9]/g, '') + '" style="color:#22c55e; font-weight:600; font-size:14px; white-space:nowrap; text-decoration:none;">' + biz.phone + '</a>' : '<span style="color:#52525b;">--</span>'}</td>
             <td>${ratingHtml}</td>
             <td>${mapsHtml}</td>
           </tr>
@@ -832,11 +900,19 @@
       }).join('');
     }
 
-    // Enter key on location input triggers search
-    document.getElementById('locationInput').addEventListener('keypress', function(e) {
+    // Enter key on city input triggers search
+    document.getElementById('cityInput').addEventListener('keypress', function(e) {
       if (e.key === 'Enter') {
         e.preventDefault();
         searchBusinesses();
+      }
+    });
+
+    // State select change also triggers search if a niche is selected
+    document.getElementById('stateSelect').addEventListener('change', function() {
+      // Auto-focus city input after selecting state
+      if (this.value) {
+        document.getElementById('cityInput').focus();
       }
     });
 
@@ -851,6 +927,23 @@
       document.getElementById('searchSection').style.display = 'none';
       document.getElementById('finderKeyInput').value = '';
     }
+
+    // Auto-auth from localStorage
+    (async function() {
+      if (currentApiKey) return; // already authenticated via sessionStorage
+      const savedKey = localStorage.getItem('soldi_api_key');
+      if (savedKey) {
+        try {
+          const res = await fetch('/api/validate-key?key=' + encodeURIComponent(savedKey));
+          const data = await res.json();
+          if (res.ok && data.success) {
+            sessionStorage.setItem('soldi_finder_key', savedKey);
+            currentApiKey = savedKey;
+            accessFinderScreen(savedKey);
+          }
+        } catch (e) {}
+      }
+    })();
   </script>
 
 </body>

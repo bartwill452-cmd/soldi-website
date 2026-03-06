@@ -49,7 +49,7 @@
     .leads-gate-input input {
       flex: 1;
       padding: 14px 16px;
-      background: rgba(255,255,255,0.04);
+      background: rgba(255,255,255,0.05);
       border: 1px solid rgba(255,255,255,0.1);
       border-radius: 10px;
       color: #fff;
@@ -219,7 +219,7 @@
       flex: 1;
       min-width: 200px;
       padding: 14px 16px;
-      background: rgba(255,255,255,0.04);
+      background: rgba(255,255,255,0.05);
       border: 1px solid rgba(255,255,255,0.1);
       border-radius: 10px;
       color: #fff;
@@ -428,7 +428,7 @@
       .leads-page { padding: 100px 0 60px; }
       .leads-header { flex-direction: column; align-items: flex-start; }
       .leads-table-wrapper { overflow-x: auto; }
-      .leads-table { min-width: 700px; }
+      .leads-table { min-width: 900px; }
       .leads-gate { margin: 40px auto 0; padding: 0 20px; }
       .leads-gate-input { flex-direction: column; }
       .leads-gate-input .btn { width: 100%; justify-content: center; }
@@ -483,7 +483,7 @@
         <form id="leadsGateForm" onsubmit="validateLeadsKey(event)">
           <div class="leads-gate-input">
             <input type="text" id="leadsKeyInput" placeholder="soldi_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" autocomplete="off" spellcheck="false">
-            <button type="submit" class="btn btn-primary" id="leadsGateBtn" style="background: linear-gradient(135deg, #f97316, #ea580c);">
+            <button type="submit" class="btn btn-primary" id="leadsGateBtn" style="background: linear-gradient(135deg, #22c55e, #16a34a);">
               <span class="leads-gate-btn-text">Access</span>
               <span class="leads-btn-loading" style="display:none;">
                 <svg class="spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
@@ -585,9 +585,10 @@
                 <tr>
                   <th>Lead Quality</th>
                   <th>Business Name</th>
-                  <th>Address</th>
                   <th>Phone</th>
                   <th>Rating</th>
+                  <th>Website</th>
+                  <th>Address</th>
                   <th>Maps</th>
                 </tr>
               </thead>
@@ -852,13 +853,22 @@
           ? `<a href="${lead.googleMapsUrl}" target="_blank" class="maps-link"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg> View</a>`
           : '--';
 
+        const phoneHtml = lead.phone
+          ? '<a href="tel:' + lead.phone.replace(/[^0-9]/g, '') + '" style="color:#f97316; font-weight:600; font-size:14px; white-space:nowrap; text-decoration:none;">' + lead.phone + '</a>'
+          : '<span style="color:#52525b;">Not listed</span>';
+
+        const websiteHtml = lead.websiteUrl
+          ? '<a href="' + lead.websiteUrl + '" target="_blank" rel="noopener" style="display:inline-flex; align-items:center; gap:4px; color:#3b82f6; font-size:13px; font-weight:500; text-decoration:none; transition:color 0.2s;" onmouseover="this.style.color=\'#60a5fa\'" onmouseout="this.style.color=\'#3b82f6\'"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg> Visit Site</a>'
+          : '<span style="color:#52525b;">--</span>';
+
         return `
           <tr class="${rowClass}">
             <td><span class="lead-badge ${badgeClass}">${badgeText}</span></td>
             <td style="font-weight:500; color:#fff;">${lead.name}</td>
-            <td>${lead.address}</td>
-            <td>${lead.phone || '<span style="color:#52525b;">Not listed</span>'}</td>
+            <td>${phoneHtml}</td>
             <td>${ratingHtml}</td>
+            <td>${websiteHtml}</td>
+            <td>${lead.address}</td>
             <td>${mapsHtml}</td>
           </tr>
         `;
@@ -884,6 +894,23 @@
       document.getElementById('searchSection').style.display = 'none';
       document.getElementById('leadsKeyInput').value = '';
     }
+
+    // Auto-auth from localStorage
+    (async function() {
+      if (currentApiKey) return;
+      const savedKey = localStorage.getItem('soldi_api_key');
+      if (savedKey) {
+        try {
+          const res = await fetch('/api/validate-key?key=' + encodeURIComponent(savedKey));
+          const data = await res.json();
+          if (res.ok && data.success) {
+            sessionStorage.setItem('soldi_leads_key', savedKey);
+            currentApiKey = savedKey;
+            accessLeadsScreen(savedKey);
+          }
+        } catch (e) {}
+      }
+    })();
   </script>
 
 </body>

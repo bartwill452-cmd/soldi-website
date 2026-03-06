@@ -49,7 +49,7 @@
     .igen-gate-input input {
       flex: 1;
       padding: 14px 16px;
-      background: rgba(255,255,255,0.04);
+      background: rgba(255,255,255,0.05);
       border: 1px solid rgba(255,255,255,0.1);
       border-radius: 10px;
       color: #fff;
@@ -84,7 +84,7 @@
       font-size: 13px;
       color: #52525b;
     }
-    .igen-gate-footer a { color: #a855f7; text-decoration: none; }
+    .igen-gate-footer a { color: #22c55e; text-decoration: none; }
     .igen-gate-footer a:hover { text-decoration: underline; }
 
     /* Dashboard */
@@ -164,7 +164,7 @@
       width: 100%;
       min-height: 120px;
       padding: 14px 16px;
-      background: rgba(255,255,255,0.04);
+      background: rgba(255,255,255,0.05);
       border: 1px solid rgba(255,255,255,0.1);
       border-radius: 10px;
       color: #fff;
@@ -233,9 +233,9 @@
     }
     .igen-select {
       padding: 10px 12px;
-      background: rgba(255,255,255,0.04);
+      background: rgba(255,255,255,0.05);
       border: 1px solid rgba(255,255,255,0.1);
-      border-radius: 8px;
+      border-radius: 10px;
       color: #fff;
       font-size: 13px;
       font-family: 'Inter', sans-serif;
@@ -508,25 +508,32 @@
   </style>
 </head>
 <body>
-  <!-- Nav -->
-  <nav>
-    <div class="nav-container">
-      <a href="/" class="nav-logo">
-        <svg class="nav-logo-icon" width="28" height="28" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <circle cx="50" cy="50" r="48" stroke="#22c55e" stroke-width="4"/>
-          <text x="50" y="62" text-anchor="middle" fill="#22c55e" font-size="42" font-weight="800" font-family="Arial">S</text>
-        </svg>
-        <span class="nav-logo-text">Soldi</span>
-      </a>
-      <div class="nav-links">
-        <a href="/#features">Features</a>
-        <a href="/#pricing">Pricing</a>
-        <a href="/odds.html">Odds Screen</a>
-        <a href="/business-finder.html">Business Finder</a>
-        <a href="/image-generator.html" style="color: #a855f7;">Image Generator</a>
+  <nav class="nav">
+    <div class="nav-inner">
+      <div class="logo">
+        <div class="logo-icon">S</div>
+        <span class="logo-text">Soldi</span>
       </div>
+      <div class="nav-links">
+        <a href="/">Home</a>
+        <a href="/#features">Features</a>
+        <a href="/#tools">Tools</a>
+        <a href="/image-generator.html" style="color: #a855f7;">Image Generator</a>
+        <a href="/#apply" class="nav-cta">Apply Now</a>
+      </div>
+      <button class="mobile-menu" id="igenMobileMenu">
+        <span></span><span></span><span></span>
+      </button>
     </div>
   </nav>
+
+  <div class="mobile-nav" id="igenMobileNav">
+    <a href="/">Home</a>
+    <a href="/#features">Features</a>
+    <a href="/#tools">Tools</a>
+    <a href="/image-generator.html" style="color: #a855f7;">Image Generator</a>
+    <a href="/#apply" class="nav-cta" style="text-align:center;">Apply Now</a>
+  </div>
 
   <section class="igen-page">
     <div class="container">
@@ -542,12 +549,12 @@
         <h2>AI Image Generator</h2>
         <p>Generate stunning AI images from text prompts. Powered by Pollinations.ai &mdash; completely free, no limits.</p>
         <div class="igen-gate-input">
-          <input type="text" id="igenKeyInput" placeholder="Enter your Soldi API key" autocomplete="off" spellcheck="false">
-          <button class="btn-igen" onclick="validateIgenKey()">Access</button>
+          <input type="text" id="igenKeyInput" placeholder="soldi_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" autocomplete="off" spellcheck="false">
+          <button class="btn-igen" onclick="validateIgenKey()" style="background: linear-gradient(135deg, #22c55e, #16a34a);">Access</button>
         </div>
         <div id="igenGateError" class="igen-gate-error"></div>
         <div class="igen-gate-footer">
-          Don't have a key? <a href="/">Get access on the dashboard</a>
+          Not a member? <a href="https://whop.com/checkout/plan_Q93fIRTfIo5g7/" target="_blank">Join Soldi</a> to get your API key.
         </div>
       </div>
 
@@ -638,7 +645,7 @@
 
             <div class="igen-image-wrap" id="igenImageWrap">
               <div class="igen-image-container">
-                <img id="igenImage" alt="Generated image" crossorigin="anonymous">
+                <img id="igenImage" alt="Generated image">
               </div>
               <div class="igen-image-actions">
                 <button class="igen-action-btn primary" onclick="downloadImage()">
@@ -675,11 +682,26 @@
     </div>
   </section>
 
-  <footer style="text-align:center;padding:40px 20px;border-top:1px solid rgba(255,255,255,0.06);">
-    <p style="font-size:13px;color:#52525b;">&copy; 2025 Soldi. All rights reserved.</p>
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-bottom" style="padding-top: 24px;">
+        <p>&copy; 2026 Soldi. All rights reserved.</p>
+      </div>
+    </div>
   </footer>
 
   <script>
+    // Mobile menu
+    document.getElementById('igenMobileMenu').addEventListener('click', function() {
+      this.classList.toggle('active');
+      document.getElementById('igenMobileNav').classList.toggle('active');
+    });
+
+    // Nav scroll
+    window.addEventListener('scroll', () => {
+      document.querySelector('.nav').classList.toggle('scrolled', window.scrollY > 50);
+    });
+
     let currentApiKey = '';
     let stylePresets = [];
     let selectedStyle = 'none';
@@ -742,13 +764,13 @@
       try {
         const res = await fetch(`/api/validate-key?key=${encodeURIComponent(key)}`);
         const data = await res.json();
-        if (data.valid) {
+        if (data.success) {
           currentApiKey = key;
           sessionStorage.setItem('soldi_imagegen_key', key);
           errorEl.style.display = 'none';
           accessIgenScreen();
         } else {
-          errorEl.textContent = 'Invalid API key. Check your key and try again.';
+          errorEl.textContent = data.error || 'Invalid API key. Check your key and try again.';
           errorEl.style.display = 'block';
         }
       } catch (err) {
@@ -797,7 +819,7 @@
       renderStylePresets();
     }
 
-    function generateImage() {
+    async function generateImage() {
       const prompt = document.getElementById('igenPrompt').value.trim();
       if (!prompt) {
         document.getElementById('igenPrompt').focus();
@@ -816,8 +838,17 @@
       // Random seed for variety
       const seed = Math.floor(Math.random() * 999999);
 
-      // Build Pollinations URL
+      // Show loading
+      document.getElementById('igenPlaceholder').style.display = 'none';
+      document.getElementById('igenImageWrap').classList.remove('active');
+      document.getElementById('igenError').classList.remove('active');
+      document.getElementById('igenLoading').classList.add('active');
+      document.getElementById('igenGenerateBtn').disabled = true;
+
+      // Build server proxy URL
       const params = new URLSearchParams({
+        key: currentApiKey,
+        prompt: fullPrompt,
         width: size.width,
         height: size.height,
         model: model,
@@ -826,33 +857,46 @@
       });
       if (enhance) params.set('enhance', 'true');
 
-      const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(fullPrompt)}?${params.toString()}`;
+      const proxyUrl = `/api/image-gen/generate?${params.toString()}`;
 
-      // Show loading
-      document.getElementById('igenPlaceholder').style.display = 'none';
-      document.getElementById('igenImageWrap').classList.remove('active');
-      document.getElementById('igenError').classList.remove('active');
-      document.getElementById('igenLoading').classList.add('active');
-      document.getElementById('igenGenerateBtn').disabled = true;
+      try {
+        const response = await fetch(proxyUrl);
 
-      // Load image
-      const img = document.getElementById('igenImage');
-      img.onload = function() {
-        document.getElementById('igenLoading').classList.remove('active');
-        document.getElementById('igenImageWrap').classList.add('active');
-        document.getElementById('igenGenerateBtn').disabled = false;
-        currentImageUrl = imageUrl;
+        if (!response.ok) {
+          let errorMsg = 'Failed to generate image. The service may be busy — please try again.';
+          try {
+            const errData = await response.json();
+            if (errData.error) errorMsg = errData.error;
+          } catch (e) {}
+          throw new Error(errorMsg);
+        }
 
-        // Add to history
-        addToHistory(imageUrl, prompt);
-      };
-      img.onerror = function() {
+        const blob = await response.blob();
+        const blobUrl = URL.createObjectURL(blob);
+
+        const img = document.getElementById('igenImage');
+        img.onload = function() {
+          document.getElementById('igenLoading').classList.remove('active');
+          document.getElementById('igenImageWrap').classList.add('active');
+          document.getElementById('igenGenerateBtn').disabled = false;
+          currentImageUrl = blobUrl;
+
+          // Add to history
+          addToHistory(blobUrl, prompt);
+        };
+        img.onerror = function() {
+          document.getElementById('igenLoading').classList.remove('active');
+          document.getElementById('igenError').classList.add('active');
+          document.getElementById('igenErrorMsg').textContent = 'Failed to display generated image. Please try again.';
+          document.getElementById('igenGenerateBtn').disabled = false;
+        };
+        img.src = blobUrl;
+      } catch (err) {
         document.getElementById('igenLoading').classList.remove('active');
         document.getElementById('igenError').classList.add('active');
-        document.getElementById('igenErrorMsg').textContent = 'Failed to generate image. The service may be busy — please try again.';
+        document.getElementById('igenErrorMsg').textContent = err.message || 'Failed to generate image. Please try again.';
         document.getElementById('igenGenerateBtn').disabled = false;
-      };
-      img.src = imageUrl;
+      }
     }
 
     function regenerateImage() {
@@ -861,22 +905,12 @@
 
     function downloadImage() {
       if (!currentImageUrl) return;
-      const img = document.getElementById('igenImage');
-      const canvas = document.createElement('canvas');
-      canvas.width = img.naturalWidth;
-      canvas.height = img.naturalHeight;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0);
-      canvas.toBlob(function(blob) {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'soldi-image-' + Date.now() + '.png';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      }, 'image/png');
+      const a = document.createElement('a');
+      a.href = currentImageUrl;
+      a.download = 'soldi-image-' + Date.now() + '.png';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
     }
 
     function openInNewTab() {
@@ -938,6 +972,23 @@
         validateIgenKey();
       }
     });
+
+    // Auto-auth from localStorage
+    (async function() {
+      if (currentApiKey) return;
+      const savedKey = localStorage.getItem('soldi_api_key');
+      if (savedKey) {
+        try {
+          const res = await fetch('/api/validate-key?key=' + encodeURIComponent(savedKey));
+          const data = await res.json();
+          if (data.success) {
+            currentApiKey = savedKey;
+            sessionStorage.setItem('soldi_imagegen_key', savedKey);
+            accessIgenScreen();
+          }
+        } catch (e) {}
+      }
+    })();
   </script>
 </body>
 </html>

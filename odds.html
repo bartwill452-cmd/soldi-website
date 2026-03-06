@@ -49,7 +49,7 @@
     .odds-gate-input input {
       flex: 1;
       padding: 14px 16px;
-      background: rgba(255,255,255,0.04);
+      background: rgba(255,255,255,0.05);
       border: 1px solid rgba(255,255,255,0.1);
       border-radius: 10px;
       color: #fff;
@@ -275,7 +275,7 @@
         <form id="oddsGateForm" onsubmit="validateOddsKey(event)">
           <div class="odds-gate-input">
             <input type="text" id="oddsKeyInput" placeholder="soldi_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" autocomplete="off" spellcheck="false">
-            <button type="submit" class="btn btn-primary" id="oddsGateBtn">
+            <button type="submit" class="btn btn-primary" id="oddsGateBtn" style="background: linear-gradient(135deg, #22c55e, #16a34a);">
               <span class="odds-gate-btn-text">Access</span>
               <span class="login-btn-loading" style="display:none;">
                 <svg class="spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
@@ -523,6 +523,23 @@
       document.getElementById('oddsTableWrapper').style.display = 'none';
       document.getElementById('oddsKeyInput').value = '';
     }
+
+    // Auto-auth from localStorage
+    (async function() {
+      if (currentApiKey) return;
+      const savedKey = localStorage.getItem('soldi_api_key');
+      if (savedKey) {
+        try {
+          const res = await fetch('/api/validate-key?key=' + encodeURIComponent(savedKey));
+          const data = await res.json();
+          if (res.ok && data.success) {
+            sessionStorage.setItem('soldi_odds_key', savedKey);
+            currentApiKey = savedKey;
+            accessOddsScreen(savedKey);
+          }
+        } catch (e) {}
+      }
+    })();
   </script>
 
 </body>

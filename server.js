@@ -234,8 +234,6 @@ process.on('SIGINT', () => { flushAnalyticsSync(); process.exit(0); });
 // Seed owner account on first run
 async function seedAdminAccount() {
   const admins = loadAdmins();
-  if (admins.length > 0) return; // Already seeded
-
   const email = process.env.ADMIN_SEED_EMAIL;
   const password = process.env.ADMIN_SEED_PASSWORD;
   if (!email || !password) {
@@ -243,15 +241,22 @@ async function seedAdminAccount() {
     return;
   }
 
+  // Check if seed email already exists
+  const seedEmail = email.toLowerCase().trim();
+  const existing = admins.find(a => a.email === seedEmail && a.role === 'owner');
+  if (existing) return; // Already seeded with this email
+
+  // If admins exist but seed email is different, add the new owner
   const hash = await bcrypt.hash(password, 10);
   const owner = {
     id: crypto.randomUUID(),
-    email: email.toLowerCase().trim(),
+    email: seedEmail,
     passwordHash: hash,
     role: 'owner',
     createdAt: new Date().toISOString(),
   };
-  saveAdmins([owner]);
+  admins.push(owner);
+  saveAdmins(admins);
   console.log(`✅ Admin owner account seeded: ${owner.email}`);
 }
 
@@ -398,18 +403,19 @@ app.post('/api/verify-membership', async (req, res) => {
       saveApiKeys(keys);
     }
 
-    // Sign JWT (7 day expiry)
+    // Sign JWT (14 day expiry)
     const token = jwt.sign(
       {
         membershipId: found.id,
         email: found.user?.email || found.email,
+        name: found.user?.name || null,
         status: found.status,
         affiliateLink,
         affiliateUsername,
         createdAt: found.created_at
       },
       JWT_SECRET,
-      { expiresIn: '7d' }
+      { expiresIn: '14d' }
     );
 
     return res.json({
@@ -418,6 +424,7 @@ app.post('/api/verify-membership', async (req, res) => {
       apiKey,
       user: {
         email: found.user?.email || found.email,
+        name: found.user?.name || null,
         status: found.status,
         affiliateLink,
         affiliateUsername,
@@ -668,10 +675,20 @@ function isDirectoryDomain(url) {
 }
 
 function extractPhoneFromText(text) {
+  if (!text) return '';
   const patterns = [
-    /\((\d{3})\)\s*(\d{3})[-.](\d{4})/,
-    /(\d{3})[-.](\d{3})[-.](\d{4})/,
-    /(\d{3})\s+(\d{3})\s+(\d{4})/,
+    // (XXX) XXX-XXXX or (XXX) XXX.XXXX or (XXX) XXX XXXX
+    /\((\d{3})\)\s*(\d{3})[-.\s](\d{4})/,
+    // (XXX) XXXXXXX (no separator)
+    /\((\d{3})\)\s*(\d{3})(\d{4})/,
+    // XXX-XXX-XXXX or XXX.XXX.XXXX or XXX XXX XXXX
+    /(?<!\d)(\d{3})[-.\s](\d{3})[-.\s](\d{4})(?!\d)/,
+    // 1-XXX-XXX-XXXX (strip leading 1)
+    /1[-.\s](\d{3})[-.\s](\d{3})[-.\s](\d{4})(?!\d)/,
+    // +1 XXX XXX XXXX or +1-XXX-XXX-XXXX
+    /\+1[-.\s]?(\d{3})[-.\s](\d{3})[-.\s](\d{4})(?!\d)/,
+    // XXXXXXXXXX (10 consecutive digits)
+    /(?<!\d)(\d{3})(\d{3})(\d{4})(?!\d)/,
   ];
   for (const pattern of patterns) {
     const match = text.match(pattern);
@@ -683,6 +700,46 @@ function extractPhoneFromText(text) {
     }
   }
   return '';
+}
+
+function extractStarRating(text) {
+  if (!text) return { rating: null, reviewCount: 0 };
+  // Match patterns like "4.5 stars", "4.8/5", "rating: 4.5", "4.5 out of 5", "Rated 4.5"
+  const ratingPatterns = [
+    /(\d+(?:\.\d+)?)\s*(?:\/\s*5|out\s+of\s+5)/i,
+    /(\d+(?:\.\d+)?)\s*stars?/i,
+    /rating[:\s]+(\d+(?:\.\d+)?)/i,
+    /rated\s+(\d+(?:\.\d+)?)/i,
+  ];
+  for (const pattern of ratingPatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      const rating = parseFloat(match[1]);
+      if (rating >= 1 && rating <= 5) {
+        // Try to extract review count nearby
+        let reviewCount = 0;
+        const countPatterns = [
+          /(\d+[,.]?\d*)\s*(?:reviews?|ratings?|votes?)/i,
+          /\((\d+[,.]?\d*)\)/,
+        ];
+        for (const cp of countPatterns) {
+          const cm = text.match(cp);
+          if (cm) {
+            reviewCount = parseInt(cm[1].replace(/[,.]/g, ''), 10) || 0;
+            break;
+          }
+        }
+        return { rating: Math.round(rating * 10) / 10, reviewCount };
+      }
+    }
+  }
+  // Match unicode stars: count filled stars
+  const starMatch = text.match(/([★]{1,5})/);
+  if (starMatch) {
+    const rating = starMatch[1].length;
+    return { rating, reviewCount: 0 };
+  }
+  return { rating: null, reviewCount: 0 };
 }
 
 function extractAddressFromText(text) {
@@ -963,17 +1020,39 @@ async function fetchDDGResults(query) {
   return results;
 }
 
-// Scrape businesses using DuckDuckGo HTML search (US only, free)
+// Scrape businesses using multiple search queries for better coverage
 async function scrapeBusinessListings(niche, location) {
-  const query = `${niche} in ${location} phone address`;
-  const rawResults = await fetchSearchResults(query);
+  // Run multiple varied queries for broader results
+  const queries = [
+    `${niche} in ${location} phone address`,
+    `best ${niche} ${location} contact number`,
+    `${niche} near ${location} reviews phone`,
+  ];
+
+  // Fetch all queries in parallel
+  const allRawResults = await Promise.allSettled(
+    queries.map(q => fetchSearchResults(q))
+  );
+
+  // Merge all results
+  const mergedRaw = [];
+  for (const result of allRawResults) {
+    if (result.status === 'fulfilled' && Array.isArray(result.value)) {
+      mergedRaw.push(...result.value);
+    }
+  }
 
   const businesses = [];
   const seenNames = new Set();
+  const seenDomains = new Set();
 
-  for (const result of rawResults) {
+  for (const result of mergedRaw) {
     const domain = extractDomain(result.url);
     if (!domain) continue;
+
+    // Deduplicate by domain across all query results
+    if (seenDomains.has(domain)) continue;
+    seenDomains.add(domain);
 
     // Skip directory/listing sites
     if (isDirectoryDomain(result.url)) continue;
@@ -994,11 +1073,15 @@ async function scrapeBusinessListings(niche, location) {
     if (seenNames.has(normName)) continue;
     seenNames.add(normName);
 
-    // Extract phone from snippet and title
-    const phone = extractPhoneFromText(result.snippet) || extractPhoneFromText(result.title);
+    // Extract phone from snippet, title, and URL text
+    const combinedText = `${result.snippet || ''} ${result.title || ''} ${result.url || ''}`;
+    const phone = extractPhoneFromText(result.snippet) || extractPhoneFromText(result.title) || extractPhoneFromText(result.url);
 
     // Extract address from snippet
     const address = extractAddressFromText(result.snippet) || location;
+
+    // Extract star rating from snippet
+    const { rating, reviewCount } = extractStarRating(combinedText);
 
     // Build Google Maps URL
     const mapsQuery = encodeURIComponent(`${name} ${location}`);
@@ -1009,8 +1092,8 @@ async function scrapeBusinessListings(niche, location) {
       address,
       phone,
       googleMapsUrl,
-      rating: null,
-      reviewCount: 0,
+      rating,
+      reviewCount,
       hasWebsite: true,
       websiteUrl: result.url,
       status: 'OPERATIONAL'
@@ -1020,17 +1103,39 @@ async function scrapeBusinessListings(niche, location) {
   return businesses;
 }
 
-// Scrape receptionist leads using search engines
+// Scrape receptionist leads using multiple search queries for better coverage
 async function scrapeReceptionistLeads(category, location) {
-  const query = `${category} in ${location} phone`;
-  const rawResults = await fetchSearchResults(query);
+  // Run multiple varied queries for broader results
+  const queries = [
+    `${category} in ${location} phone`,
+    `best ${category} ${location} contact number reviews`,
+    `${category} near ${location} phone address rating`,
+  ];
+
+  // Fetch all queries in parallel
+  const allRawResults = await Promise.allSettled(
+    queries.map(q => fetchSearchResults(q))
+  );
+
+  // Merge all results
+  const mergedRaw = [];
+  for (const result of allRawResults) {
+    if (result.status === 'fulfilled' && Array.isArray(result.value)) {
+      mergedRaw.push(...result.value);
+    }
+  }
 
   const leads = [];
   const seenNames = new Set();
+  const seenDomains = new Set();
 
-  for (const result of rawResults) {
+  for (const result of mergedRaw) {
     const domain = extractDomain(result.url);
     if (!domain) continue;
+
+    // Deduplicate by domain across all query results
+    if (seenDomains.has(domain)) continue;
+    seenDomains.add(domain);
 
     // Skip directory/listing sites
     if (isDirectoryDomain(result.url)) continue;
@@ -1048,8 +1153,14 @@ async function scrapeReceptionistLeads(category, location) {
     if (seenNames.has(normName)) continue;
     seenNames.add(normName);
 
-    const phone = extractPhoneFromText(result.snippet) || extractPhoneFromText(result.title);
+    // Extract phone from snippet, title, and URL text
+    const phone = extractPhoneFromText(result.snippet) || extractPhoneFromText(result.title) || extractPhoneFromText(result.url);
     const address = extractAddressFromText(result.snippet) || location;
+
+    // Extract star rating from snippet
+    const combinedText = `${result.snippet || ''} ${result.title || ''}`;
+    const { rating, reviewCount } = extractStarRating(combinedText);
+
     const mapsQuery = encodeURIComponent(`${name} ${location}`);
     const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${mapsQuery}`;
 
@@ -1058,8 +1169,8 @@ async function scrapeReceptionistLeads(category, location) {
       address,
       phone,
       googleMapsUrl,
-      rating: null,
-      reviewCount: 0,
+      rating,
+      reviewCount,
       hasWebsite: true,
       websiteUrl: result.url,
       category,
@@ -1172,11 +1283,27 @@ app.get('/api/business-finder/categories', (req, res) => {
 // GET /api/business-finder/search
 // ============================================
 app.get('/api/business-finder/search', async (req, res) => {
-  const { key, niche, location } = req.query;
+  const { key, niche, city, state } = req.query;
+  // Support legacy 'location' param or new city/state params
+  let location = req.query.location || '';
 
   if (!key) return res.status(400).json({ error: 'API key is required' });
   if (!niche) return res.status(400).json({ error: 'Niche/category is required' });
-  if (!location) return res.status(400).json({ error: 'Location is required' });
+
+  // Build location from city + state if not provided as single string
+  if (!location && (city || state)) {
+    if (city && state) {
+      location = `${city}, ${state}`;
+    } else if (state) {
+      location = state; // State-only search
+    } else if (city) {
+      location = city;
+    }
+  }
+
+  if (!location) {
+    return res.status(400).json({ error: 'Location is required. Provide a city, state, or both.' });
+  }
 
   // Validate API key
   const keys = loadApiKeys();
@@ -1434,6 +1561,68 @@ app.get('/api/image-gen/models', (req, res) => {
     sizes: IMAGE_SIZES,
     apiBase: 'https://image.pollinations.ai/prompt',
   });
+});
+
+// ============================================
+// AI IMAGE GENERATOR - Server-side Proxy
+// ============================================
+app.get('/api/image-gen/generate', async (req, res) => {
+  const { key, prompt, model, width, height, style, seed, enhance, nologo } = req.query;
+
+  // Validate API key
+  if (!key) return res.status(400).json({ error: 'API key required' });
+  const keys = loadApiKeys();
+  if (!keys[key] || keys[key].status !== 'active') {
+    return res.status(401).json({ error: 'Invalid or inactive API key' });
+  }
+
+  // Validate prompt
+  if (!prompt || !prompt.trim()) {
+    return res.status(400).json({ error: 'Prompt is required' });
+  }
+
+  // Build Pollinations URL
+  const params = new URLSearchParams();
+  if (width) params.set('width', width);
+  if (height) params.set('height', height);
+  if (model) params.set('model', model);
+  if (seed) params.set('seed', seed);
+  if (enhance === 'true') params.set('enhance', 'true');
+  if (nologo) params.set('nologo', nologo);
+
+  const pollinationsUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?${params.toString()}`;
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 120000); // 2 min timeout
+
+    const response = await fetch(pollinationsUrl, {
+      signal: controller.signal,
+      headers: {
+        'Accept': 'image/*',
+      },
+    });
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      return res.status(502).json({ error: `Image generation service returned status ${response.status}` });
+    }
+
+    // Forward content type and pipe the image back
+    const contentType = response.headers.get('content-type') || 'image/jpeg';
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+
+    // Stream the response body to the client
+    const arrayBuffer = await response.arrayBuffer();
+    res.send(Buffer.from(arrayBuffer));
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      return res.status(504).json({ error: 'Image generation timed out. Please try again.' });
+    }
+    console.error('Image gen proxy error:', err.message);
+    return res.status(502).json({ error: 'Failed to generate image. The service may be temporarily unavailable.' });
+  }
 });
 
 // ============================================
@@ -2453,10 +2642,9 @@ async function scrapeTiktokVideos(period) {
 
   // ONE search query per period to minimize rate limiting
   const searchQuery = {
-    hour: 'tiktok shop creator viral product sold revenue "@" video trending now',
-    today: 'tiktok shop top creator viral video today "@" sold revenue product',
-    week: 'tiktok shop best creators this week viral video "@" revenue sales',
-    month: 'tiktok shop top creators this month viral revenue "@" best sellers'
+    '24h': 'tiktok shop top creator viral video today "@" sold revenue product 2026',
+    '7d': 'tiktok shop best creators this week viral video "@" revenue sales top performing',
+    '30d': 'tiktok shop top creators this month viral revenue "@" best sellers affiliate 2026'
   };
 
   const videos = [];
@@ -2464,7 +2652,7 @@ async function scrapeTiktokVideos(period) {
 
   // Try ONE search query — don't spam search engines
   try {
-    const query = searchQuery[p] || searchQuery.today;
+    const query = searchQuery[p] || searchQuery['24h'];
     const results = await fetchSearchResults(query);
 
     for (const r of results) {
@@ -2515,7 +2703,7 @@ async function scrapeTiktokVideos(period) {
   // Shuffle and pick based on period to give variety
   const shuffled = [...TIKTOK_CREATOR_DB];
   // Seed shuffle by period so each period shows different creators
-  const seedOffset = { hour: 0, today: 5, week: 10, month: 15 }[p] || 0;
+  const seedOffset = { '24h': 0, '7d': 7, '30d': 14 }[p] || 0;
   for (let i = shuffled.length - 1; i > 0; i--) {
     const j = (i + seedOffset + Date.now() % 7) % (i + 1);
     [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
@@ -2542,7 +2730,7 @@ async function scrapeTiktokVideos(period) {
 
 // Auto-refresh: scrape all periods every 5 minutes
 async function refreshTiktokCache() {
-  const periods = ['hour', 'today', 'week', 'month'];
+  const periods = ['24h', '7d', '30d'];
   for (const period of periods) {
     try {
       const videos = await scrapeTiktokVideos(period);
@@ -2582,8 +2770,8 @@ app.get('/api/tiktok-shop/trending', async (req, res) => {
     }
 
     // Check cache first
-    const validPeriods = ['hour', 'today', 'week', 'month'];
-    const p = validPeriods.includes(period) ? period : 'today';
+    const validPeriods = ['24h', '7d', '30d'];
+    const p = validPeriods.includes(period) ? period : '24h';
     const cached = getTiktokCache(p);
     if (cached) {
       return res.json({ success: true, videos: cached, fromCache: true, period: p });

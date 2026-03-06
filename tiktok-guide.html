@@ -110,7 +110,7 @@
   <nav class="navbar">
     <div class="container nav-container">
       <a href="/" class="logo">
-        <img src="/images/soldi-logo-transparent.png" alt="Soldi" width="32" height="32">
+        <img src="/images/soldi-logo.svg" alt="Soldi" width="32" height="32">
         <span>Soldi</span>
       </a>
       <a href="/" class="nav-link" style="color: #ec4899;">Dashboard</a>
@@ -167,6 +167,21 @@
 
           <div class="tip-box">
             <strong>Pro tip:</strong> If you don't have 1,000 followers yet, focus on posting 2-3 videos per day in a specific niche. Most creators hit 1K within 2-4 weeks of consistent posting.
+          </div>
+
+          <div class="warning-box" style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 10px; padding: 20px; margin: 24px 0;">
+            <h3 style="color: #ef4444; margin-top: 0; display: flex; align-items: center; gap: 8px;">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              NEVER Buy Followers
+            </h3>
+            <p style="margin-bottom: 8px;">Buying followers is one of the biggest mistakes you can make on TikTok. Here's why it will <strong style="color: #ef4444;">kill your account</strong>:</p>
+            <ul>
+              <li><strong>Destroyed algorithm reach</strong> &mdash; TikTok pushes your content based on engagement rate. Fake followers never engage, so your engagement rate tanks and TikTok stops showing your videos to real people.</li>
+              <li><strong>Shadow ban risk</strong> &mdash; TikTok's systems detect fake followers and will shadow ban or permanently restrict your account.</li>
+              <li><strong>Zero sales</strong> &mdash; Fake followers never buy anything. You'll have 50K followers and $0 in commissions.</li>
+              <li><strong>TikTok Shop rejection</strong> &mdash; TikTok audits affiliate accounts. Fake engagement patterns get you removed from the program entirely.</li>
+            </ul>
+            <p style="margin-bottom: 0;"><strong style="color: #22c55e;">Instead:</strong> Focus on posting 2-3 quality videos per day in one niche. Real followers who actually buy products will come naturally within weeks. Quality content + consistency beats fake numbers every time.</p>
           </div>
 
           <h2>2. Finding Winning Products</h2>
@@ -365,6 +380,23 @@
       document.getElementById('ttgGate').style.display = '';
       document.getElementById('ttgKeyInput').value = '';
     }
+
+    // Auto-auth from localStorage
+    (async function() {
+      if (currentApiKey) return;
+      const savedKey = localStorage.getItem('soldi_api_key');
+      if (savedKey) {
+        try {
+          const res = await fetch('/api/validate-key?key=' + encodeURIComponent(savedKey));
+          const data = await res.json();
+          if (data.success) {
+            currentApiKey = savedKey;
+            sessionStorage.setItem('soldi_tiktok_guide_key', savedKey);
+            enterDashboard();
+          }
+        } catch (e) {}
+      }
+    })();
   </script>
 </body>
 </html>

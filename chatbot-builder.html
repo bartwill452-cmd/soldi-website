@@ -95,12 +95,12 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 24px;
+      margin-bottom: 28px;
       flex-wrap: wrap;
       gap: 16px;
     }
     .cb-header h1 {
-      font-size: 28px;
+      font-size: 32px;
       font-weight: 800;
       color: #fff;
     }
@@ -135,20 +135,22 @@
     /* 3-column layout */
     .cb-layout {
       display: grid;
-      grid-template-columns: 200px 1fr 380px;
-      gap: 20px;
-      min-height: 600px;
+      grid-template-columns: 240px 1fr 400px;
+      gap: 24px;
+      min-height: 650px;
     }
 
     /* Sidebar */
     .cb-sidebar {
-      background: rgba(255,255,255,0.03);
+      background: rgba(255,255,255,0.035);
+      backdrop-filter: blur(12px);
       border: 1px solid rgba(255,255,255,0.06);
-      border-radius: 12px;
+      border-radius: 16px;
       padding: 16px;
       display: flex;
       flex-direction: column;
       gap: 8px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.15);
     }
     .cb-sidebar-title {
       font-size: 11px;
@@ -160,12 +162,12 @@
     }
     .cb-new-btn {
       width: 100%;
-      padding: 10px;
+      padding: 12px;
       background: rgba(6, 182, 212, 0.1);
       border: 1px dashed rgba(6, 182, 212, 0.3);
       border-radius: 8px;
       color: #06b6d4;
-      font-size: 13px;
+      font-size: 14px;
       font-weight: 600;
       cursor: pointer;
       transition: all 0.2s;
@@ -180,16 +182,16 @@
       overflow-y: auto;
     }
     .cb-bot-item {
-      padding: 10px;
-      border-radius: 8px;
+      padding: 12px;
+      border-radius: 10px;
       cursor: pointer;
       transition: all 0.15s;
       position: relative;
     }
     .cb-bot-item:hover { background: rgba(255,255,255,0.04); }
-    .cb-bot-item.active { background: rgba(6, 182, 212, 0.1); border: 1px solid rgba(6, 182, 212, 0.2); }
+    .cb-bot-item.active { background: rgba(6, 182, 212, 0.12); border: 1px solid rgba(6, 182, 212, 0.25); box-shadow: 0 2px 8px rgba(6, 182, 212, 0.1); }
     .cb-bot-item-name {
-      font-size: 13px;
+      font-size: 14px;
       font-weight: 600;
       color: #e4e4e7;
       white-space: nowrap;
@@ -222,38 +224,40 @@
 
     /* Builder Form */
     .cb-builder {
-      background: rgba(255,255,255,0.03);
+      background: rgba(255,255,255,0.035);
+      backdrop-filter: blur(12px);
       border: 1px solid rgba(255,255,255,0.06);
-      border-radius: 12px;
+      border-radius: 16px;
       padding: 24px;
       overflow-y: auto;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.15);
     }
     .cb-form-group {
-      margin-bottom: 20px;
+      margin-bottom: 24px;
     }
     .cb-label {
-      font-size: 12px;
+      font-size: 13px;
       font-weight: 600;
       color: #a1a1aa;
       text-transform: uppercase;
-      letter-spacing: 0.04em;
-      margin-bottom: 6px;
+      letter-spacing: 0.03em;
+      margin-bottom: 8px;
       display: block;
     }
     .cb-input, .cb-textarea, .cb-select {
       width: 100%;
-      padding: 10px 14px;
-      background: rgba(255,255,255,0.04);
-      border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 8px;
+      padding: 12px 16px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 10px;
       color: #fff;
       font-size: 14px;
       font-family: 'Inter', sans-serif;
       outline: none;
-      transition: border-color 0.2s;
+      transition: border-color 0.2s, box-shadow 0.2s;
     }
-    .cb-input:focus, .cb-textarea:focus, .cb-select:focus { border-color: #06b6d4; }
-    .cb-textarea { resize: vertical; min-height: 70px; }
+    .cb-input:focus, .cb-textarea:focus, .cb-select:focus { border-color: #06b6d4; box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.15); }
+    .cb-textarea { resize: vertical; min-height: 80px; }
     .cb-select { cursor: pointer; }
     .cb-select option { background: #18181b; color: #fff; }
 
@@ -372,15 +376,24 @@
       gap: 12px;
       margin-top: 24px;
     }
+    .cb-save-row .btn-cb {
+      width: 100%;
+      padding: 14px 32px;
+    }
+    .cb-save-row .btn-cb:hover {
+      box-shadow: 0 4px 24px rgba(6, 182, 212, 0.35);
+    }
 
     /* Right Panel */
     .cb-right {
       display: flex;
       flex-direction: column;
-      background: rgba(255,255,255,0.03);
+      background: rgba(255,255,255,0.035);
+      backdrop-filter: blur(12px);
       border: 1px solid rgba(255,255,255,0.06);
-      border-radius: 12px;
+      border-radius: 16px;
       overflow: hidden;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.15);
     }
     .cb-tabs {
       display: flex;
@@ -388,9 +401,9 @@
     }
     .cb-tab {
       flex: 1;
-      padding: 12px;
+      padding: 14px;
       text-align: center;
-      font-size: 12px;
+      font-size: 13px;
       font-weight: 600;
       color: #71717a;
       cursor: pointer;
@@ -403,25 +416,25 @@
       font-family: 'Inter', sans-serif;
     }
     .cb-tab:hover { color: #a1a1aa; }
-    .cb-tab.active { color: #06b6d4; border-bottom-color: #06b6d4; }
+    .cb-tab.active { color: #06b6d4; border-bottom-color: #06b6d4; background: rgba(6, 182, 212, 0.05); }
     .cb-tab-content { display: none; flex: 1; overflow-y: auto; }
     .cb-tab-content.active { display: flex; flex-direction: column; }
 
     /* Preview tab */
     .cb-preview-chat {
       flex: 1;
-      padding: 12px;
+      padding: 16px;
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 10px;
       overflow-y: auto;
       min-height: 300px;
     }
     .cb-preview-msg {
       max-width: 85%;
-      padding: 10px 14px;
-      border-radius: 12px;
-      font-size: 13px;
+      padding: 12px 16px;
+      border-radius: 16px;
+      font-size: 14px;
       line-height: 1.5;
       word-wrap: break-word;
     }
@@ -429,20 +442,20 @@
       background: rgba(255,255,255,0.06);
       color: #d4d4d8;
       align-self: flex-start;
-      border-bottom-left-radius: 4px;
+      border-bottom-left-radius: 6px;
     }
     .cb-preview-msg.user {
       background: #06b6d4;
       color: #fff;
       align-self: flex-end;
-      border-bottom-right-radius: 4px;
+      border-bottom-right-radius: 6px;
     }
     .cb-preview-msg.typing {
       background: rgba(255,255,255,0.06);
       color: #71717a;
       font-style: italic;
       align-self: flex-start;
-      border-bottom-left-radius: 4px;
+      border-bottom-left-radius: 6px;
     }
     .cb-preview-input {
       display: flex;
@@ -450,20 +463,20 @@
     }
     .cb-preview-input input {
       flex: 1;
-      padding: 12px 14px;
+      padding: 14px 16px;
       background: transparent;
       border: none;
       color: #fff;
-      font-size: 13px;
+      font-size: 14px;
       outline: none;
       font-family: 'Inter', sans-serif;
     }
     .cb-preview-input button {
-      padding: 0 16px;
+      padding: 0 20px;
       background: #06b6d4;
       border: none;
       color: #fff;
-      font-size: 13px;
+      font-size: 14px;
       font-weight: 600;
       cursor: pointer;
       font-family: 'Inter', sans-serif;
@@ -489,10 +502,10 @@
     .cb-embed-code {
       background: rgba(0,0,0,0.3);
       border: 1px solid rgba(255,255,255,0.06);
-      border-radius: 8px;
-      padding: 14px;
+      border-radius: 10px;
+      padding: 16px;
       font-family: 'Inter', monospace;
-      font-size: 12px;
+      font-size: 13px;
       color: #06b6d4;
       word-break: break-all;
       position: relative;
@@ -567,6 +580,34 @@
     }
     .cb-guide strong { color: #06b6d4; }
 
+    /* Section divider */
+    .cb-section-divider {
+      margin: 28px 0 24px;
+      padding-top: 24px;
+      position: relative;
+    }
+    .cb-section-divider::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, rgba(6, 182, 212, 0.3), rgba(255,255,255,0.06) 50%, transparent);
+    }
+    .cb-section-divider-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #06b6d4;
+      margin-bottom: 4px;
+    }
+    .cb-section-divider-desc {
+      font-size: 12px;
+      color: #71717a;
+      margin-bottom: 16px;
+      line-height: 1.5;
+    }
+
     /* Status message */
     .cb-status {
       padding: 10px 14px;
@@ -593,17 +634,20 @@
     @media (max-width: 1024px) {
       .cb-layout {
         grid-template-columns: 1fr;
-        gap: 16px;
+        gap: 20px;
       }
       .cb-sidebar {
         flex-direction: row;
         flex-wrap: wrap;
         align-items: center;
+        gap: 12px;
       }
-      .cb-sidebar-title { width: 100%; }
+      .cb-sidebar-title { width: 100%; margin-bottom: 0; }
       .cb-new-btn { width: auto; }
-      .cb-bot-list { flex-direction: row; flex-wrap: wrap; }
+      .cb-bot-list { flex-direction: row; flex-wrap: wrap; gap: 8px; }
       .cb-bot-item { min-width: 140px; }
+      .cb-right { min-height: 500px; }
+      .cb-header h1 { font-size: 26px; }
     }
   </style>
 </head>
@@ -612,7 +656,7 @@
   <nav class="navbar">
     <div class="container nav-container">
       <a href="/" class="logo">
-        <img src="/images/soldi-logo-transparent.png" alt="Soldi" width="32" height="32">
+        <img src="/images/soldi-logo.svg" alt="Soldi" width="32" height="32">
         <span>Soldi</span>
       </a>
       <a href="/" class="nav-link" style="color: #06b6d4;">Dashboard</a>
@@ -709,9 +753,9 @@
               <label class="cb-label">Custom Instructions (optional)</label>
               <textarea class="cb-textarea" id="cbInstructions" placeholder="e.g. Never discuss competitor pricing, always suggest booking a call for complex questions..."></textarea>
             </div>
-            <div style="border-top: 1px solid rgba(255,255,255,0.06); margin: 24px 0; padding-top: 20px;">
-              <div style="font-size: 13px; font-weight: 700; color: #06b6d4; margin-bottom: 4px;">Account & Support Info</div>
-              <p style="font-size: 12px; color: #71717a; margin-bottom: 16px;">Help your chatbot answer account-related questions like password resets, support contacts, and policies.</p>
+            <div class="cb-section-divider">
+              <div class="cb-section-divider-title">Account & Support Info</div>
+              <p class="cb-section-divider-desc">Help your chatbot answer account-related questions like password resets, support contacts, and policies.</p>
             </div>
             <div class="cb-form-group">
               <label class="cb-label">Login / Signup URL</label>
@@ -749,10 +793,10 @@
           <!-- Right Panel -->
           <div class="cb-right">
             <div class="cb-tabs">
-              <button class="cb-tab active" onclick="switchTab('preview')">Preview</button>
-              <button class="cb-tab" onclick="switchTab('embed')">Embed</button>
-              <button class="cb-tab" onclick="switchTab('guide')">Sales Guide</button>
-              <button class="cb-tab" onclick="switchTab('install')">Install</button>
+              <button class="cb-tab active" onclick="switchTab('preview', this)">Preview</button>
+              <button class="cb-tab" onclick="switchTab('embed', this)">Embed</button>
+              <button class="cb-tab" onclick="switchTab('guide', this)">Sales Guide</button>
+              <button class="cb-tab" onclick="switchTab('install', this)">Install</button>
             </div>
 
             <!-- Preview Tab -->
@@ -1223,11 +1267,11 @@
     }
 
     // ---- Tabs ----
-    function switchTab(tab) {
+    function switchTab(tab, btn) {
       document.querySelectorAll('.cb-tab').forEach(t => t.classList.remove('active'));
       document.querySelectorAll('.cb-tab-content').forEach(t => t.classList.remove('active'));
       document.getElementById('tab' + tab.charAt(0).toUpperCase() + tab.slice(1)).classList.add('active');
-      event.target.classList.add('active');
+      if (btn) btn.classList.add('active');
     }
 
     // ---- Preview ----
@@ -1348,6 +1392,23 @@
       d.textContent = str || '';
       return d.innerHTML;
     }
+
+    // Auto-auth from localStorage
+    (async function() {
+      if (currentApiKey) return;
+      const savedKey = localStorage.getItem('soldi_api_key');
+      if (savedKey) {
+        try {
+          const res = await fetch('/api/validate-key?key=' + encodeURIComponent(savedKey));
+          const data = await res.json();
+          if (data.success) {
+            currentApiKey = savedKey;
+            sessionStorage.setItem('soldi_chatbot_key', savedKey);
+            enterDashboard();
+          }
+        } catch (e) {}
+      }
+    })();
   </script>
 </body>
 </html>

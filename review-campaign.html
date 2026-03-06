@@ -49,7 +49,7 @@
     .rc-gate-input input {
       flex: 1;
       padding: 14px 16px;
-      background: rgba(255,255,255,0.04);
+      background: rgba(255,255,255,0.05);
       border: 1px solid rgba(255,255,255,0.1);
       border-radius: 10px;
       color: #fff;
@@ -74,7 +74,7 @@
     .btn-rc:hover { transform: translateY(-1px); box-shadow: 0 4px 20px rgba(244, 63, 94, 0.3); }
     .rc-gate-error { color: #ef4444; font-size: 13px; margin-top: 8px; display: none; }
     .rc-gate-footer { margin-top: 24px; font-size: 13px; color: #52525b; }
-    .rc-gate-footer a { color: #f43f5e; text-decoration: none; }
+    .rc-gate-footer a { color: #22c55e; text-decoration: none; }
     .rc-gate-footer a:hover { text-decoration: underline; }
 
     /* Dashboard */
@@ -169,8 +169,8 @@
     }
     .rc-input {
       width: 100%;
-      padding: 12px 14px;
-      background: rgba(255,255,255,0.04);
+      padding: 12px 16px;
+      background: rgba(255,255,255,0.05);
       border: 1px solid rgba(255,255,255,0.1);
       border-radius: 10px;
       color: #fff;
@@ -316,9 +316,9 @@
     }
     .rc-select {
       padding: 10px 12px;
-      background: rgba(255,255,255,0.04);
+      background: rgba(255,255,255,0.05);
       border: 1px solid rgba(255,255,255,0.1);
-      border-radius: 8px;
+      border-radius: 10px;
       color: #fff;
       font-size: 13px;
       font-family: 'Inter', sans-serif;
@@ -488,24 +488,32 @@
   </style>
 </head>
 <body>
-  <nav>
-    <div class="nav-container">
-      <a href="/" class="nav-logo">
-        <svg class="nav-logo-icon" width="28" height="28" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <circle cx="50" cy="50" r="48" stroke="#22c55e" stroke-width="4"/>
-          <text x="50" y="62" text-anchor="middle" fill="#22c55e" font-size="42" font-weight="800" font-family="Arial">S</text>
-        </svg>
-        <span class="nav-logo-text">Soldi</span>
-      </a>
-      <div class="nav-links">
-        <a href="/#features">Features</a>
-        <a href="/#pricing">Pricing</a>
-        <a href="/odds.html">Odds Screen</a>
-        <a href="/business-finder.html">Business Finder</a>
-        <a href="/review-campaign.html" style="color: #f43f5e;">Review Campaign</a>
+  <nav class="nav">
+    <div class="nav-inner">
+      <div class="logo">
+        <div class="logo-icon">S</div>
+        <span class="logo-text">Soldi</span>
       </div>
+      <div class="nav-links">
+        <a href="/">Home</a>
+        <a href="/#features">Features</a>
+        <a href="/#tools">Tools</a>
+        <a href="/review-campaign.html" style="color: #f43f5e;">Review Campaign</a>
+        <a href="/#apply" class="nav-cta">Apply Now</a>
+      </div>
+      <button class="mobile-menu" id="rcMobileMenu">
+        <span></span><span></span><span></span>
+      </button>
     </div>
   </nav>
+
+  <div class="mobile-nav" id="rcMobileNav">
+    <a href="/">Home</a>
+    <a href="/#features">Features</a>
+    <a href="/#tools">Tools</a>
+    <a href="/review-campaign.html" style="color: #f43f5e;">Review Campaign</a>
+    <a href="/#apply" class="nav-cta" style="text-align:center;">Apply Now</a>
+  </div>
 
   <section class="rc-page">
     <div class="container">
@@ -519,12 +527,12 @@
         <h2>Google Review Campaign</h2>
         <p>Build scheduled review request campaigns to grow your Google reviews naturally over time. Add real customers and space out requests so reviews don't look suspicious.</p>
         <div class="rc-gate-input">
-          <input type="text" id="rcKeyInput" placeholder="Enter your Soldi API key" autocomplete="off" spellcheck="false">
-          <button class="btn-rc" onclick="validateRcKey()">Access</button>
+          <input type="text" id="rcKeyInput" placeholder="soldi_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" autocomplete="off" spellcheck="false">
+          <button class="btn-rc" onclick="validateRcKey()" style="background: linear-gradient(135deg, #22c55e, #16a34a);">Access</button>
         </div>
         <div id="rcGateError" class="rc-gate-error"></div>
         <div class="rc-gate-footer">
-          Don't have a key? <a href="/">Get access on the dashboard</a>
+          Not a member? <a href="https://whop.com/checkout/plan_Q93fIRTfIo5g7/" target="_blank">Join Soldi</a> to get your API key.
         </div>
       </div>
 
@@ -540,9 +548,9 @@
 
         <!-- Tabs -->
         <div class="rc-tabs">
-          <button class="rc-tab active" onclick="switchTab('setup')">Review Link</button>
-          <button class="rc-tab" onclick="switchTab('campaign')">Campaign Builder</button>
-          <button class="rc-tab" onclick="switchTab('templates')">Email Templates</button>
+          <button class="rc-tab active" onclick="switchTab('setup', this)">Review Link</button>
+          <button class="rc-tab" onclick="switchTab('campaign', this)">Campaign Builder</button>
+          <button class="rc-tab" onclick="switchTab('templates', this)">Email Templates</button>
         </div>
 
         <!-- Tab 1: Review Link Setup -->
@@ -685,11 +693,26 @@
     </div>
   </section>
 
-  <footer style="text-align:center;padding:40px 20px;border-top:1px solid rgba(255,255,255,0.06);">
-    <p style="font-size:13px;color:#52525b;">&copy; 2025 Soldi. All rights reserved.</p>
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-bottom" style="padding-top: 24px;">
+        <p>&copy; 2026 Soldi. All rights reserved.</p>
+      </div>
+    </div>
   </footer>
 
   <script>
+    // Mobile menu
+    document.getElementById('rcMobileMenu').addEventListener('click', function() {
+      this.classList.toggle('active');
+      document.getElementById('rcMobileNav').classList.toggle('active');
+    });
+
+    // Nav scroll
+    window.addEventListener('scroll', () => {
+      document.querySelector('.nav').classList.toggle('scrolled', window.scrollY > 50);
+    });
+
     let currentApiKey = '';
     let campaign = {
       businessName: '',
@@ -736,13 +759,13 @@
       try {
         const res = await fetch(`/api/validate-key?key=${encodeURIComponent(key)}`);
         const data = await res.json();
-        if (data.valid) {
+        if (data.success) {
           currentApiKey = key;
           sessionStorage.setItem('soldi_reviews_key', key);
           errorEl.style.display = 'none';
           accessRcScreen();
         } else {
-          errorEl.textContent = 'Invalid API key.';
+          errorEl.textContent = data.error || 'Invalid API key.';
           errorEl.style.display = 'block';
         }
       } catch (err) {
@@ -781,11 +804,25 @@
       updateStats();
     }
 
-    function switchTab(tab) {
+    function switchTab(tab, clickedBtn) {
       document.querySelectorAll('.rc-tab').forEach(t => t.classList.remove('active'));
       document.querySelectorAll('.rc-panel').forEach(p => p.classList.remove('active'));
-      event.target.classList.add('active');
-      document.getElementById('panel' + tab.charAt(0).toUpperCase() + tab.slice(1)).classList.add('active');
+
+      // Highlight the correct tab button
+      if (clickedBtn) {
+        clickedBtn.classList.add('active');
+      } else {
+        // Find the tab button by matching tab name
+        const tabMap = { setup: 0, campaign: 1, templates: 2 };
+        const idx = tabMap[tab];
+        if (idx !== undefined) {
+          const tabs = document.querySelectorAll('.rc-tab');
+          if (tabs[idx]) tabs[idx].classList.add('active');
+        }
+      }
+
+      const panelId = 'panel' + tab.charAt(0).toUpperCase() + tab.slice(1);
+      document.getElementById(panelId).classList.add('active');
     }
 
     // ---- Tab 1: Review Link ----
@@ -846,7 +883,6 @@
         campaign.reviewLink = link;
         saveCampaign();
         switchTab('campaign');
-        document.querySelectorAll('.rc-tab')[1].click();
       }
     }
 
@@ -986,7 +1022,7 @@
                     <small>${c.email || c.phone || 'No contact info'}</small>
                   </div>
                   <div class="rc-schedule-actions">
-                    ${c.email ? `<button class="rc-schedule-action" onclick="copyEmailForCustomer('${c.id}')">Copy Email</button>` : ''}
+                    ${c.email ? `<button class="rc-schedule-action" onclick="copyEmailForCustomer('${c.id}', this)">Copy Email</button>` : ''}
                     <button class="rc-schedule-action ${c.sent ? 'done' : ''}" onclick="toggleSent('${c.id}')">
                       ${c.sent ? 'Sent' : 'Mark Sent'}
                     </button>
@@ -1010,7 +1046,7 @@
       }
     }
 
-    function copyEmailForCustomer(id) {
+    function copyEmailForCustomer(id, btn) {
       const customer = campaign.customers.find(c => c.id === id);
       if (!customer || emailTemplates.length === 0) return;
 
@@ -1021,10 +1057,10 @@
         .replace(/\{review_link\}/g, campaign.reviewLink || '[Your Review Link]');
 
       navigator.clipboard.writeText(body).then(() => {
-        // Find the button and show feedback
-        const btn = event.target;
-        btn.textContent = 'Copied!';
-        setTimeout(() => btn.textContent = 'Copy Email', 2000);
+        if (btn) {
+          btn.textContent = 'Copied!';
+          setTimeout(() => btn.textContent = 'Copy Email', 2000);
+        }
       });
     }
 
@@ -1061,7 +1097,7 @@
             </div>
             <div class="rc-template-subject">Subject: ${escapeHtml(previewSubject)}</div>
             <div class="rc-template-body">${escapeHtml(previewBody)}</div>
-            <button class="rc-template-copy" onclick="copyTemplate('email', '${t.id}')">Copy Template</button>
+            <button class="rc-template-copy" onclick="copyTemplate('email', '${t.id}', this)">Copy Template</button>
           </div>
         `;
       });
@@ -1081,7 +1117,7 @@
               <span class="rc-template-type sms">SMS</span>
             </div>
             <div class="rc-template-body">${escapeHtml(previewBody)}</div>
-            <button class="rc-template-copy" onclick="copyTemplate('sms', '${t.id}')">Copy Template</button>
+            <button class="rc-template-copy" onclick="copyTemplate('sms', '${t.id}', this)">Copy Template</button>
           </div>
         `;
       });
@@ -1089,7 +1125,7 @@
       container.innerHTML = html;
     }
 
-    function copyTemplate(type, id) {
+    function copyTemplate(type, id, btn) {
       const templates = type === 'email' ? emailTemplates : smsTemplates;
       const template = templates.find(t => t.id === id);
       if (!template) return;
@@ -1107,9 +1143,10 @@
       }
 
       navigator.clipboard.writeText(text).then(() => {
-        const btn = event.target;
-        btn.textContent = 'Copied!';
-        setTimeout(() => btn.textContent = 'Copy Template', 2000);
+        if (btn) {
+          btn.textContent = 'Copied!';
+          setTimeout(() => btn.textContent = 'Copy Template', 2000);
+        }
       });
     }
 
@@ -1132,6 +1169,23 @@
         validateRcKey();
       }
     });
+
+    // Auto-auth from localStorage
+    (async function() {
+      if (currentApiKey) return;
+      const savedKey = localStorage.getItem('soldi_api_key');
+      if (savedKey) {
+        try {
+          const res = await fetch('/api/validate-key?key=' + encodeURIComponent(savedKey));
+          const data = await res.json();
+          if (data.valid) {
+            currentApiKey = savedKey;
+            sessionStorage.setItem('soldi_reviews_key', savedKey);
+            accessRcScreen();
+          }
+        } catch (e) {}
+      }
+    })();
   </script>
 </body>
 </html>

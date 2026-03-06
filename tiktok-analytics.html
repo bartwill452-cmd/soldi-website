@@ -4,46 +4,56 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>TikTok Shop Analytics | Soldi</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="/soldi-analytics.js"></script>
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Inter', -apple-system, sans-serif; background: #050507; color: #e4e4e7; line-height: 1.6; min-height: 100vh; }
     a { color: inherit; text-decoration: none; }
 
     /* Gate */
-    .tt-gate { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 24px; }
-    .tt-gate-box { background: rgba(255,255,255,0.03); border: 1px solid rgba(244,63,94,0.2); border-radius: 16px; padding: 40px; max-width: 420px; width: 100%; text-align: center; }
-    .tt-gate-box h1 { font-size: 22px; font-weight: 700; margin-bottom: 6px; color: #f43f5e; }
-    .tt-gate-box p { font-size: 13px; color: #a1a1aa; margin-bottom: 20px; }
-    .tt-gate-input { width: 100%; padding: 10px 14px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e7; font-size: 14px; outline: none; margin-bottom: 12px; }
+    .tt-gate { display: flex; align-items: center; justify-content: center; min-height: calc(100vh - 80px); padding: 24px; padding-top: 100px; }
+    .tt-gate-box { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 16px; padding: 40px; max-width: 480px; width: 100%; text-align: center; }
+    .tt-gate-icon { width: 64px; height: 64px; background: rgba(244, 63, 94, 0.12); border-radius: 16px; display: flex; align-items: center; justify-content: center; margin: 0 auto 24px; color: #f43f5e; }
+    .tt-gate-box h1 { font-size: 28px; font-weight: 800; margin-bottom: 8px; color: #fff; }
+    .tt-gate-box p { font-size: 14px; color: #71717a; line-height: 1.6; margin-bottom: 28px; }
+    .tt-gate-input { width: 100%; padding: 14px 16px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; color: #e4e4e7; font-size: 14px; font-family: 'Inter', monospace; outline: none; margin-bottom: 12px; transition: border-color 0.2s; }
     .tt-gate-input:focus { border-color: #f43f5e; }
-    .tt-gate-btn { width: 100%; padding: 10px; background: linear-gradient(135deg, #f43f5e, #ec4899); border: none; border-radius: 8px; color: #fff; font-weight: 600; font-size: 14px; cursor: pointer; }
-    .tt-gate-btn:hover { opacity: 0.9; }
-    .tt-gate-err { color: #ef4444; font-size: 12px; margin-top: 8px; display: none; }
+    .tt-gate-input::placeholder { color: #52525b; }
+    .tt-gate-btn { width: 100%; padding: 14px 28px; background: linear-gradient(135deg, #f43f5e, #e11d48); border: none; border-radius: 10px; color: #fff; font-weight: 600; font-size: 14px; cursor: pointer; transition: all 0.2s; font-family: 'Inter', sans-serif; }
+    .tt-gate-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 20px rgba(244, 63, 94, 0.3); }
+    .tt-gate-err { color: #ef4444; font-size: 13px; margin-top: 8px; display: none; }
+    .tt-gate-footer { margin-top: 24px; font-size: 13px; color: #52525b; }
+    .tt-gate-footer a { color: #22c55e; text-decoration: none; }
+    .tt-gate-footer a:hover { text-decoration: underline; }
 
     /* App */
-    .tt-app { display: none; max-width: 1300px; margin: 0 auto; padding: 24px; }
-    .tt-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
-    .tt-header h1 { font-size: 22px; font-weight: 700; color: #f43f5e; }
+    .tt-app { display: none; max-width: 1200px; margin: 0 auto; padding: 120px 24px 80px; }
+    .tt-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 32px; flex-wrap: wrap; gap: 16px; }
+    .tt-header h1 { font-size: clamp(24px, 3.5vw, 36px); font-weight: 800; color: #fff; letter-spacing: -0.5px; }
+    .tt-header h1 span { color: #f43f5e; }
     .tt-back { font-size: 13px; color: #a1a1aa; transition: color 0.2s; }
     .tt-back:hover { color: #f43f5e; }
 
     /* Controls */
     .tt-controls { display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; align-items: center; }
-    .tt-tabs { display: flex; gap: 4px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 4px; }
-    .tt-tab { padding: 8px 16px; border: none; background: transparent; color: #a1a1aa; font-size: 13px; font-weight: 500; border-radius: 7px; cursor: pointer; transition: all 0.2s; }
-    .tt-tab.active { background: rgba(244,63,94,0.15); color: #f43f5e; }
-    .tt-tab:hover:not(.active) { color: #e4e4e7; }
-    .tt-sort { padding: 8px 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e7; font-size: 13px; outline: none; cursor: pointer; }
+    .tt-tabs { display: flex; gap: 4px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; padding: 4px; }
+    .tt-tab { padding: 10px 20px; border: none; background: transparent; color: #71717a; font-size: 13px; font-weight: 600; border-radius: 8px; cursor: pointer; transition: all 0.2s; font-family: 'Inter', sans-serif; }
+    .tt-tab.active { background: rgba(244,63,94,0.12); color: #fb7185; }
+    .tt-tab:hover:not(.active) { color: #d4d4d8; }
+    .tt-sort { padding: 10px 14px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; color: #e4e4e7; font-size: 13px; font-family: 'Inter', sans-serif; outline: none; cursor: pointer; }
     .tt-sort option { background: #18181b; }
-    .tt-refresh { padding: 8px 14px; background: rgba(244,63,94,0.1); border: 1px solid rgba(244,63,94,0.2); border-radius: 8px; color: #f43f5e; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
-    .tt-refresh:hover { background: rgba(244,63,94,0.2); }
+    .tt-refresh { padding: 10px 20px; background: rgba(244,63,94,0.1); border: 1px solid rgba(244,63,94,0.2); border-radius: 10px; color: #f43f5e; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; font-family: 'Inter', sans-serif; }
+    .tt-refresh:hover { background: rgba(244,63,94,0.2); transform: translateY(-1px); }
 
     /* Results Grid */
     .tt-results-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
-    .tt-card { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 20px; transition: border-color 0.2s; }
-    .tt-card:hover { border-color: rgba(244,63,94,0.3); }
+    .tt-card { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 16px; padding: 24px; transition: all 0.2s; }
+    .tt-card:hover { border-color: rgba(244,63,94,0.3); background: rgba(255,255,255,0.04); }
     .tt-card-title { font-size: 14px; font-weight: 600; color: #e4e4e7; margin-bottom: 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
     .tt-card-title a { color: #e4e4e7; text-decoration: none; transition: color 0.2s; }
     .tt-card-title a:hover { color: #f43f5e; }
@@ -57,12 +67,12 @@
     .tt-stat-likes { color: #a1a1aa; }
     .tt-card-snippet { font-size: 12px; color: #71717a; margin-bottom: 12px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
     .tt-card-actions { display: flex; gap: 8px; }
-    .tt-analyze-btn { padding: 6px 14px; background: rgba(244,63,94,0.1); border: 1px solid rgba(244,63,94,0.2); border-radius: 6px; color: #f43f5e; font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
-    .tt-analyze-btn:hover { background: rgba(244,63,94,0.2); }
-    .tt-analyze-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-    .tt-card-link { padding: 6px 14px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; color: #a1a1aa; font-size: 12px; text-decoration: none; transition: all 0.2s; }
-    .tt-card-link:hover { color: #e4e4e7; }
-    .tt-analysis { margin-top: 12px; padding: 12px; background: rgba(244,63,94,0.05); border: 1px solid rgba(244,63,94,0.15); border-radius: 8px; font-size: 12px; color: #d4d4d8; line-height: 1.7; display: none; }
+    .tt-analyze-btn { padding: 8px 16px; background: rgba(244,63,94,0.1); border: 1px solid rgba(244,63,94,0.2); border-radius: 8px; color: #f43f5e; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; font-family: 'Inter', sans-serif; }
+    .tt-analyze-btn:hover { background: rgba(244,63,94,0.2); transform: translateY(-1px); }
+    .tt-analyze-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+    .tt-card-link { padding: 8px 16px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #a1a1aa; font-size: 12px; font-weight: 500; text-decoration: none; transition: all 0.2s; }
+    .tt-card-link:hover { color: #e4e4e7; background: rgba(255,255,255,0.08); }
+    .tt-analysis { margin-top: 16px; padding: 16px; background: rgba(244,63,94,0.05); border: 1px solid rgba(244,63,94,0.15); border-radius: 10px; font-size: 13px; color: #d4d4d8; line-height: 1.7; display: none; }
     .tt-analysis-label { font-size: 11px; font-weight: 600; color: #f43f5e; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
 
     /* Loading & Empty */
@@ -81,30 +91,62 @@
   </style>
 </head>
 <body>
+  <nav class="nav">
+    <div class="nav-inner">
+      <div class="logo">
+        <div class="logo-icon">S</div>
+        <span class="logo-text">Soldi</span>
+      </div>
+      <div class="nav-links">
+        <a href="/">Home</a>
+        <a href="/#features">Features</a>
+        <a href="/#tools">Tools</a>
+        <a href="/tiktok-analytics.html" style="color: #f43f5e;">TikTok Analytics</a>
+        <a href="/#apply" class="nav-cta">Apply Now</a>
+      </div>
+      <button class="mobile-menu" id="ttMobileMenu">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </nav>
+
+  <div class="mobile-nav" id="ttMobileNav">
+    <a href="/">Home</a>
+    <a href="/#features">Features</a>
+    <a href="/#tools">Tools</a>
+    <a href="/tiktok-analytics.html" style="color: #f43f5e;">TikTok Analytics</a>
+    <a href="/#apply" class="nav-cta" style="text-align:center;">Apply Now</a>
+  </div>
+
   <!-- GATE -->
   <div class="tt-gate" id="ttGate">
     <div class="tt-gate-box">
+      <div class="tt-gate-icon">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19.1c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.43z"/><polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02"/></svg>
+      </div>
       <h1>TikTok Shop Analytics</h1>
-      <p>Discover top-performing TikTok Shop videos and get AI-powered analysis on why they went viral. Paid members only.</p>
-      <input class="tt-gate-input" id="ttKeyInput" type="text" placeholder="Enter your API key">
-      <button class="tt-gate-btn" onclick="validateKey()">Access Analytics</button>
+      <p>Discover top-performing TikTok Shop videos and get AI-powered analysis on why they went viral.</p>
+      <input class="tt-gate-input" id="ttKeyInput" type="text" placeholder="soldi_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" autocomplete="off" spellcheck="false">
+      <button class="tt-gate-btn" onclick="validateKey()" style="background: linear-gradient(135deg, #22c55e, #16a34a);">Access Analytics</button>
       <div class="tt-gate-err" id="ttGateErr">Invalid API key. Please try again.</div>
+      <div class="tt-gate-footer">
+        Not a member? <a href="https://whop.com/checkout/plan_Q93fIRTfIo5g7/" target="_blank">Join Soldi</a> to get your API key.
+      </div>
     </div>
   </div>
 
   <!-- APP -->
   <div class="tt-app" id="ttApp">
     <div class="tt-header">
-      <h1>TikTok Shop Analytics</h1>
-      <a href="/index.html" class="tt-back">&larr; Back to Dashboard</a>
+      <h1>TikTok Shop <span>Analytics</span></h1>
+      <a href="/" class="tt-back">&larr; Back to Dashboard</a>
     </div>
 
     <div class="tt-controls">
       <div class="tt-tabs">
-        <button class="tt-tab active" data-period="hour" onclick="switchPeriod('hour', this)">Hour</button>
-        <button class="tt-tab" data-period="today" onclick="switchPeriod('today', this)">Today</button>
-        <button class="tt-tab" data-period="week" onclick="switchPeriod('week', this)">Week</button>
-        <button class="tt-tab" data-period="month" onclick="switchPeriod('month', this)">Month</button>
+        <button class="tt-tab active" data-period="24h" onclick="switchPeriod('24h', this)">Last 24 Hours</button>
+        <button class="tt-tab" data-period="7d" onclick="switchPeriod('7d', this)">Last 7 Days</button>
+        <button class="tt-tab" data-period="30d" onclick="switchPeriod('30d', this)">Last 30 Days</button>
       </div>
       <select class="tt-sort" id="ttSort" onchange="sortResults()">
         <option value="revenue">Sort: Revenue</option>
@@ -124,9 +166,28 @@
     </div>
   </div>
 
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-bottom" style="padding-top: 24px;">
+        <p>&copy; 2026 Soldi. All rights reserved.</p>
+      </div>
+    </div>
+  </footer>
+
   <script>
+    // Mobile menu
+    document.getElementById('ttMobileMenu').addEventListener('click', function() {
+      this.classList.toggle('active');
+      document.getElementById('ttMobileNav').classList.toggle('active');
+    });
+
+    // Nav scroll
+    window.addEventListener('scroll', () => {
+      document.querySelector('.nav').classList.toggle('scrolled', window.scrollY > 50);
+    });
+
     let API_KEY = '';
-    let currentPeriod = 'hour';
+    let currentPeriod = '24h';
     let currentVideos = [];
 
     // Gate
@@ -310,6 +371,25 @@
     }
 
     function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
+    // Auto-auth from localStorage
+    (async function() {
+      if (API_KEY) return;
+      const savedKey = localStorage.getItem('soldi_api_key');
+      if (savedKey) {
+        try {
+          const res = await fetch('/api/validate-key?key=' + encodeURIComponent(savedKey));
+          const data = await res.json();
+          if (data.success) {
+            API_KEY = savedKey;
+            sessionStorage.setItem('soldi_tiktok_analytics_key', savedKey);
+            document.getElementById('ttGate').style.display = 'none';
+            document.getElementById('ttApp').style.display = 'block';
+            fetchTrending();
+          }
+        } catch (e) {}
+      }
+    })();
   </script>
 </body>
 </html>
