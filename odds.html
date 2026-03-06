@@ -165,14 +165,15 @@
   </nav>
 
   <div class="odds-page">
-    <!-- Gate -->
+    <!-- Members-Only Gate -->
     <div class="odds-gate" id="oddsGate">
-      <h2>Odds Screen</h2>
-      <p>Enter your Soldi API key to access live odds, +EV bets, and arbitrage opportunities.</p>
-      <form onsubmit="validateOddsKey(event)">
-        <input type="text" id="oddsKeyInput" placeholder="soldi_xxxxxxxxxxxx" autocomplete="off" required>
-        <button type="submit" id="oddsKeyBtn">Access</button>
-      </form>
+      <div style="font-size:48px;margin-bottom:16px;">🔒</div>
+      <h2>Members Only</h2>
+      <p>Live odds, +EV bets, and arbitrage opportunities are exclusively available to Soldi members.</p>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-top:8px;">
+        <a href="/" style="padding:12px 24px;background:linear-gradient(135deg,#22c55e,#16a34a);color:#050507;font-weight:700;font-size:14px;border:none;border-radius:10px;text-decoration:none;text-align:center;">Log In</a>
+        <a href="https://whop.com/soldi/" target="_blank" style="padding:12px 24px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:#e4e4e7;font-weight:600;font-size:14px;border-radius:10px;text-decoration:none;text-align:center;">Get Access →</a>
+      </div>
       <div class="error-msg" id="oddsError"></div>
     </div>
 
@@ -250,38 +251,25 @@ function buildUrl(endpoint, params = {}) {
 }
 
 // ── Auth ──
-async function validateOddsKey(e) {
-  e.preventDefault();
-  const key = document.getElementById('oddsKeyInput').value.trim();
-  const errEl = document.getElementById('oddsError');
-  errEl.textContent = '';
-  try {
-    const res = await fetch('/api/validate-key?key=' + encodeURIComponent(key));
-    const data = await res.json();
-    if (res.ok && data.success) {
-      currentApiKey = key;
-      sessionStorage.setItem('soldi_odds_key', key);
-      showDashboard();
-    } else {
-      errEl.textContent = data.error || 'Invalid API key';
-    }
-  } catch {
-    errEl.textContent = 'Connection error';
-  }
-}
-
 function showDashboard() {
   document.getElementById('oddsGate').style.display = 'none';
   document.getElementById('oddsDashboard').style.display = 'block';
   loadSports();
 }
 
+function showGate(msg) {
+  document.getElementById('oddsGate').style.display = '';
+  document.getElementById('oddsDashboard').style.display = 'none';
+  if (msg) document.getElementById('oddsError').textContent = msg;
+  if (refreshTimer) clearInterval(refreshTimer);
+}
+
 function logoutOdds() {
   currentApiKey = null;
   sessionStorage.removeItem('soldi_odds_key');
-  document.getElementById('oddsGate').style.display = '';
-  document.getElementById('oddsDashboard').style.display = 'none';
-  if (refreshTimer) clearInterval(refreshTimer);
+  localStorage.removeItem('soldi_token');
+  localStorage.removeItem('soldi_api_key');
+  showGate();
 }
 
 // ── Sports ──
@@ -589,31 +577,44 @@ function getSportBadge(sportKey) {
   return 'badge-default';
 }
 
-// ── Auto-Auth ──
+// ── Auto-Auth (Members Only) ──
 (async function autoAuth() {
-  // Try session storage
+  // Check for stored session key first (fast path)
   const savedKey = sessionStorage.getItem('soldi_odds_key');
   if (savedKey) { currentApiKey = savedKey; showDashboard(); return; }
 
-  // Try localStorage API key
-  const lsKey = localStorage.getItem('soldi_api_key');
-  if (lsKey) {
-    try {
-      const res = await fetch('/api/validate-key?key=' + encodeURIComponent(lsKey));
-      const data = await res.json();
-      if (res.ok && data.success) { currentApiKey = lsKey; sessionStorage.setItem('soldi_odds_key', lsKey); showDashboard(); return; }
-    } catch {}
-  }
-
-  // Try JWT token
+  // Verify membership via JWT token
   const token = localStorage.getItem('soldi_token');
   if (token) {
     try {
       const res = await fetch('/api/me', { headers: { 'Authorization': 'Bearer ' + token } });
       const data = await res.json();
-      if (res.ok && data.success) { currentApiKey = data.apiKey || 'jwt_auth'; showDashboard(); return; }
+      if (res.ok && data.success) {
+        currentApiKey = data.apiKey || localStorage.getItem('soldi_api_key') || 'jwt_auth';
+        sessionStorage.setItem('soldi_odds_key', currentApiKey);
+        showDashboard();
+        return;
+      }
     } catch {}
   }
+
+  // Also try localStorage API key (for members who logged in previously)
+  const lsKey = localStorage.getItem('soldi_api_key');
+  if (lsKey) {
+    try {
+      const res = await fetch('/api/validate-key?key=' + encodeURIComponent(lsKey));
+      const data = await res.json();
+      if (res.ok && data.success) {
+        currentApiKey = lsKey;
+        sessionStorage.setItem('soldi_odds_key', lsKey);
+        showDashboard();
+        return;
+      }
+    } catch {}
+  }
+
+  // No valid membership — show gate
+  showGate();
 })();
 </script>
 </body>
