@@ -646,9 +646,10 @@ function buildWelcomeEmailHtml(firstName, email) {
 }
 
 // ============================================
-// THE ODDS API: Sports Betting Data
+// SOLDI ODDS API: Sports Betting Data (self-hosted scraper)
 // ============================================
-const THE_ODDS_API_KEY = process.env.THE_ODDS_API_KEY;
+const SOLDI_API_URL = process.env.SOLDI_API_URL || 'http://localhost:3001';
+const SOLDI_API_KEY = process.env.SOLDI_API_KEY || 'dev-key-change-me';
 const oddsCache = new Map();
 
 function getOddsCache(key) {
@@ -661,7 +662,7 @@ function setOddsCache(key, data, ttlSeconds) {
   oddsCache.set(key, { data, expiry: Date.now() + ttlSeconds * 1000 });
 }
 
-// Sportsbook definitions
+// Sportsbook definitions (matching SoldiAPI scrapers)
 const ODDS_SPORTSBOOKS = [
   { key: 'fanduel', name: 'FanDuel', shortName: 'FD' },
   { key: 'draftkings', name: 'DraftKings', shortName: 'DK' },
@@ -669,15 +670,17 @@ const ODDS_SPORTSBOOKS = [
   { key: 'pinnacle', name: 'Pinnacle', shortName: 'PIN' },
   { key: 'williamhill_us', name: 'Caesars', shortName: 'CZR' },
   { key: 'bovada', name: 'Bovada', shortName: 'BOV' },
-  { key: 'bet365', name: 'Bet365', shortName: '365' },
   { key: 'betonlineag', name: 'BetOnline', shortName: 'BOL' },
   { key: 'betrivers', name: 'BetRivers', shortName: 'BR' },
   { key: 'hardrock', name: 'Hard Rock Bet', shortName: 'HR' },
   { key: 'novig', name: 'Novig', shortName: 'NOV' },
   { key: 'bookmaker', name: 'Bookmaker', shortName: 'BM' },
-  { key: 'mybookieag', name: 'MyBookie', shortName: 'MB' },
+  { key: 'bet105', name: 'Bet105', shortName: '105' },
+  { key: 'xbet', name: 'XBet', shortName: 'XB' },
+  { key: 'buckeye', name: 'Buckeye', shortName: 'BKY' },
+  { key: 'prophetx', name: 'ProphetX', shortName: 'PX' },
 ];
-const SHARP_BOOKS = ['pinnacle', 'novig'];
+const SHARP_BOOKS = ['pinnacle', 'novig', 'bookmaker'];
 
 const ODDS_SPORT_CATEGORIES = [
   { id: 'basketball', name: 'Basketball', icon: '🏀', leagues: [
@@ -693,13 +696,19 @@ const ODDS_SPORT_CATEGORIES = [
     { key: 'icehockey_nhl', name: 'NHL' }
   ]},
   { id: 'soccer', name: 'Soccer', icon: '⚽', leagues: [
-    { key: 'soccer_epl', name: 'EPL' }, { key: 'soccer_usa_mls', name: 'MLS' }
+    { key: 'soccer_epl', name: 'EPL' }, { key: 'soccer_spain_la_liga', name: 'La Liga' },
+    { key: 'soccer_germany_bundesliga', name: 'Bundesliga' }, { key: 'soccer_italy_serie_a', name: 'Serie A' },
+    { key: 'soccer_france_ligue_one', name: 'Ligue 1' }, { key: 'soccer_usa_mls', name: 'MLS' },
+    { key: 'soccer_uefa_champs_league', name: 'UCL' }
   ]},
   { id: 'mma', name: 'MMA', icon: '🥊', leagues: [
     { key: 'mma_mixed_martial_arts', name: 'UFC' }
   ]},
   { id: 'tennis', name: 'Tennis', icon: '🎾', leagues: [
-    { key: 'tennis_atp_french_open', name: 'ATP' }, { key: 'tennis_wta_french_open', name: 'WTA' }
+    { key: 'tennis_atp', name: 'ATP' }, { key: 'tennis_wta', name: 'WTA' }
+  ]},
+  { id: 'boxing', name: 'Boxing', icon: '🥊', leagues: [
+    { key: 'boxing_boxing', name: 'Boxing' }
   ]},
 ];
 
@@ -767,7 +776,7 @@ function findArbitrageForEvent(allOdds) {
   return null;
 }
 
-// Transform The Odds API response to our format
+// Transform SoldiAPI response to our format (same schema as The Odds API)
 function transformOddsEvents(rawEvents) {
   return rawEvents.map(event => {
     const bookmakers = (event.bookmakers || []).map(bm => {
@@ -886,28 +895,26 @@ function findArbitrageOpportunities(events) {
   return arbs;
 }
 
-// Fetch odds from The Odds API (with cache)
+// Fetch odds from SoldiAPI (self-hosted scraper, with cache)
 async function fetchOddsEvents(sport) {
   const cacheKey = `odds_events_${sport}`;
   const cached = getOddsCache(cacheKey);
   if (cached) return { events: cached, cached: true };
 
-  if (!THE_ODDS_API_KEY) throw new Error('THE_ODDS_API_KEY not configured');
-
-  const bookmakers = ODDS_SPORTSBOOKS.map(b => b.key).join(',');
-  const url = `https://api.the-odds-api.com/v4/sports/${sport}/odds?apiKey=${THE_ODDS_API_KEY}&regions=us,us2&markets=h2h,spreads,totals&bookmakers=${bookmakers}&oddsFormat=american`;
-  const apiRes = await fetch(url);
+  const url = `${SOLDI_API_URL}/api/v1/sports/${sport}/odds?regions=us&markets=h2h,spreads,totals&oddsFormat=american`;
+  const headers = { 'X-API-Key': SOLDI_API_KEY };
+  const apiRes = await fetch(url, { headers, signal: AbortSignal.timeout(15000) });
   if (!apiRes.ok) {
     const err = await apiRes.text();
-    console.error('Odds API error:', apiRes.status, err);
-    throw new Error(`Odds API returned ${apiRes.status}`);
+    console.error('SoldiAPI error:', apiRes.status, err);
+    throw new Error(`SoldiAPI returned ${apiRes.status}`);
   }
-  const remaining = apiRes.headers.get('x-requests-remaining');
   const rawEvents = await apiRes.json();
   const events = transformOddsEvents(rawEvents);
-  setOddsCache(cacheKey, events, 60);
-  console.log(`[Odds API] Fetched ${events.length} events for ${sport} (${remaining} requests remaining)`);
-  return { events, cached: false, remaining };
+  // Cache for 30s since SoldiAPI refreshes every ~15-20s
+  setOddsCache(cacheKey, events, 30);
+  console.log(`[SoldiAPI] Fetched ${events.length} events for ${sport}`);
+  return { events, cached: false };
 }
 
 // GET /api/odds/sports - List sport categories
@@ -924,7 +931,7 @@ app.get('/api/odds/events', async (req, res) => {
   const sport = req.query.sport || 'basketball_nba';
   try {
     const result = await fetchOddsEvents(sport);
-    res.json({ success: true, events: result.events, cached: result.cached, remaining: result.remaining });
+    res.json({ success: true, events: result.events, cached: result.cached });
   } catch (err) {
     console.error('Odds events error:', err.message);
     res.status(502).json({ error: err.message || 'Failed to fetch odds' });

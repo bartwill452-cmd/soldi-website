@@ -129,9 +129,10 @@
     .badge-nhl { background: rgba(0,0,0,0.3); color: #a1a1aa; }
     .badge-ncaab { background: rgba(255,165,0,0.15); color: #f59e0b; }
     .badge-ncaaf { background: rgba(255,165,0,0.15); color: #f59e0b; }
-    .badge-epl { background: rgba(56,0,60,0.3); color: #c084fc; }
-    .badge-mls { background: rgba(56,0,60,0.3); color: #c084fc; }
-    .badge-ufc { background: rgba(213,0,0,0.15); color: #ef4444; }
+    .badge-soccer { background: rgba(56,0,60,0.3); color: #c084fc; }
+    .badge-mma { background: rgba(213,0,0,0.15); color: #ef4444; }
+    .badge-boxing { background: rgba(213,0,0,0.15); color: #ef4444; }
+    .badge-tennis { background: rgba(196,181,49,0.15); color: #eab308; }
     .badge-default { background: rgba(255,255,255,0.06); color: #a1a1aa; }
 
     /* ── Responsive ── */
@@ -577,12 +578,14 @@ function getSportBadge(sportKey) {
   if (!sportKey) return 'badge-default';
   const k = sportKey.toLowerCase();
   if (k.includes('nba')) return 'badge-nba';
+  if (k.includes('ncaab')) return 'badge-ncaab';
   if (k.includes('nfl') || k.includes('ncaaf')) return 'badge-nfl';
   if (k.includes('mlb') || k.includes('baseball')) return 'badge-mlb';
   if (k.includes('nhl') || k.includes('hockey')) return 'badge-nhl';
-  if (k.includes('ncaab')) return 'badge-ncaab';
-  if (k.includes('epl') || k.includes('soccer') || k.includes('mls')) return 'badge-epl';
-  if (k.includes('mma') || k.includes('ufc')) return 'badge-ufc';
+  if (k.includes('soccer') || k.includes('epl') || k.includes('mls') || k.includes('liga') || k.includes('serie') || k.includes('ligue') || k.includes('bundesliga') || k.includes('uefa')) return 'badge-soccer';
+  if (k.includes('mma') || k.includes('ufc')) return 'badge-mma';
+  if (k.includes('boxing')) return 'badge-boxing';
+  if (k.includes('tennis') || k.includes('atp') || k.includes('wta')) return 'badge-tennis';
   return 'badge-default';
 }
 

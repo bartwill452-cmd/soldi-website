@@ -249,18 +249,20 @@ client.on('messageCreate', async (message) => {
       fields.push({ name: '❌ Website Server', value: `Unreachable: ${err.message}`, inline: false });
     }
 
-    // 2. Odds Screen API
+    // 2. SoldiAPI (Odds Scraper)
     try {
-      const res = await fetch('https://soldi-website.onrender.com/api/odds/sports', {
+      const soldiApiUrl = process.env.SOLDI_API_URL || 'http://localhost:3001';
+      const res = await fetch(`${soldiApiUrl}/health`, {
         signal: AbortSignal.timeout(10000),
       });
       if (res.ok) {
-        fields.push({ name: '✅ Odds Screen API', value: 'Responding', inline: false });
+        const data = await res.json();
+        fields.push({ name: '✅ SoldiAPI (Odds Scraper)', value: `Online — ${data.active_sports || 'N/A'} sports tracked`, inline: false });
       } else {
-        fields.push({ name: '❌ Odds Screen API', value: `Responded with status ${res.status}`, inline: false });
+        fields.push({ name: '❌ SoldiAPI (Odds Scraper)', value: `Responded with status ${res.status}`, inline: false });
       }
     } catch (err) {
-      fields.push({ name: '❌ Odds Screen API', value: `Unreachable: ${err.message}`, inline: false });
+      fields.push({ name: '❌ SoldiAPI (Odds Scraper)', value: `Unreachable: ${err.message}`, inline: false });
     }
 
     // 3. Discord Bot (self)
