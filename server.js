@@ -902,7 +902,7 @@ async function fetchOddsEvents(sport) {
   if (cached) return { events: cached, cached: true };
 
   const url = `${SOLDI_API_URL}/api/v1/sports/${sport}/odds?regions=us&markets=h2h,spreads,totals&oddsFormat=american`;
-  const headers = { 'X-API-Key': SOLDI_API_KEY };
+  const headers = { 'Authorization': `Bearer ${SOLDI_API_KEY}` };
   const apiRes = await fetch(url, { headers, signal: AbortSignal.timeout(15000) });
   if (!apiRes.ok) {
     const err = await apiRes.text();
