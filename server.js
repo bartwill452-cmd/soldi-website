@@ -32,6 +32,7 @@ const WHOP_COMPANY_ID = process.env.WHOP_COMPANY_ID;
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-change-me';
 const WHOP_STORE_SLUG = process.env.WHOP_STORE_SLUG || 'soldi-4def';
 const WHOP_PRODUCT_PATH = process.env.WHOP_PRODUCT_PATH || 'soldi-a9';
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'bartwill452@gmail.com';
 
 // ============================================
 // API KEY STORAGE (file-based)
@@ -361,6 +362,55 @@ function requireOwner(req, res, next) {
 app.post('/api/verify-membership', async (req, res) => {
   const { email } = req.body;
   if (!email) return res.status(400).json({ error: 'Email is required' });
+
+  // Admin/owner bypass — skip Whop API lookup
+  if (email.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
+    let apiKey;
+    const existingKey = findKeyByMembershipId('admin');
+    if (existingKey) {
+      apiKey = existingKey.key;
+    } else {
+      apiKey = generateApiKey();
+      const keys = loadApiKeys();
+      keys[apiKey] = {
+        email: ADMIN_EMAIL,
+        membershipId: 'admin',
+        createdAt: new Date().toISOString(),
+        status: 'active'
+      };
+      saveApiKeys(keys);
+    }
+
+    const token = jwt.sign(
+      {
+        membershipId: 'admin',
+        email: ADMIN_EMAIL,
+        name: 'Admin',
+        firstName: 'Admin',
+        status: 'active',
+        affiliateLink: null,
+        affiliateUsername: null,
+        createdAt: new Date().toISOString()
+      },
+      JWT_SECRET,
+      { expiresIn: '14d' }
+    );
+
+    return res.json({
+      success: true,
+      token,
+      apiKey,
+      user: {
+        email: ADMIN_EMAIL,
+        name: 'Admin',
+        firstName: 'Admin',
+        status: 'active',
+        affiliateLink: null,
+        affiliateUsername: null,
+        memberSince: 'Owner'
+      }
+    });
+  }
 
   if (!WHOP_API_KEY || WHOP_API_KEY === 'YOUR_API_KEY_HERE') {
     return res.status(500).json({ error: 'Server not configured. API key missing.' });
