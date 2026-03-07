@@ -894,12 +894,31 @@ function buildWelcomeEmailHtml(firstName, email) {
     <p style="color:#d4d4d8;font-size:14px;margin:0;padding-left:40px;">Access the Business Finder, Receptionist Leads, AI Image Generator, Chatbot Builder, Odds Screen, TikTok Analytics, and more — all from your dashboard.</p>
   </div>
 
+  <div style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:24px;margin-bottom:16px;">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
+      <span style="background:#5865F2;color:#fff;width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;">3</span>
+      <h3 style="color:#5865F2;margin:0;font-size:16px;">Join the Discord</h3>
+    </div>
+    <p style="color:#d4d4d8;font-size:14px;margin:0 0 12px;padding-left:40px;">Click below to join our private Discord community:</p>
+    <div style="padding-left:40px;">
+      <a href="https://discord.gg/HStNMpCAH5" style="display:inline-block;padding:10px 24px;background:#5865F2;color:#fff;font-weight:600;border-radius:8px;text-decoration:none;font-size:14px;">Join Discord Server</a>
+    </div>
+  </div>
+
   <div style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:24px;margin-bottom:32px;">
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
-      <span style="background:#22c55e;color:#050507;width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;">3</span>
-      <h3 style="color:#22c55e;margin:0;font-size:16px;">Join the Discord</h3>
+      <span style="background:#22c55e;color:#050507;width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;">4</span>
+      <h3 style="color:#22c55e;margin:0;font-size:16px;">Verify in Discord to Unlock Paid Channels</h3>
     </div>
-    <p style="color:#d4d4d8;font-size:14px;margin:0;padding-left:40px;">Connect with other members for live alerts, whale tracking, and community discussions. Access Discord from your Whop dashboard or your Soldi member dashboard.</p>
+    <p style="color:#d4d4d8;font-size:14px;margin:0 0 8px;padding-left:40px;">Once you join, <strong style="color:#fff;">message the Soldi Bot</strong> to get your <strong style="color:#5865F2;">Soldi Paid Member</strong> role:</p>
+    <div style="padding-left:40px;">
+      <div style="background:#0a0a0a;border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:12px 16px;font-family:monospace;font-size:13px;color:#d4d4d8;margin-bottom:8px;">
+        1. Type <strong style="color:#22c55e;">!verify</strong> in any channel<br>
+        2. The bot will DM you asking for your email<br>
+        3. Reply with: <strong style="color:#fff;">${email}</strong><br>
+        4. Your <strong style="color:#5865F2;">Soldi Paid Member</strong> role will be assigned automatically
+      </div>
+    </div>
   </div>
 
   <div style="text-align:center;margin-bottom:24px;">
@@ -1836,6 +1855,30 @@ async function scrapeBusinessListings(niche, location) {
       websiteUrl: result.url,
       status: 'OPERATIONAL'
     });
+  }
+
+  // Phase 2: For businesses missing phone numbers, try to scrape from their website
+  const missingPhones = businesses.filter(b => !b.phone && b.websiteUrl);
+  if (missingPhones.length > 0) {
+    // Scrape up to 10 sites in parallel to avoid being too slow
+    const toScrape = missingPhones.slice(0, 10);
+    const scrapeResults = await Promise.allSettled(
+      toScrape.map(async (biz) => {
+        try {
+          const resp = await fetch(biz.websiteUrl, {
+            headers: { 'User-Agent': SCRAPER_UA, 'Accept': 'text/html' },
+            signal: AbortSignal.timeout(5000),
+            redirect: 'follow',
+          });
+          if (!resp.ok) return null;
+          const html = await resp.text();
+          // Only search the first 50KB to save memory/time
+          const chunk = html.substring(0, 50000);
+          const phone = extractPhoneFromText(chunk);
+          if (phone) biz.phone = phone;
+        } catch { /* timeout or error - skip */ }
+      })
+    );
   }
 
   return businesses;
