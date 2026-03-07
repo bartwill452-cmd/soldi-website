@@ -736,6 +736,14 @@
 
       // Load categories
       await loadCategories(key);
+
+      // Auto-load Arizona example results so users don't see a blank screen
+      if (categories.length > 0 && !selectedNiche) {
+        const firstGold = categories.find(c => c.tier === 'gold') || categories[0];
+        selectCategory(firstGold.id);
+        document.getElementById('stateSelect').value = 'AZ';
+        searchBusinesses();
+      }
     }
 
     async function loadCategories(key) {
