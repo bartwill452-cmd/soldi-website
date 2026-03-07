@@ -1,20 +1,13 @@
 """
 DraftKings sportsbook scraper.
 
-Uses Playwright headless browser to navigate to DraftKings' sportsbook pages
-and passively capture the sportsbook-nash API responses. This bypasses the
-geo/bot protection that blocks direct HTTP API access (403).
+Uses direct HTTP requests to DraftKings' public sportsbook-nash API to fetch
+odds data. No browser required.
 
 Strategy:
-  1. Navigate to sportsbook.draftkings.com/leagues/{sport} pages
-  2. Intercept XHR responses from sportsbook-nash.draftkings.com
-  3. Parse the flat {events, markets, selections} response
-  4. Navigate to subcategory pages (?category=player-points, etc.) to get
-     player props and team totals
-  5. For tennis, dynamically discover tournament URLs from the hub page
-  6. For team totals, query the API directly with subcategoryId 4609 (NBA)
-     since team total data lives in a separate subcategory
-  7. Cache results with 120s TTL
+  1. Hit sportsbook-nash.draftkings.com API directly with event group IDs
+  2. Parse the flat {events, markets, selections} response
+  3. Cache results with 120s TTL
 """
 
 import asyncio
@@ -23,6 +16,8 @@ import logging
 import re
 import time
 from typing import Any, Dict, List, Optional, Set, Tuple
+
+import httpx
 
 from models import Bookmaker, Market, OddsEvent, Outcome
 from sources.base import DataSource
@@ -34,25 +29,42 @@ from sources.sport_mapping import (
 
 logger = logging.getLogger(__name__)
 
-# ── DraftKings sportsbook navigation URLs per sport_key ──────────────
-_DK_SPORT_URLS = {
-    "basketball_nba": "https://sportsbook.draftkings.com/leagues/basketball/nba",
-    "basketball_ncaab": "https://sportsbook.draftkings.com/leagues/basketball/ncaab",
-    "americanfootball_nfl": "https://sportsbook.draftkings.com/leagues/football/nfl",
-    "americanfootball_ncaaf": "https://sportsbook.draftkings.com/leagues/football/college-football",
-    "icehockey_nhl": "https://sportsbook.draftkings.com/leagues/hockey/nhl",
-    "baseball_mlb": "https://sportsbook.draftkings.com/leagues/baseball/mlb",
-    "mma_mixed_martial_arts": "https://sportsbook.draftkings.com/leagues/mma/ufc",
-    "boxing_boxing": "https://sportsbook.draftkings.com/leagues/mma/boxing",
-    "soccer_epl": "https://sportsbook.draftkings.com/leagues/soccer/england---premier-league",
-    "soccer_spain_la_liga": "https://sportsbook.draftkings.com/leagues/soccer/spain---la-liga",
-    "soccer_germany_bundesliga": "https://sportsbook.draftkings.com/leagues/soccer/germany---bundesliga",
-    "soccer_italy_serie_a": "https://sportsbook.draftkings.com/leagues/soccer/italy---serie-a",
-    "soccer_france_ligue_one": "https://sportsbook.draftkings.com/leagues/soccer/france---ligue-1",
-    "soccer_usa_mls": "https://sportsbook.draftkings.com/leagues/soccer/mls",
-    "soccer_uefa_champs_league": "https://sportsbook.draftkings.com/leagues/soccer/uefa-champions-league",
-    "tennis_atp": "https://sportsbook.draftkings.com/leagues/tennis/atp",
-    "tennis_wta": "https://sportsbook.draftkings.com/leagues/tennis/wta",
+# ── DraftKings event group IDs per sport_key ──────────────────────────
+_DK_EVENT_GROUP_IDS = {
+    "basketball_nba": 88808956,
+    "basketball_ncaab": 88808957,
+    "americanfootball_nfl": 88808958,
+    "americanfootball_ncaaf": 88808959,
+    "icehockey_nhl": 88808960,
+    "baseball_mlb": 88808961,
+    "mma_mixed_martial_arts": 88808972,
+    "boxing_boxing": 88808971,
+    "soccer_epl": 88808896,
+    "soccer_spain_la_liga": 88808899,
+    "soccer_germany_bundesliga": 88808897,
+    "soccer_italy_serie_a": 88808900,
+    "soccer_france_ligue_one": 88808898,
+    "soccer_usa_mls": 88808901,
+    "soccer_uefa_champs_league": 88808903,
+    "tennis_atp": 88808968,
+    "tennis_wta": 88808969,
+}
+
+_NASH_API_BASE = (
+    "https://sportsbook-nash.draftkings.com/sites/US-SB/api/sportscontent"
+    "/navigation/dkusok/v1/leagues/{eventGroupId}?format=json"
+)
+
+_HTTP_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/131.0.0.0 Safari/537.36"
+    ),
+    "Accept": "application/json",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Origin": "https://sportsbook.draftkings.com",
+    "Referer": "https://sportsbook.draftkings.com/",
 }
 
 # Player prop category pages to scrape (appended as ?category= on league page)
@@ -101,11 +113,29 @@ _SPORTS_WITH_PERIODS = {
     "baseball_mlb",
 }
 
-# Tennis hub page for dynamic tournament discovery
-_TENNIS_HUB = "https://sportsbook.draftkings.com/sports/tennis"
+# Subcategory slug -> possible subcategoryId values to try
+_SUBCATEGORY_IDS = {
+    "team-props": [4609, 4610],
+    "player-points": [583],
+    "player-rebounds": [584],
+    "player-assists": [585],
+    "player-threes": [586],
+    "player-combos": [587],
+    "player-defense": [588],
+    "1st-half": [491],
+    "2nd-half": [492],
+    "1st-quarter": [493],
+    "2nd-quarter": [494],
+    "3rd-quarter": [495],
+    "4th-quarter": [496],
+}
 
 _CACHE_TTL = 120  # seconds — prefetch loop takes ~80s to cycle all sports
-_STALE_TTL = 900  # seconds — serve stale data up to 15 minutes (prefetch cycle ~13min)
+_STALE_TTL = 900  # seconds — serve stale data up to 15 minutes
+
+# Max retries for HTTP requests
+_MAX_RETRIES = 3
+_BASE_BACKOFF = 1.0  # seconds
 
 # Unicode minus sign used in DraftKings displayOdds
 _UNICODE_MINUS = "\u2212"  # −
@@ -125,19 +155,24 @@ def _parse_dk_american_odds(odds_str: str) -> Optional[int]:
 
 
 class DraftKingsSource(DataSource):
-    """Fetches odds from DraftKings via Playwright passive response capture."""
+    """Fetches odds from DraftKings via direct HTTP API calls."""
 
     def __init__(self):
-        self._browser = None  # type: Any
-        self._context = None  # type: Any
-        self._page = None  # type: Any
-        self._pw = None  # type: Any
+        self._client: Optional[httpx.AsyncClient] = None
         self._lock = asyncio.Lock()
-        self._cache = {}  # type: Dict[str, Tuple[List[OddsEvent], float]]
-        self._prefetch_task = None  # type: Any
-        # Cache discovered tennis tournament URLs
-        self._tennis_urls = {}  # type: Dict[str, List[str]]
-        self._tennis_urls_ts = 0.0
+        self._cache: Dict[str, Tuple[List[OddsEvent], float]] = {}
+        self._prefetch_task: Optional[asyncio.Task] = None
+
+    def _ensure_client(self) -> httpx.AsyncClient:
+        """Create the HTTP client if it doesn't exist yet."""
+        if self._client is None or self._client.is_closed:
+            self._client = httpx.AsyncClient(
+                headers=_HTTP_HEADERS,
+                timeout=httpx.Timeout(15.0, connect=10.0),
+                follow_redirects=True,
+                http2=False,
+            )
+        return self._client
 
     def start_prefetch(self) -> None:
         """Start background prefetch of major sports."""
@@ -146,8 +181,6 @@ class DraftKingsSource(DataSource):
     async def _prefetch_all(self) -> None:
         await asyncio.sleep(3)
         logger.info("DraftKings: Starting continuous background prefetch")
-        # Prioritize simple sports (MMA/boxing = main page only) first,
-        # then heavier sports with sub-pages (props, periods)
         all_sports = [
             "mma_mixed_martial_arts",
             "boxing_boxing",
@@ -172,49 +205,22 @@ class DraftKingsSource(DataSource):
             cycle += 1
             for sport_key in all_sports:
                 try:
-                    async with self._lock:
-                        await self._ensure_browser()
-                        is_tennis = sport_key in ("tennis_atp", "tennis_wta")
-                        if is_tennis:
-                            events = await self._fetch_tennis(sport_key)
-                        else:
-                            url = _DK_SPORT_URLS.get(sport_key)
-                            if url is None:
-                                continue
-                            events = await self._fetch_sport(url, sport_key)
-                        self._cache[sport_key] = (events, time.time())
-                    logger.info("DraftKings prefetch: %s complete (%d events)", sport_key, len(events))
+                    events = await self._fetch_sport(sport_key)
+                    self._cache[sport_key] = (events, time.time())
+                    logger.info(
+                        "DraftKings prefetch: %s complete (%d events)",
+                        sport_key, len(events),
+                    )
                 except Exception as e:
-                    logger.warning("DraftKings prefetch %s failed: %s", sport_key, e)
+                    logger.warning(
+                        "DraftKings prefetch %s failed: %s", sport_key, e,
+                    )
                 await asyncio.sleep(0.5)
-            logger.info("DraftKings: Prefetch cycle #%d complete (%d sports)", cycle, len(all_sports))
+            logger.info(
+                "DraftKings: Prefetch cycle #%d complete (%d sports)",
+                cycle, len(all_sports),
+            )
             await asyncio.sleep(1)
-
-    async def _ensure_browser(self) -> None:
-        if self._page is not None:
-            return
-        try:
-            from playwright.async_api import async_playwright
-            self._pw = await async_playwright().start()
-            self._browser = await self._pw.chromium.launch(
-                headless=True,
-                args=[
-                    "--disable-blink-features=AutomationControlled",
-                    "--no-sandbox",
-                ],
-            )
-            self._context = await self._browser.new_context(
-                user_agent=(
-                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/131.0.0.0 Safari/537.36"
-                ),
-            )
-            self._page = await self._context.new_page()
-            logger.info("DraftKings: Playwright browser launched")
-        except Exception as e:
-            logger.warning("DraftKings: Failed to launch browser: %s", e)
-            self._page = None
 
     # ── Public API ────────────────────────────────────────────────────
 
@@ -231,14 +237,10 @@ class DraftKingsSource(DataSource):
         if bookmakers and "draftkings" not in bookmakers:
             return [], headers
 
-        is_tennis = sport_key in ("tennis_atp", "tennis_wta")
-        if not is_tennis:
-            url = _DK_SPORT_URLS.get(sport_key)
-            if url is None:
-                return [], headers
+        if sport_key not in _DK_EVENT_GROUP_IDS:
+            return [], headers
 
         # Always serve from cache — prefetch loop keeps it warm.
-        # Never fall through to Playwright navigation in the composite context.
         cached = self._cache.get(sport_key)
         if cached and (time.time() - cached[1]) < _STALE_TTL:
             return cached[0], headers
@@ -250,197 +252,119 @@ class DraftKingsSource(DataSource):
         """Player props not yet implemented per-event for DraftKings."""
         return []
 
-    # ── Fetching ──────────────────────────────────────────────────────
+    # ── HTTP Fetching ─────────────────────────────────────────────────
 
-    async def _fetch_sport(
-        self, base_url: str, sport_key: str,
-    ) -> List[OddsEvent]:
-        """Fetch game lines + player props + team totals for a sport."""
-        # 1. Main game lines (Moneyline, Spread, Total)
-        events = await self._navigate_and_capture(base_url, sport_key)
+    async def _http_get_nash(
+        self, event_group_id: int, subcategory_id: Optional[int] = None
+    ) -> Optional[dict]:
+        """Make an HTTP GET to the nash API with retry + exponential backoff."""
+        client = self._ensure_client()
+        url = _NASH_API_BASE.format(eventGroupId=event_group_id)
+        if subcategory_id is not None:
+            url += f"&subcategoryId={subcategory_id}"
 
-        # 2. Team totals via subcategory page (skip for combat sports — no team totals)
-        if sport_key not in ("mma_mixed_martial_arts", "boxing_boxing"):
-            team_url = base_url + "?category=team-props"
-            team_events = await self._navigate_and_capture(
-                team_url, sport_key, is_team_props=True
+        last_exc: Optional[Exception] = None
+        for attempt in range(_MAX_RETRIES):
+            try:
+                resp = await client.get(url)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if (
+                        "events" in data
+                        and "markets" in data
+                        and "selections" in data
+                    ):
+                        return data
+                    # Valid JSON but not the expected format — don't retry
+                    logger.debug(
+                        "DraftKings: Unexpected response shape from %s", url,
+                    )
+                    return None
+                elif resp.status_code == 404:
+                    # Subcategory doesn't exist for this sport — not an error
+                    return None
+                else:
+                    logger.warning(
+                        "DraftKings: HTTP %d from %s (attempt %d/%d)",
+                        resp.status_code, url, attempt + 1, _MAX_RETRIES,
+                    )
+            except Exception as e:
+                last_exc = e
+                logger.warning(
+                    "DraftKings: Request to %s failed (attempt %d/%d): %s",
+                    url, attempt + 1, _MAX_RETRIES, e,
+                )
+
+            if attempt < _MAX_RETRIES - 1:
+                backoff = _BASE_BACKOFF * (2 ** attempt)
+                await asyncio.sleep(backoff)
+
+        if last_exc:
+            logger.error(
+                "DraftKings: All %d retries exhausted for %s: %s",
+                _MAX_RETRIES, url, last_exc,
             )
-            events = self._merge_events(events, team_events)
+        return None
+
+    async def _fetch_sport(self, sport_key: str) -> List[OddsEvent]:
+        """Fetch game lines + player props + team totals for a sport."""
+        event_group_id = _DK_EVENT_GROUP_IDS.get(sport_key)
+        if event_group_id is None:
+            return []
+
+        # 1. Main game lines (Moneyline, Spread, Total)
+        data = await self._http_get_nash(event_group_id)
+        if data is None:
+            return []
+
+        events = self._parse_nash_response(data, sport_key)
+
+        # 2. Team totals via subcategory (skip for combat sports)
+        if sport_key not in ("mma_mixed_martial_arts", "boxing_boxing"):
+            for sub_id in _SUBCATEGORY_IDS.get("team-props", []):
+                team_data = await self._http_get_nash(
+                    event_group_id, subcategory_id=sub_id
+                )
+                if team_data:
+                    team_events = self._parse_nash_response(
+                        team_data, sport_key, is_team_props=True,
+                    )
+                    events = self._merge_events(events, team_events)
+                    break  # Found working subcategory ID
 
         # 3. Half / quarter period pages (for supported sports)
         if sport_key in _SPORTS_WITH_PERIODS:
             for period_cat in _PERIOD_CATS:
-                # Skip quarter pages for halves-only sports (NCAAB, etc.)
                 if sport_key in _HALVES_ONLY_SPORTS and "quarter" in period_cat:
                     continue
-                period_url = base_url + "?category=" + period_cat
-                period_events = await self._navigate_and_capture(
-                    period_url, sport_key
-                )
-                events = self._merge_events(events, period_events)
+                for sub_id in _SUBCATEGORY_IDS.get(period_cat, []):
+                    period_data = await self._http_get_nash(
+                        event_group_id, subcategory_id=sub_id
+                    )
+                    if period_data:
+                        period_events = self._parse_nash_response(
+                            period_data, sport_key,
+                        )
+                        events = self._merge_events(events, period_events)
+                        break
 
         # 4. Player props (for supported sports)
         if sport_key in _SPORTS_WITH_PLAYER_PROPS:
             for prop_cat in _PLAYER_PROP_CATS:
-                prop_url = base_url + "?category=" + prop_cat
-                prop_events = await self._navigate_and_capture(
-                    prop_url, sport_key,
-                    is_player_props=True,
-                    prop_category=prop_cat,
-                )
-                events = self._merge_events(events, prop_events)
+                for sub_id in _SUBCATEGORY_IDS.get(prop_cat, []):
+                    prop_data = await self._http_get_nash(
+                        event_group_id, subcategory_id=sub_id
+                    )
+                    if prop_data:
+                        prop_events = self._parse_nash_response(
+                            prop_data, sport_key,
+                            is_player_props=True,
+                            prop_category=prop_cat,
+                        )
+                        events = self._merge_events(events, prop_events)
+                        break
 
         return events
-
-    async def _fetch_tennis(self, sport_key: str) -> List[OddsEvent]:
-        """Discover and scrape tennis tournament pages dynamically."""
-        prefix = "atp" if sport_key == "tennis_atp" else "wta"
-
-        # Discover tournament URLs from the hub (cache for 10 minutes)
-        if time.time() - self._tennis_urls_ts > 600:
-            await self._discover_tennis_urls()
-
-        urls = self._tennis_urls.get(prefix, [])
-        if not urls:
-            logger.info("DraftKings: No %s tennis URLs discovered", prefix.upper())
-            return []
-
-        all_events = []  # type: List[OddsEvent]
-        for url in urls:
-            events = await self._navigate_and_capture(url, sport_key)
-            all_events = self._merge_events(all_events, events)
-
-        return all_events
-
-    async def _discover_tennis_urls(self) -> None:
-        """Navigate to the tennis hub and extract tournament league links."""
-        await self._ensure_browser()
-        if self._page is None:
-            return
-
-        try:
-            await self._page.goto(
-                _TENNIS_HUB, timeout=15000, wait_until="domcontentloaded"
-            )
-            await asyncio.sleep(2)
-
-            links = await self._page.evaluate("""
-                () => {
-                    const results = [];
-                    document.querySelectorAll('a[href*="/leagues/tennis/"]').forEach(a => {
-                        const href = a.href;
-                        if (href.includes('doubles') || href.includes('specials') ||
-                            href.includes('futures') || href.includes('login')) return;
-                        if (!results.includes(href)) results.push(href);
-                    });
-                    return results;
-                }
-            """)
-
-            atp_urls = []  # type: List[str]
-            wta_urls = []  # type: List[str]
-            for link in links:
-                lower = link.lower()
-                if any(x in lower for x in ["/atp", "australian-open-men",
-                       "french-open-men", "wimbledon-men", "us-open-men"]):
-                    atp_urls.append(link)
-                elif any(x in lower for x in ["/wta", "australian-open-women",
-                         "french-open-women", "wimbledon-women", "us-open-women"]):
-                    wta_urls.append(link)
-                elif "/challenger" in lower:
-                    pass  # Skip challengers
-                # Unclassified tournament links are skipped
-
-            self._tennis_urls = {"atp": atp_urls, "wta": wta_urls}
-            self._tennis_urls_ts = time.time()
-            logger.info(
-                "DraftKings: Discovered %d ATP, %d WTA tennis tournament URLs",
-                len(atp_urls), len(wta_urls),
-            )
-        except Exception as e:
-            logger.warning("DraftKings: Tennis URL discovery failed: %s", e)
-
-    async def _navigate_and_capture(
-        self,
-        url: str,
-        sport_key: str,
-        is_player_props: bool = False,
-        is_team_props: bool = False,
-        prop_category: str = "",
-    ) -> List[OddsEvent]:
-        """Navigate to a URL and capture the sportsbook-nash API response."""
-        await self._ensure_browser()
-        if self._page is None:
-            return []
-
-        captured = []  # type: List[dict]
-        got_data = asyncio.Event()
-
-        async def on_response(response):
-            try:
-                if response.status != 200:
-                    return
-                ct = response.headers.get("content-type", "")
-                if "json" not in ct:
-                    return
-                resp_url = response.url
-                if "sportsbook-nash" in resp_url and "sportscontent" in resp_url:
-                    body = await response.text()
-                    data = json.loads(body)
-                    if "events" in data and "markets" in data and "selections" in data:
-                        captured.append(data)
-                        got_data.set()
-            except Exception:
-                pass
-
-        self._page.on("response", on_response)
-        try:
-            await self._page.goto(url, timeout=15000, wait_until="domcontentloaded")
-            # Wait for first API response
-            try:
-                await asyncio.wait_for(got_data.wait(), timeout=4.0)
-            except asyncio.TimeoutError:
-                pass  # Move on — response may not arrive for empty pages
-
-            # For MMA/boxing, scroll page to trigger lazy-loaded fight cards
-            is_combat = "mma" in sport_key or "boxing" in sport_key
-            if is_combat and captured:
-                # Give time for additional responses after first one
-                await asyncio.sleep(1.5)
-                # Scroll down to trigger lazy loading of more fights
-                try:
-                    await self._page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-                    await asyncio.sleep(2.0)
-                    # Scroll a couple more times for pagination
-                    for _ in range(3):
-                        await self._page.evaluate("window.scrollBy(0, 800)")
-                        await asyncio.sleep(0.8)
-                except Exception:
-                    pass
-            elif captured:
-                # For other sports, brief delay to catch trailing responses
-                await asyncio.sleep(0.5)
-        except Exception as e:
-            logger.warning("DraftKings: Navigation to %s failed: %s", url, e)
-            self._page.remove_listener("response", on_response)
-            return []
-
-        self._page.remove_listener("response", on_response)
-
-        if not captured:
-            return []
-
-        all_events = []  # type: List[OddsEvent]
-        for data in captured:
-            events = self._parse_nash_response(
-                data, sport_key,
-                is_player_props=is_player_props,
-                is_team_props=is_team_props,
-                prop_category=prop_category,
-            )
-            all_events.extend(events)
-
-        return all_events
 
     # ── Parsing ───────────────────────────────────────────────────────
 
@@ -964,28 +888,16 @@ class DraftKingsSource(DataSource):
     # ── Cleanup ───────────────────────────────────────────────────────
 
     async def close(self) -> None:
-        """Close the browser."""
-        if self._page:
+        """Close the HTTP client."""
+        if self._prefetch_task and not self._prefetch_task.done():
+            self._prefetch_task.cancel()
             try:
-                await self._page.close()
+                await self._prefetch_task
+            except asyncio.CancelledError:
+                pass
+        if self._client:
+            try:
+                await self._client.aclose()
             except Exception:
                 pass
-        if self._context:
-            try:
-                await self._context.close()
-            except Exception:
-                pass
-        if self._browser:
-            try:
-                await self._browser.close()
-            except Exception:
-                pass
-        if self._pw:
-            try:
-                await self._pw.stop()
-            except Exception:
-                pass
-        self._page = None
-        self._context = None
-        self._browser = None
-        self._pw = None
+            self._client = None

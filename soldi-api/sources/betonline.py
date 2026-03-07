@@ -1,23 +1,23 @@
 """
 BetOnline sportsbook scraper.
 
-Uses Playwright to establish a browser session (bypass Cloudflare), then
-fetches odds data via in-page fetch() calls to BetOnline's offering API.
-No login required — public odds are visible without authentication.
+Uses direct HTTP requests (httpx) to BetOnline's offering API.
+No browser required — the API subdomain (api-offering.betonline.ag)
+does not enforce Cloudflare challenges.
 
 Architecture:
-  1. Launch headless Chrome + stealth, navigate to ONE page to get CF cookies
-  2. Use page.evaluate(fetch(...)) for all subsequent API calls (no more
-     per-sport navigation which triggered CF blocks in multi-browser context)
-  3. Parse the JSON responses with the same offering format as before
+  1. POST to offering-by-league endpoint with sport/league params
+  2. Parse the JSON responses with the same offering format as before
+  3. Background prefetch loop keeps cache warm for all supported sports
 """
 
 import asyncio
-import json
 import logging
 import time
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
+
+import httpx
 
 from models import Bookmaker, Market, OddsEvent, Outcome, PlayerProp
 from sources.base import DataSource
@@ -87,28 +87,46 @@ _PERIOD_SPORTS = frozenset([
     "baseball_mlb",
 ])
 
+# Default headers for API requests
+_DEFAULT_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    "Accept": "application/json",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Origin": "https://www.betonline.ag",
+    "Referer": "https://www.betonline.ag/",
+}
+
+# Number of retries for failed HTTP requests
+_MAX_RETRIES = 2
+
 
 class BetOnlineSource(DataSource):
-    """Fetches odds from BetOnline via in-page fetch() API calls.
+    """Fetches odds from BetOnline via direct HTTP API calls.
 
-    Uses Playwright only to establish a browser session (CF cookies).
-    All data fetching is done via page.evaluate(fetch(...)), which avoids
-    the page navigation issues that caused 0 events in multi-browser contexts.
+    Uses httpx to POST to the offering API endpoint. No browser needed —
+    the API subdomain does not enforce Cloudflare challenges.
     """
 
     def __init__(self):
-        self._browser = None  # type: ignore
-        self._context = None  # type: ignore
-        self._page = None  # type: ignore
-        self._pw = None  # type: ignore
+        self._client: Optional[httpx.AsyncClient] = None
         self._lock = asyncio.Lock()
         # Cache: sport_key → (events, timestamp)
         self._cache: Dict[str, Tuple[List[OddsEvent], float]] = {}
         # Props cache: "props:{sport_key}:{event_id}" → (props, timestamp)
         self._props_cache: Dict[str, Tuple[List[PlayerProp], float]] = {}
         self._prefetch_task = None  # type: ignore
-        # Track consecutive zero-event cycles for browser health detection
+        # Track consecutive zero-event cycles for health detection
         self._consecutive_zero_cycles: int = 0
+
+    async def _ensure_client(self) -> None:
+        """Create the httpx async client if not already created."""
+        if self._client is None:
+            self._client = httpx.AsyncClient(
+                headers=_DEFAULT_HEADERS,
+                timeout=httpx.Timeout(30.0, connect=10.0),
+                follow_redirects=True,
+            )
+            logger.info("BetOnline: HTTP client created")
 
     def start_prefetch(self) -> None:
         """Start background prefetch of all supported sports (call after event loop is running)."""
@@ -116,43 +134,38 @@ class BetOnlineSource(DataSource):
 
     async def _prefetch_all(self) -> None:
         """Background task: continuously warm up cache for all supported sports."""
-        await asyncio.sleep(8)  # Stagger browser launch
+        await asyncio.sleep(8)  # Stagger startup
         logger.info("BetOnline: Starting continuous background prefetch")
         cycle = 0
         while True:
             cycle += 1
             cycle_total_events = 0
-            async with self._lock:
-                try:
-                    await self._ensure_browser()
-                    if self._page is None:
-                        logger.warning("BetOnline: No browser page, skipping cycle %d", cycle)
-                        await asyncio.sleep(30)
-                        continue
+            try:
+                await self._ensure_client()
 
-                    for sport_key, (sport, league) in BETONLINE_API_PARAMS.items():
-                        try:
-                            events = await self._fetch_sport_api(sport_key, sport, league)
-                            self._cache[sport_key] = (events, time.time())
-                            cycle_total_events += len(events)
-                            logger.info("BetOnline prefetch: %d events for %s", len(events), sport_key)
-                        except Exception as e:
-                            logger.warning("BetOnline prefetch failed for %s: %s", sport_key, e)
-                        # Small pause between API calls to avoid rate limiting
-                        await asyncio.sleep(0.5)
-                except Exception as e:
-                    logger.warning("BetOnline prefetch error: %s", e)
+                for sport_key, (sport, league) in BETONLINE_API_PARAMS.items():
+                    try:
+                        events = await self._fetch_sport_api(sport_key, sport, league)
+                        self._cache[sport_key] = (events, time.time())
+                        cycle_total_events += len(events)
+                        logger.info("BetOnline prefetch: %d events for %s", len(events), sport_key)
+                    except Exception as e:
+                        logger.warning("BetOnline prefetch failed for %s: %s", sport_key, e)
+                    # Small pause between API calls to avoid rate limiting
+                    await asyncio.sleep(0.5)
+            except Exception as e:
+                logger.warning("BetOnline prefetch error: %s", e)
 
-            # Track browser health: if we get 0 events for 2+ consecutive cycles,
-            # the browser session is likely stale — restart it
+            # Track health: if we get 0 events for 2+ consecutive cycles,
+            # recreate the HTTP client in case of stale connections
             if cycle_total_events == 0:
                 self._consecutive_zero_cycles += 1
                 if self._consecutive_zero_cycles >= 2:
                     logger.warning(
-                        "BetOnline: %d consecutive zero-event cycles — restarting browser",
+                        "BetOnline: %d consecutive zero-event cycles — recreating HTTP client",
                         self._consecutive_zero_cycles,
                     )
-                    await self._close_browser()
+                    await self._close_client()
                     self._consecutive_zero_cycles = 0
                     await asyncio.sleep(10)
             else:
@@ -164,97 +177,18 @@ class BetOnlineSource(DataSource):
             )
             await asyncio.sleep(15)  # Keep cache warm — 17 sports × 0.5s ≈ 9s + 15s pause
 
-    async def _ensure_browser(self) -> None:
-        """Launch Playwright browser with stealth mode to bypass Cloudflare."""
-        if self._page is not None:
-            return
-
-        try:
-            from playwright.async_api import async_playwright
-            self._pw = await async_playwright().start()
-
-            launch_args = [
-                "--disable-blink-features=AutomationControlled",
-                "--no-sandbox",
-                "--disable-dev-shm-usage",
-            ]
-            try:
-                self._browser = await self._pw.chromium.launch(
-                    headless=True,
-                    channel="chrome",
-                    args=launch_args,
-                )
-                logger.info("BetOnline: Launched system Chrome")
-            except Exception:
-                self._browser = await self._pw.chromium.launch(
-                    headless=True,
-                    args=launch_args,
-                )
-                logger.info("BetOnline: Launched bundled Chromium (fallback)")
-
-            self._context = await self._browser.new_context(
-                user_agent=(
-                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/131.0.0.0 Safari/537.36"
-                ),
-                viewport={"width": 1920, "height": 1080},
-                locale="en-US",
-            )
-            # Apply stealth evasions to bypass Cloudflare bot detection
-            try:
-                from playwright_stealth import Stealth
-                stealth = Stealth()
-                await stealth.apply_stealth_async(self._context)
-            except ImportError:
-                await self._context.add_init_script("""
-                    Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
-                    Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']});
-                    Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
-                    window.chrome = {runtime: {}};
-                """)
-            self._page = await self._context.new_page()
-            logger.info("BetOnline: Playwright browser launched (stealth mode)")
-
-            # Navigate to sportsbook to establish CF session cookies.
-            # This is the ONLY page navigation we do — all subsequent
-            # data fetching uses in-page fetch() calls.
-            try:
-                logger.info("BetOnline: Loading sportsbook page to establish session")
-                await self._page.goto(
-                    f"{SITE_URL}/sportsbook/basketball/nba",
-                    timeout=45000,
-                    wait_until="load",
-                )
-                # Wait for CF challenge to resolve and JS to execute
-                await asyncio.sleep(10)
-                title = await self._page.title()
-                logger.info("BetOnline: Session established (title: %r)", title)
-            except Exception as e:
-                logger.warning("BetOnline: Session setup navigation failed: %s", e)
-
-        except Exception as e:
-            logger.warning("BetOnline: Failed to launch browser: %s", e)
-            self._page = None
-
     # ------------------------------------------------------------------
-    # Core API fetch method (in-page fetch)
+    # Core API fetch method (direct HTTP)
     # ------------------------------------------------------------------
 
     async def _fetch_sport_api(
         self, sport_key: str, sport: str, league: str
     ) -> List[OddsEvent]:
-        """Fetch odds for one sport via in-page fetch() API call.
-
-        Makes the API call from within the browser's JavaScript context,
-        which shares the session cookies and avoids CF blocks.
+        """Fetch odds for one sport via direct HTTP POST to the API.
 
         For basketball/football, also fetches 1st-half and 1st-quarter
         lines via the Period parameter.
         """
-        if self._page is None:
-            return []
-
         # Fetch full-game lines
         full_game_data = await self._api_call(sport, league)
         if full_game_data is None:
@@ -282,61 +216,84 @@ class BetOnlineSource(DataSource):
     async def _api_call(
         self, sport: str, league: str, period: Optional[int] = None
     ) -> Optional[dict]:
-        """Make a single API call via page.evaluate(fetch(...)).
+        """Make a single API call via HTTP POST.
 
-        Returns the parsed JSON or None on failure.
+        Returns the parsed JSON or None on failure. Retries up to _MAX_RETRIES
+        times on transient failures.
         """
-        if self._page is None:
+        await self._ensure_client()
+        if self._client is None:
             return None
 
-        try:
-            # Build the payload in JS
-            js_code = """
-                async ([sport, league, period]) => {
-                    try {
-                        const body = {Sport: sport, League: league, ScheduleText: null, filterTime: 0};
-                        if (period !== null) body.Period = period;
-                        const r = await fetch("%s", {
-                            method: "POST",
-                            headers: {
-                                "Accept": "application/json",
-                                "Content-Type": "application/json",
-                                "gsetting": "bolsassite",
-                                "utc-offset": "300",
-                            },
-                            body: JSON.stringify(body),
-                        });
-                        if (!r.ok) return {error: r.status};
-                        return await r.json();
-                    } catch(e) {
-                        return {error: e.message};
-                    }
-                }
-            """ % API_URL
+        payload: dict = {
+            "Sport": sport,
+            "League": league,
+            "ScheduleText": None,
+            "filterTime": 0,
+        }
+        if period is not None:
+            payload["Period"] = period
 
-            result = await self._page.evaluate(js_code, [sport, league, period])
+        extra_headers = {
+            "Content-Type": "application/json",
+            "gsetting": "bolsassite",
+            "utc-offset": "300",
+        }
 
-            if not isinstance(result, dict):
-                return None
+        last_error = None
+        for attempt in range(_MAX_RETRIES + 1):
+            try:
+                resp = await self._client.post(
+                    API_URL,
+                    json=payload,
+                    headers=extra_headers,
+                )
 
-            # Check for error responses
-            if "error" in result:
-                err = result["error"]
-                if err == 403:
-                    # Session may have expired — flag for browser restart
+                if resp.status_code == 403:
                     logger.warning(
-                        "BetOnline: API returned 403 for %s/%s — session may be stale",
-                        sport, league,
+                        "BetOnline: API returned 403 for %s/%s (attempt %d)",
+                        sport, league, attempt + 1,
                     )
-                else:
-                    logger.debug("BetOnline: API error for %s/%s: %s", sport, league, err)
+                    last_error = "403"
+                    if attempt < _MAX_RETRIES:
+                        await asyncio.sleep(1 * (attempt + 1))
+                    continue
+
+                if resp.status_code != 200:
+                    logger.debug(
+                        "BetOnline: API returned %d for %s/%s",
+                        resp.status_code, sport, league,
+                    )
+                    last_error = str(resp.status_code)
+                    if attempt < _MAX_RETRIES:
+                        await asyncio.sleep(1 * (attempt + 1))
+                    continue
+
+                result = resp.json()
+                if not isinstance(result, dict):
+                    return None
+
+                return result
+
+            except (httpx.TimeoutException, httpx.TransportError) as e:
+                last_error = str(e)
+                logger.debug(
+                    "BetOnline: API call error for %s/%s (attempt %d): %s",
+                    sport, league, attempt + 1, e,
+                )
+                if attempt < _MAX_RETRIES:
+                    await asyncio.sleep(1 * (attempt + 1))
+                continue
+            except Exception as e:
+                logger.warning("BetOnline: API call error for %s/%s: %s", sport, league, e)
                 return None
 
-            return result
-
-        except Exception as e:
-            logger.warning("BetOnline: API call error for %s/%s: %s", sport, league, e)
-            return None
+        if last_error:
+            logger.warning(
+                "BetOnline: API call failed after %d attempts for %s/%s: %s",
+                _MAX_RETRIES + 1, sport, league, last_error,
+            )
+        return None
 
     # ------------------------------------------------------------------
     # Public interface: get_odds
@@ -358,7 +315,6 @@ class BetOnlineSource(DataSource):
             return [], {"x-requests-remaining": "unlimited"}
 
         # Always serve from cache — prefetch loop keeps it warm.
-        # Never fall through to Playwright navigation in the composite context.
         cached = self._cache.get(sport_key)
         if cached and (time.time() - cached[1]) < _CACHE_TTL:
             return cached[0], {"x-requests-remaining": "unlimited"}
@@ -602,19 +558,16 @@ class BetOnlineSource(DataSource):
             return cutoff
 
     # ------------------------------------------------------------------
-    # Player props (via in-page fetch — no page navigation)
+    # Player props (via direct HTTP)
     # ------------------------------------------------------------------
 
     async def get_player_props(
         self, sport_key: str, event_id: str
     ) -> List[PlayerProp]:
-        """Fetch player props from BetOnline's prop builder section.
+        """Fetch player props from BetOnline's prop offering API.
 
-        Strategy:
-        1. Navigate to the sport's props page
-        2. Capture API responses (offering/prop endpoints) passively
-        3. Parse captured JSON responses with multiple structure strategies
-        4. If API capture yields nothing, scrape the rendered DOM as fallback
+        Uses the same offering-by-league endpoint but looks for prop-style
+        game descriptions in the response.
         """
         cache_key = "props:%s:%s" % (sport_key, event_id)
         cached = self._props_cache.get(cache_key)
@@ -625,111 +578,31 @@ class BetOnlineSource(DataSource):
         if not url_path:
             return []
 
-        # Try to acquire lock; return stale cache or empty if busy
-        try:
-            await asyncio.wait_for(self._lock.acquire(), timeout=2.0)
-        except asyncio.TimeoutError:
-            if cached:
-                return cached[0]
+        api_params = BETONLINE_API_PARAMS.get(sport_key)
+        if not api_params:
             return []
 
+        sport, league = api_params
+        sport_url_base = "%s/%s" % (SITE_URL, url_path)
+
         try:
-            # Double-check cache after acquiring lock
-            cached = self._props_cache.get(cache_key)
-            if cached and (time.time() - cached[1]) < _CACHE_TTL:
-                return cached[0]
-
-            try:
-                await self._ensure_browser()
-                if self._page is None:
-                    return []
-
-                captured_responses = []  # type: List[Tuple[str, dict]]
-
-                async def on_response(response):
-                    url_lower = response.url.lower()
-                    if response.status != 200:
-                        return
-                    if any(
-                        kw in url_lower
-                        for kw in ("prop", "player", "builder", "alt-line",
-                                   "offering", "market", "odds", "event",
-                                   "game", "bet-offer", "wager")
-                    ):
-                        try:
-                            ct = response.headers.get("content-type", "")
-                            if "json" in ct or "javascript" in ct or "text" in ct:
-                                body = await response.text()
-                                data = json.loads(body)
-                                captured_responses.append((response.url, data))
-                        except Exception:
-                            pass
-
-                self._page.on("response", on_response)
-                try:
-                    props_url = "%s/%s/props" % (SITE_URL, url_path)
-                    await self._page.goto(props_url, timeout=30000)
-
-                    for i in range(30):
-                        if len(captured_responses) >= 2:
-                            break
-                        if captured_responses and i >= 20:
-                            break
-                        await asyncio.sleep(0.5)
-                finally:
-                    self._page.remove_listener("response", on_response)
-
-                sport_url_base = "%s/%s" % (SITE_URL, url_path)
-                props = []  # type: List[PlayerProp]
-
-                # Strategy 1: Parse captured API responses
-                for resp_url, resp_data in captured_responses:
-                    parsed = self._parse_props_api(resp_data, sport_url_base)
-                    if len(parsed) > len(props):
-                        props = parsed
-
-                # Strategy 2: Try offering-format responses for prop markets
-                if not props:
-                    for resp_url, resp_data in captured_responses:
-                        parsed = self._parse_props_from_offering(
-                            resp_data, sport_url_base
-                        )
-                        if len(parsed) > len(props):
-                            props = parsed
-
-                # Strategy 3: DOM scraping fallback
-                if not props:
-                    try:
-                        await asyncio.sleep(2)
-                        props = await self._scrape_props_dom(sport_url_base)
-                    except Exception as e:
-                        logger.debug("BetOnline: DOM prop scrape error: %s", e)
-
-                self._props_cache[cache_key] = (props, time.time())
-                logger.info(
-                    "BetOnline: %d props for %s / %s (from %d API responses)",
-                    len(props), sport_key, event_id, len(captured_responses),
-                )
-
-                # After props navigation, re-navigate to sportsbook to restore
-                # the session context for subsequent API fetch() calls
-                try:
-                    await self._page.goto(
-                        f"{SITE_URL}/sportsbook/basketball/nba",
-                        timeout=30000,
-                        wait_until="load",
-                    )
-                    await asyncio.sleep(5)
-                except Exception:
-                    pass
-
-                return props
-
-            except Exception as e:
-                logger.warning("BetOnline: Props failed for %s: %s", sport_key, e)
+            await self._ensure_client()
+            data = await self._api_call(sport, league)
+            if not data:
                 return []
-        finally:
-            self._lock.release()
+
+            props = self._parse_props_from_offering(data, sport_url_base)
+
+            self._props_cache[cache_key] = (props, time.time())
+            logger.info(
+                "BetOnline: %d props for %s / %s",
+                len(props), sport_key, event_id,
+            )
+            return props
+
+        except Exception as e:
+            logger.warning("BetOnline: Props failed for %s: %s", sport_key, e)
+            return []
 
     def _parse_props_api(
         self, data, sport_url_base: str
@@ -976,146 +849,6 @@ class BetOnlineSource(DataSource):
 
         return props
 
-    async def _scrape_props_dom(self, sport_url_base: str) -> List[PlayerProp]:
-        """Scrape player props from the rendered BetOnline prop builder DOM."""
-        if self._page is None:
-            return []
-
-        try:
-            raw_props = await self._page.evaluate("""
-                () => {
-                    const results = [];
-
-                    // Strategy 1: Look for prop rows in table-like structures
-                    const rows = document.querySelectorAll(
-                        'tr, [class*="prop"], [class*="player"], [data-testid*="prop"]'
-                    );
-
-                    for (const row of rows) {
-                        const text = row.textContent || '';
-                        const ouMatch = text.match(
-                            /(?:O(?:ver)?|U(?:nder)?)\s+(\d+\.?\d*)\s+([+-]\d+)/gi
-                        );
-                        if (!ouMatch || ouMatch.length < 1) continue;
-
-                        const nameEl = row.querySelector(
-                            '[class*="name"], [class*="player"], td:first-child, p:first-child'
-                        );
-                        const playerName = nameEl ? nameEl.textContent.trim() : '';
-                        if (!playerName || playerName.length < 3) continue;
-
-                        for (const match of ouMatch) {
-                            const parts = match.match(
-                                /(O(?:ver)?|U(?:nder)?)\s+(\d+\.?\d*)\s+([+-]\d+)/i
-                            );
-                            if (!parts) continue;
-                            results.push({
-                                player: playerName,
-                                side: parts[1].startsWith('O') ? 'Over' : 'Under',
-                                line: parseFloat(parts[2]),
-                                odds: parseInt(parts[3]),
-                                stat: ''
-                            });
-                        }
-                    }
-
-                    // Strategy 2: MUI-style buttons
-                    if (results.length === 0) {
-                        const cards = document.querySelectorAll(
-                            '[class*="card"], [class*="Card"], [class*="prop-row"]'
-                        );
-                        for (const card of cards) {
-                            const buttons = card.querySelectorAll('button');
-                            if (buttons.length < 2) continue;
-
-                            let playerName = '';
-                            const nameEls = card.querySelectorAll(
-                                'p, span, h3, h4, [class*="name"], [class*="player"]'
-                            );
-                            for (const el of nameEls) {
-                                const t = el.textContent.trim();
-                                if (t.length >= 3 && /^[A-Za-z.\s'-]+$/.test(t)
-                                    && t.split(' ').length >= 2) {
-                                    playerName = t;
-                                    break;
-                                }
-                            }
-                            if (!playerName) continue;
-
-                            for (const btn of buttons) {
-                                const btnParts = Array.from(btn.querySelectorAll('p, span'))
-                                    .map(el => el.textContent.trim());
-                                if (btnParts.length < 1) continue;
-
-                                for (let i = 0; i < btnParts.length; i++) {
-                                    const part = btnParts[i];
-                                    const ouParts = part.match(
-                                        /^(O|U|Over|Under)\s+(\d+\.?\d*)$/i
-                                    );
-                                    if (ouParts) {
-                                        const side = ouParts[1].startsWith('O')
-                                            ? 'Over' : 'Under';
-                                        const line = parseFloat(ouParts[2]);
-                                        const oddsStr = btnParts[i + 1] || '';
-                                        const odds = parseInt(
-                                            oddsStr.replace('+', '').replace(',', '')
-                                        );
-                                        if (!isNaN(odds) && !isNaN(line) && line > 0) {
-                                            results.push({
-                                                player: playerName,
-                                                side: side,
-                                                line: line,
-                                                odds: odds,
-                                                stat: ''
-                                            });
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    return results;
-                }
-            """)
-
-            if not raw_props or not isinstance(raw_props, list):
-                return []
-
-            props = []  # type: List[PlayerProp]
-            for item in raw_props:
-                if not isinstance(item, dict):
-                    continue
-                player = (item.get("player") or "").strip()
-                if not player or len(player) < 3:
-                    continue
-                line = item.get("line", 0)
-                odds = item.get("odds", 0)
-                side = item.get("side", "Over")
-                stat_raw = item.get("stat", "")
-                if not line or not odds:
-                    continue
-
-                stat_type = self._classify_stat(stat_raw) if stat_raw else "other"
-
-                props.append(PlayerProp(
-                    player_name=player,
-                    stat_type=stat_type,
-                    line=float(line),
-                    price=int(odds),
-                    description=side,
-                    bookmaker_key="betonlineag",
-                    bookmaker_title="BetOnline",
-                    event_url=sport_url_base,
-                ))
-
-            logger.info("BetOnline: DOM prop scrape found %d props", len(props))
-            return props
-
-        except Exception as e:
-            logger.warning("BetOnline: DOM prop scrape error: %s", e)
-            return []
-
     # ------------------------------------------------------------------
     # Stat classifier
     # ------------------------------------------------------------------
@@ -1191,29 +924,20 @@ class BetOnlineSource(DataSource):
         return "other"
 
     # ------------------------------------------------------------------
-    # Browser lifecycle
+    # HTTP client lifecycle
     # ------------------------------------------------------------------
 
-    async def _close_browser(self) -> None:
-        """Close and reset the browser for recovery."""
-        logger.info("BetOnline: Closing browser for restart")
+    async def _close_client(self) -> None:
+        """Close and reset the HTTP client for recovery."""
+        logger.info("BetOnline: Closing HTTP client for restart")
         try:
-            if self._page:
-                await self._page.close()
-            if self._context:
-                await self._context.close()
-            if self._browser:
-                await self._browser.close()
-            if self._pw:
-                await self._pw.stop()
+            if self._client:
+                await self._client.aclose()
         except Exception as e:
-            logger.debug("BetOnline: Error closing browser: %s", e)
+            logger.debug("BetOnline: Error closing HTTP client: %s", e)
         finally:
-            self._page = None
-            self._context = None
-            self._browser = None
-            self._pw = None
+            self._client = None
 
     async def close(self) -> None:
-        """Shut down the Playwright browser."""
-        await self._close_browser()
+        """Shut down the HTTP client."""
+        await self._close_client()

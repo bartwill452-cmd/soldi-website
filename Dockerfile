@@ -12,8 +12,6 @@ WORKDIR /app
 # Install Python dependencies (cache layer)
 COPY soldi-api/requirements.txt ./soldi-api/
 RUN pip install --no-cache-dir -r soldi-api/requirements.txt
-# NOTE: Playwright browsers NOT installed — all Playwright scrapers
-# are disabled via DISABLED_SCRAPERS env var to save ~300MB RAM.
 
 # Install Node.js dependencies (cache layer)
 COPY package.json package-lock.json ./

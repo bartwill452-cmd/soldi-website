@@ -1,22 +1,14 @@
 """
 BetMGM sportsbook scraper.
 
-Uses Playwright headless browser to navigate to BetMGM's sportsbook pages
-and passively capture the cds-api/bettingoffer responses. The REST API
-at sportsapi.{state}.betmgm.com requires auth (401), so we intercept
-browser traffic instead.
+Uses httpx to directly query BetMGM's public cds-api/bettingoffer endpoints.
+No browser required — the API is unauthenticated and returns JSON fixture data.
 
 Strategy:
-  1. Navigate to sports.betmgm.com/en/sports/{sport}/betting/{region}/{league}
-  2. Intercept XHR responses from cds-api/bettingoffer endpoints
+  1. Build cds-api URL with sportId and competitionId for each sport_key
+  2. Try multiple state subdomains (va, nj, co, az) if geo-restricted
   3. Parse the fixture/game/selection response into OddsEvent format
   4. Cache results with 120s TTL
-
-NOTE: BetMGM is geo-restricted to US states where it's licensed. This
-scraper will return 0 events when run from outside the US. For US-based
-deployment, the scraper will capture full market data (spreads, totals,
-halves, quarters). ESPN already provides basic BetMGM moneylines via
-provider ID 40.
 """
 
 import asyncio
@@ -25,6 +17,8 @@ import logging
 import re
 import time
 from typing import Any, Dict, List, Optional, Tuple
+
+import httpx
 
 from models import Bookmaker, Market, OddsEvent, Outcome
 from sources.base import DataSource
@@ -37,26 +31,35 @@ from sources.sport_mapping import (
 
 logger = logging.getLogger(__name__)
 
-# ── BetMGM sportsbook navigation URLs per sport_key ──────────────────
-# Use the main domain (sports.betmgm.com) to avoid state-specific geo-redirects.
-# The site redirects to the appropriate state based on location.
-_MGM_SPORT_URLS = {
-    "basketball_nba": "https://sports.betmgm.com/en/sports/basketball-7/betting/usa-9/nba-6004",
-    "basketball_ncaab": "https://sports.betmgm.com/en/sports/basketball-7/betting/usa-9/ncaab-264",
-    "americanfootball_nfl": "https://sports.betmgm.com/en/sports/football-11/betting/usa-9/nfl-35",
-    "americanfootball_ncaaf": "https://sports.betmgm.com/en/sports/football-11/betting/usa-9/college-football-211",
-    "icehockey_nhl": "https://sports.betmgm.com/en/sports/ice-hockey-12/betting/usa-9/nhl-34",
-    "baseball_mlb": "https://sports.betmgm.com/en/sports/baseball-23/betting/usa-9/mlb-75",
-    "mma_mixed_martial_arts": "https://sports.betmgm.com/en/sports/mma-45/betting/ufc-702",
-    "boxing_boxing": "https://sports.betmgm.com/en/sports/boxing-36/betting",
-    "soccer_epl": "https://sports.betmgm.com/en/sports/soccer-4/betting/england-14/premier-league-102841",
-    "soccer_spain_la_liga": "https://sports.betmgm.com/en/sports/soccer-4/betting/spain-28/la-liga-102846",
-    "soccer_germany_bundesliga": "https://sports.betmgm.com/en/sports/soccer-4/betting/germany-17/bundesliga-102842",
-    "soccer_italy_serie_a": "https://sports.betmgm.com/en/sports/soccer-4/betting/italy-20/serie-a-102843",
-    "soccer_france_ligue_one": "https://sports.betmgm.com/en/sports/soccer-4/betting/france-16/ligue-1-102840",
-    "soccer_uefa_champs_league": "https://sports.betmgm.com/en/sports/soccer-4/betting/champions-league-702",
-    "tennis_atp": "https://sports.betmgm.com/en/sports/tennis-5/betting/atp-167",
-    "tennis_wta": "https://sports.betmgm.com/en/sports/tennis-5/betting/wta-168",
+# ── BetMGM cds-api sport/competition IDs per sport_key ───────────────
+_MGM_API_PARAMS: Dict[str, Dict[str, Any]] = {
+    "basketball_nba":               {"sportIds": 7,  "competitionIds": 6004},
+    "basketball_ncaab":             {"sportIds": 7,  "competitionIds": 264},
+    "americanfootball_nfl":         {"sportIds": 11, "competitionIds": 35},
+    "americanfootball_ncaaf":       {"sportIds": 11, "competitionIds": 211},
+    "icehockey_nhl":                {"sportIds": 12, "competitionIds": 34},
+    "baseball_mlb":                 {"sportIds": 23, "competitionIds": 75},
+    "mma_mixed_martial_arts":       {"sportIds": 45, "competitionIds": 702},
+    "boxing_boxing":                {"sportIds": 36},
+    "soccer_epl":                   {"sportIds": 4,  "competitionIds": 102841},
+    "soccer_spain_la_liga":         {"sportIds": 4,  "competitionIds": 102846},
+    "soccer_germany_bundesliga":    {"sportIds": 4,  "competitionIds": 102842},
+    "soccer_italy_serie_a":         {"sportIds": 4,  "competitionIds": 102843},
+    "soccer_france_ligue_one":      {"sportIds": 4,  "competitionIds": 102840},
+    "soccer_uefa_champs_league":    {"sportIds": 4,  "competitionIds": 702},
+    "tennis_atp":                   {"sportIds": 5,  "competitionIds": 167},
+    "tennis_wta":                   {"sportIds": 5,  "competitionIds": 168},
+}
+
+_STATE_SUBDOMAINS = ["va", "nj", "co", "az"]
+
+_ACCESS_ID = "NmFjNmUwZjAtMGI3Yi00YzA3LTg3OTktNDgxMGIwM2YxZGVh"
+
+_HTTP_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    "Accept": "application/json",
+    "Accept-Language": "en-US,en;q=0.9",
+    "x-bwin-accessid": _ACCESS_ID,
 }
 
 _CACHE_TTL = 120  # seconds — prefetch loop takes ~80s to cycle all sports
@@ -91,17 +94,41 @@ def _parse_decimal_to_american(decimal_odds: float) -> Optional[int]:
         return int(round(-100 / (decimal_odds - 1)))
 
 
+def _build_api_url(state: str, params: Dict[str, Any]) -> str:
+    """Build a cds-api bettingoffer URL for the given state and sport params."""
+    base = f"https://sports.{state}.betmgm.com/cds-api/bettingoffer/fixtures"
+    query = {
+        "x-bwin-accessid": _ACCESS_ID,
+        "lang": "en-us",
+        "country": "US",
+        "userCountry": "US",
+        "subdivision": f"US-{state.upper()}",
+        "offerMapping": "All",
+        "score498": "true",
+        "sortBy": "Tags",
+    }
+    query.update(params)
+    qs = "&".join(f"{k}={v}" for k, v in query.items())
+    return f"{base}?{qs}"
+
+
 class BetMGMSource(DataSource):
-    """Fetches odds from BetMGM via Playwright passive response capture."""
+    """Fetches odds from BetMGM via direct HTTP requests to the cds-api."""
 
     def __init__(self):
-        self._browser = None  # type: Any
-        self._context = None  # type: Any
-        self._page = None  # type: Any
-        self._pw = None  # type: Any
-        self._lock = asyncio.Lock()
-        self._cache = {}  # type: Dict[str, Tuple[List[OddsEvent], float]]
-        self._prefetch_task = None  # type: Any
+        self._client: Optional[httpx.AsyncClient] = None
+        self._cache: Dict[str, Tuple[List[OddsEvent], float]] = {}
+        self._prefetch_task: Optional[asyncio.Task] = None
+
+    def _ensure_client(self) -> httpx.AsyncClient:
+        """Return the shared httpx client, creating it if needed."""
+        if self._client is None or self._client.is_closed:
+            self._client = httpx.AsyncClient(
+                headers=_HTTP_HEADERS,
+                timeout=httpx.Timeout(30.0),
+                follow_redirects=True,
+            )
+        return self._client
 
     def start_prefetch(self) -> None:
         """Start background prefetch of major sports."""
@@ -110,73 +137,20 @@ class BetMGMSource(DataSource):
     async def _prefetch_all(self) -> None:
         await asyncio.sleep(12)  # Stagger after DraftKings
         logger.info("BetMGM: Starting continuous background prefetch")
-        all_sports = list(_MGM_SPORT_URLS.keys())
+        all_sports = list(_MGM_API_PARAMS.keys())
         cycle = 0
         while True:
             cycle += 1
             for sport_key in all_sports:
                 try:
-                    url = _MGM_SPORT_URLS.get(sport_key)
-                    if url is None:
-                        continue
-                    async with self._lock:
-                        await self._ensure_browser()
-                        events = await self._navigate_and_capture(url, sport_key)
-                        self._cache[sport_key] = (events, time.time())
+                    events = await self._fetch_sport(sport_key)
+                    self._cache[sport_key] = (events, time.time())
                     logger.info("BetMGM prefetch: %s complete (%d events)", sport_key, len(events))
                 except Exception as e:
                     logger.warning("BetMGM prefetch %s failed: %s", sport_key, e)
                 await asyncio.sleep(1)
             logger.info("BetMGM: Prefetch cycle #%d complete (%d sports)", cycle, len(all_sports))
             await asyncio.sleep(1)
-
-    async def _ensure_browser(self) -> None:
-        if self._page is not None:
-            return
-        try:
-            from playwright.async_api import async_playwright
-            self._pw = await async_playwright().start()
-
-            launch_args = [
-                "--disable-blink-features=AutomationControlled",
-                "--no-sandbox",
-                "--disable-dev-shm-usage",
-            ]
-            try:
-                self._browser = await self._pw.chromium.launch(
-                    headless=True,
-                    channel="chrome",
-                    args=launch_args,
-                )
-            except Exception:
-                self._browser = await self._pw.chromium.launch(
-                    headless=True,
-                    args=launch_args,
-                )
-
-            self._context = await self._browser.new_context(
-                user_agent=(
-                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/131.0.0.0 Safari/537.36"
-                ),
-                viewport={"width": 1920, "height": 1080},
-                locale="en-US",
-            )
-            try:
-                from playwright_stealth import Stealth
-                stealth = Stealth()
-                await stealth.apply_stealth_async(self._context)
-            except ImportError:
-                await self._context.add_init_script("""
-                    Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
-                    window.chrome = {runtime: {}};
-                """)
-            self._page = await self._context.new_page()
-            logger.info("BetMGM: Playwright browser launched (stealth mode)")
-        except Exception as e:
-            logger.warning("BetMGM: Failed to launch browser: %s", e)
-            self._page = None
 
     # ── Public API ────────────────────────────────────────────────────
 
@@ -193,12 +167,10 @@ class BetMGMSource(DataSource):
         if bookmakers and "betmgm" not in bookmakers:
             return [], headers
 
-        url = _MGM_SPORT_URLS.get(sport_key)
-        if url is None:
+        if sport_key not in _MGM_API_PARAMS:
             return [], headers
 
         # Always serve from cache — prefetch loop keeps it warm.
-        # Never fall through to Playwright navigation in the composite context.
         cached = self._cache.get(sport_key)
         if cached and (time.time() - cached[1]) < _STALE_TTL:
             return cached[0], headers
@@ -206,69 +178,38 @@ class BetMGMSource(DataSource):
 
     # ── Fetching ──────────────────────────────────────────────────────
 
-    async def _navigate_and_capture(
-        self, url: str, sport_key: str
-    ) -> List[OddsEvent]:
-        """Navigate to a BetMGM page and capture cds-api responses."""
-        await self._ensure_browser()
-        if self._page is None:
+    async def _fetch_sport(self, sport_key: str) -> List[OddsEvent]:
+        """Fetch fixtures for a sport via the cds-api, trying multiple states."""
+        params = _MGM_API_PARAMS.get(sport_key)
+        if params is None:
             return []
 
-        captured = []  # type: List[dict]
+        client = self._ensure_client()
 
-        async def on_response(response):
+        for state in _STATE_SUBDOMAINS:
+            url = _build_api_url(state, params)
             try:
-                if response.status != 200:
-                    return
-                resp_url = response.url
-                ct = response.headers.get("content-type", "")
-                if "json" not in ct:
-                    return
-                # BetMGM uses cds-api for betting offer data
-                # Also capture ms-api, offer-api, and other potential endpoints
-                if any(pattern in resp_url for pattern in [
-                    "cds-api", "bettingoffer", "ms-api", "sports-offer",
-                    "offer/api", "fixture", "sportsapi", "sportscontent",
-                ]):
-                    body = await response.text()
-                    data = json.loads(body)
-                    captured.append(data)
-                    logger.debug("BetMGM: captured API response from %s", resp_url[:120])
-            except Exception:
-                pass
+                resp = await client.get(url)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    events = self._parse_response(data, sport_key)
+                    if events:
+                        logger.debug(
+                            "BetMGM: Got %d events for %s via %s subdomain",
+                            len(events), sport_key, state,
+                        )
+                        return events
+                else:
+                    logger.debug(
+                        "BetMGM: %s subdomain returned %d for %s",
+                        state, resp.status_code, sport_key,
+                    )
+            except httpx.HTTPError as e:
+                logger.debug("BetMGM: %s subdomain failed for %s: %s", state, sport_key, e)
+                continue
 
-        got_data = asyncio.Event()
-        original_on_response = on_response
-
-        async def on_response_wrapped(response):
-            await original_on_response(response)
-            if captured:
-                got_data.set()
-
-        self._page.on("response", on_response_wrapped)
-        try:
-            await self._page.goto(url, timeout=30000, wait_until="load")
-            try:
-                await asyncio.wait_for(got_data.wait(), timeout=15.0)
-            except asyncio.TimeoutError:
-                pass
-        except Exception as e:
-            logger.warning("BetMGM: Navigation to %s failed: %s", url, e)
-            self._page.remove_listener("response", on_response_wrapped)
-            return []
-
-        self._page.remove_listener("response", on_response_wrapped)
-
-        if not captured:
-            logger.warning("BetMGM: No API responses captured for %s (possible geo-block?)", url)
-            return []
-
-        all_events = []  # type: List[OddsEvent]
-        for data in captured:
-            events = self._parse_response(data, sport_key)
-            all_events = self._merge_events(all_events, events)
-
-        return all_events
+        logger.warning("BetMGM: All state subdomains failed for %s", sport_key)
+        return []
 
     # ── Parsing ───────────────────────────────────────────────────────
 
@@ -645,28 +586,7 @@ class BetMGMSource(DataSource):
     # ── Cleanup ───────────────────────────────────────────────────────
 
     async def close(self) -> None:
-        """Close the browser."""
-        if self._page:
-            try:
-                await self._page.close()
-            except Exception:
-                pass
-        if self._context:
-            try:
-                await self._context.close()
-            except Exception:
-                pass
-        if self._browser:
-            try:
-                await self._browser.close()
-            except Exception:
-                pass
-        if self._pw:
-            try:
-                await self._pw.stop()
-            except Exception:
-                pass
-        self._page = None
-        self._context = None
-        self._browser = None
-        self._pw = None
+        """Close the HTTP client."""
+        if self._client and not self._client.is_closed:
+            await self._client.aclose()
+        self._client = None

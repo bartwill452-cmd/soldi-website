@@ -1,15 +1,13 @@
 """
 Caesars sportsbook scraper (formerly William Hill).
 
-Uses Playwright headless browser to navigate to Caesars sportsbook pages
-and passively capture the api.americanwagering.com API responses.
+Uses direct HTTP calls to api.americanwagering.com to fetch odds data.
 
 Strategy:
-  1. Try direct API call to api.americanwagering.com (fastest, no browser)
-  2. Fallback: Navigate to sportsbook.caesars.com/us/{state}/bet/{sport}/{league}
-  3. Intercept XHR responses from americanwagering.com
-  4. Parse the events/markets/selections response into OddsEvent format
-  5. Cache results with 120s TTL
+  1. Call api.americanwagering.com directly for each sport
+  2. Try multiple state jurisdictions (nj, va, az, co, il, in, oh, pa) if primary fails
+  3. Parse the events/markets/selections response into OddsEvent format
+  4. Cache results with 120s TTL
 
 NOTE: Caesars is geo-restricted to US states where it's licensed. This
 scraper will return 0 events when run from outside the US. For US-based
@@ -19,7 +17,6 @@ provider ID 38 (williamhill_us).
 """
 
 import asyncio
-import json
 import logging
 import re
 import time
@@ -37,34 +34,10 @@ from sources.sport_mapping import (
 
 logger = logging.getLogger(__name__)
 
-# ── Caesars sportsbook navigation URLs per sport_key ─────────────────
-# Try multiple URL patterns: some versions work without geo-restriction
-_CZR_SPORT_URLS = {
-    "basketball_nba": "https://sportsbook.caesars.com/us/nj/bet/basketball/nba",
-    "basketball_ncaab": "https://sportsbook.caesars.com/us/nj/bet/basketball/ncaa-basketball",
-    "americanfootball_nfl": "https://sportsbook.caesars.com/us/nj/bet/football/nfl",
-    "americanfootball_ncaaf": "https://sportsbook.caesars.com/us/nj/bet/football/ncaa-football",
-    "icehockey_nhl": "https://sportsbook.caesars.com/us/nj/bet/hockey/nhl",
-    "baseball_mlb": "https://sportsbook.caesars.com/us/nj/bet/baseball/mlb",
-    "mma_mixed_martial_arts": "https://sportsbook.caesars.com/us/nj/bet/mma/ufc",
-    "boxing_boxing": "https://sportsbook.caesars.com/us/nj/bet/boxing",
-    "soccer_epl": "https://sportsbook.caesars.com/us/nj/bet/soccer/england-premier-league",
-    "soccer_spain_la_liga": "https://sportsbook.caesars.com/us/nj/bet/soccer/spain-la-liga",
-    "soccer_germany_bundesliga": "https://sportsbook.caesars.com/us/nj/bet/soccer/germany-bundesliga",
-    "soccer_italy_serie_a": "https://sportsbook.caesars.com/us/nj/bet/soccer/italy-serie-a",
-    "soccer_france_ligue_one": "https://sportsbook.caesars.com/us/nj/bet/soccer/france-ligue-1",
-    "soccer_uefa_champs_league": "https://sportsbook.caesars.com/us/nj/bet/soccer/uefa-champions-league",
-    "tennis_atp": "https://sportsbook.caesars.com/us/nj/bet/tennis",
-    "tennis_wta": "https://sportsbook.caesars.com/us/nj/bet/tennis",
-}
-
-# Alternate state URLs to try if primary geo-blocks
-_CZR_ALT_STATES = ["az", "co", "il", "in", "oh", "pa", "va"]
-
 # ── Direct API config ────────────────────────────────────────────────
-_API_BASE = "https://api.americanwagering.com/regions/us/locations/nj/brands/czr/sb/v3"
+_API_BASE_TEMPLATE = "https://api.americanwagering.com/regions/us/locations/{state}/brands/czr/sb/v3"
 
-# Sport slugs for direct API calls (if available)
+# Sport slugs for direct API calls
 _CZR_SPORT_SLUGS = {
     "basketball_nba": "basketball/competitions/nba",
     "basketball_ncaab": "basketball/competitions/ncaa-basketball",
@@ -84,9 +57,15 @@ _CZR_SPORT_SLUGS = {
     "boxing_boxing": "boxing/competitions/boxing",
 }
 
+# Supported sport keys (same set as slugs)
+_SUPPORTED_SPORTS = set(_CZR_SPORT_SLUGS.keys())
+
 _CACHE_TTL = 120  # seconds — prefetch loop takes ~80s to cycle all sports
 _STALE_TTL = 900  # seconds — serve stale data up to 15 minutes (prefetch cycle ~13min)
 _JURISDICTION = "nj"
+
+# Jurisdictions to try in order if primary fails
+_JURISDICTIONS = ["nj", "va", "az", "co", "il", "in", "oh", "pa"]
 
 
 def _decimal_to_american(decimal_odds: float) -> Optional[int]:
@@ -100,14 +79,9 @@ def _decimal_to_american(decimal_odds: float) -> Optional[int]:
 
 
 class CaesarsSource(DataSource):
-    """Fetches odds from Caesars via Playwright passive capture."""
+    """Fetches odds from Caesars via direct HTTP API calls."""
 
     def __init__(self):
-        self._browser = None  # type: Any
-        self._context = None  # type: Any
-        self._page = None  # type: Any
-        self._pw = None  # type: Any
-        self._lock = asyncio.Lock()
         self._cache = {}  # type: Dict[str, Tuple[List[OddsEvent], float]]
         self._prefetch_task = None  # type: Any
         self._http_client = httpx.AsyncClient(
@@ -121,10 +95,8 @@ class CaesarsSource(DataSource):
                 "Accept": "application/json",
             },
         )
-        # Track if direct API works to skip Playwright
-        self._direct_api_works = None  # type: Optional[bool]
-        # Timestamp when direct API was last marked as failed (retry after 5 min)
-        self._direct_api_failed_at = 0.0
+        # Track which jurisdiction works best
+        self._working_jurisdiction = _JURISDICTION  # type: str
 
     def start_prefetch(self) -> None:
         """Start background prefetch of major sports."""
@@ -133,39 +105,13 @@ class CaesarsSource(DataSource):
     async def _prefetch_all(self) -> None:
         await asyncio.sleep(16)  # Stagger after BetMGM
         logger.info("Caesars: Starting continuous background prefetch")
-        all_sports = list(_CZR_SPORT_URLS.keys())
+        all_sports = list(_SUPPORTED_SPORTS)
         cycle = 0
         while True:
             cycle += 1
             for sport_key in all_sports:
                 try:
-                    url = _CZR_SPORT_URLS.get(sport_key)
-                    if url is None:
-                        continue
-                    events = []  # type: list
-
-                    # Try direct API first (faster, no browser needed)
-                    should_try_api = (
-                        self._direct_api_works is not False
-                        or (time.time() - self._direct_api_failed_at) > 300
-                    )
-                    if should_try_api:
-                        events = await self._fetch_direct_api(sport_key)
-                        if events:
-                            if not self._direct_api_works:
-                                self._direct_api_works = True
-                                logger.info("Caesars: Direct API works, skipping Playwright")
-
-                    # Fallback to Playwright capture
-                    if not events:
-                        if self._direct_api_works is None or self._direct_api_works is True:
-                            self._direct_api_works = False
-                            self._direct_api_failed_at = time.time()
-                            logger.info("Caesars: Direct API failed, using Playwright")
-                        async with self._lock:
-                            await self._ensure_browser()
-                            events = await self._navigate_and_capture(url, sport_key)
-
+                    events = await self._fetch_direct_api(sport_key)
                     self._cache[sport_key] = (events, time.time())
                     logger.info("Caesars prefetch: %s complete (%d events)", sport_key, len(events))
                 except Exception as e:
@@ -173,54 +119,6 @@ class CaesarsSource(DataSource):
                 await asyncio.sleep(1)
             logger.info("Caesars: Prefetch cycle #%d complete (%d sports)", cycle, len(all_sports))
             await asyncio.sleep(1)
-
-    async def _ensure_browser(self) -> None:
-        if self._page is not None:
-            return
-        try:
-            from playwright.async_api import async_playwright
-            self._pw = await async_playwright().start()
-
-            launch_args = [
-                "--disable-blink-features=AutomationControlled",
-                "--no-sandbox",
-                "--disable-dev-shm-usage",
-            ]
-            try:
-                self._browser = await self._pw.chromium.launch(
-                    headless=True,
-                    channel="chrome",
-                    args=launch_args,
-                )
-            except Exception:
-                self._browser = await self._pw.chromium.launch(
-                    headless=True,
-                    args=launch_args,
-                )
-
-            self._context = await self._browser.new_context(
-                user_agent=(
-                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/131.0.0.0 Safari/537.36"
-                ),
-                viewport={"width": 1920, "height": 1080},
-                locale="en-US",
-            )
-            try:
-                from playwright_stealth import Stealth
-                stealth = Stealth()
-                await stealth.apply_stealth_async(self._context)
-            except ImportError:
-                await self._context.add_init_script("""
-                    Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
-                    window.chrome = {runtime: {}};
-                """)
-            self._page = await self._context.new_page()
-            logger.info("Caesars: Playwright browser launched (stealth mode)")
-        except Exception as e:
-            logger.warning("Caesars: Failed to launch browser: %s", e)
-            self._page = None
 
     # ── Public API ────────────────────────────────────────────────────
 
@@ -237,12 +135,10 @@ class CaesarsSource(DataSource):
         if bookmakers and "williamhill_us" not in bookmakers:
             return [], headers
 
-        url = _CZR_SPORT_URLS.get(sport_key)
-        if url is None:
+        if sport_key not in _SUPPORTED_SPORTS:
             return [], headers
 
         # Always serve from cache — prefetch loop keeps it warm.
-        # Never fall through to Playwright navigation in the composite context.
         cached = self._cache.get(sport_key)
         if cached and (time.time() - cached[1]) < _STALE_TTL:
             return cached[0], headers
@@ -251,99 +147,46 @@ class CaesarsSource(DataSource):
     # ── Direct API Fetching ───────────────────────────────────────────
 
     async def _fetch_direct_api(self, sport_key: str) -> List[OddsEvent]:
-        """Try to fetch events directly from api.americanwagering.com."""
+        """Fetch events directly from api.americanwagering.com.
+
+        Tries multiple state jurisdictions if the primary one fails.
+        """
         slug = _CZR_SPORT_SLUGS.get(sport_key)
         if not slug:
             return []
 
-        try:
-            # Try the events listing endpoint
-            url = f"{_API_BASE}/{slug}/events"
-            response = await self._http_client.get(url)
-            if response.status_code != 200:
-                return []
+        # Try working jurisdiction first, then fall back to others
+        jurisdictions = [self._working_jurisdiction] + [
+            j for j in _JURISDICTIONS if j != self._working_jurisdiction
+        ]
 
-            data = response.json()
-            if not isinstance(data, (list, dict)):
-                return []
-
-            return self._parse_api_response(data, sport_key)
-        except Exception as e:
-            logger.debug("Caesars direct API failed: %s", e)
-            return []
-
-    # ── Playwright Fetching ───────────────────────────────────────────
-
-    async def _navigate_and_capture(
-        self, url: str, sport_key: str
-    ) -> List[OddsEvent]:
-        """Navigate to a Caesars page and capture americanwagering API responses."""
-        await self._ensure_browser()
-        if self._page is None:
-            return []
-
-        captured = []  # type: List[dict]
-
-        async def on_response(response):
+        for state in jurisdictions:
             try:
-                if response.status != 200:
-                    return
-                resp_url = response.url
-                ct = response.headers.get("content-type", "")
-                if "json" not in ct:
-                    return
-                # Capture from americanwagering.com (Caesars data API)
-                # Also capture from caesars-owned APIs and any offering endpoints
-                if any(pattern in resp_url for pattern in [
-                    "americanwagering.com",
-                    "/sb/", "/sportsbook/",
-                    "offering", "events", "fixtures",
-                    "sportscontent",
-                ]):
-                    body = await response.text()
-                    data = json.loads(body)
-                    # Only capture if it looks like event data
-                    if isinstance(data, list) or (isinstance(data, dict) and any(
-                        k in data for k in ["markets", "events", "competitions",
-                                            "fixtures", "selections", "name"]
-                    )):
-                        captured.append(data)
-                        logger.debug("Caesars: captured API response from %s", resp_url[:120])
-            except Exception:
-                pass
+                api_base = _API_BASE_TEMPLATE.format(state=state)
+                url = f"{api_base}/{slug}/events"
+                response = await self._http_client.get(url)
+                if response.status_code != 200:
+                    continue
 
-        got_data = asyncio.Event()
-        original_on_response = on_response
+                data = response.json()
+                if not isinstance(data, (list, dict)):
+                    continue
 
-        async def on_response_wrapped(response):
-            await original_on_response(response)
-            if captured:
-                got_data.set()
+                events = self._parse_api_response(data, sport_key)
+                if events:
+                    # Remember which jurisdiction worked
+                    if state != self._working_jurisdiction:
+                        logger.info(
+                            "Caesars: Switching working jurisdiction from %s to %s",
+                            self._working_jurisdiction, state,
+                        )
+                        self._working_jurisdiction = state
+                    return events
+            except Exception as e:
+                logger.debug("Caesars direct API failed for %s/%s: %s", state, sport_key, e)
+                continue
 
-        self._page.on("response", on_response_wrapped)
-        try:
-            await self._page.goto(url, timeout=30000, wait_until="load")
-            try:
-                await asyncio.wait_for(got_data.wait(), timeout=15.0)
-            except asyncio.TimeoutError:
-                pass
-        except Exception as e:
-            logger.warning("Caesars: Navigation to %s failed: %s", url, e)
-            self._page.remove_listener("response", on_response_wrapped)
-            return []
-
-        self._page.remove_listener("response", on_response_wrapped)
-
-        if not captured:
-            logger.warning("Caesars: No API responses captured for %s (possible geo-block?)", url)
-            return []
-
-        all_events = []  # type: List[OddsEvent]
-        for data in captured:
-            events = self._parse_api_response(data, sport_key)
-            all_events = self._merge_events(all_events, events)
-
-        return all_events
+        return []
 
     # ── Parsing ───────────────────────────────────────────────────────
 
@@ -766,29 +609,5 @@ class CaesarsSource(DataSource):
     # ── Cleanup ───────────────────────────────────────────────────────
 
     async def close(self) -> None:
-        """Close browser and HTTP client."""
+        """Close HTTP client."""
         await self._http_client.aclose()
-        if self._page:
-            try:
-                await self._page.close()
-            except Exception:
-                pass
-        if self._context:
-            try:
-                await self._context.close()
-            except Exception:
-                pass
-        if self._browser:
-            try:
-                await self._browser.close()
-            except Exception:
-                pass
-        if self._pw:
-            try:
-                await self._pw.stop()
-            except Exception:
-                pass
-        self._page = None
-        self._context = None
-        self._browser = None
-        self._pw = None

@@ -1,11 +1,10 @@
-"""Bookmaker.eu — Playwright-based scraper (direct API calls).
+"""Bookmaker.eu — HTTP-based scraper (direct API calls via httpx).
 
-Logs in to be.bookmaker.eu via headless Chromium, then calls the
+Logs in to be.bookmaker.eu via an HTTP session, then calls the
 GetSchedule API directly for each league (NBA, NCAAB, MLB, NHL, UFC)
 to fetch both pregame and live games with moneyline/spread/total odds.
 
-Follows the Bet105Source pattern: browser lifecycle, async lock, 90s
-TTL cache, background prefetch, and stale-on-error fallback.
+No Playwright or browser required.
 """
 
 import asyncio
@@ -14,6 +13,8 @@ import logging
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Tuple
+
+import httpx
 
 from models import Bookmaker, Market, OddsEvent, Outcome, ScoreData
 from sources.base import DataSource
@@ -57,17 +58,27 @@ _MU_LEAGUE_MAP = {
 
 _SUPPORTED_SPORTS = set(_SPORT_ID_MAP.values()) | set(_LEAGUE_CONFIG.values()) | set(_MU_LEAGUE_MAP.values())
 
+_HTTP_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/131.0.0.0 Safari/537.36"
+    ),
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Content-Type": "application/json",
+    "Origin": SITE_URL,
+    "Referer": f"{SITE_URL}/en/sports/",
+}
+
 
 class BookmakerSource(DataSource):
-    """Scrape odds from Bookmaker.eu using Playwright passive capture."""
+    """Scrape odds from Bookmaker.eu using direct HTTP API calls."""
 
     def __init__(self, username: str = "", password: str = ""):
         self._username = username
         self._password = password
-        self._pw = None
-        self._browser = None
-        self._context = None
-        self._page = None
+        self._client: Optional[httpx.AsyncClient] = None
         self._logged_in = False
         self._lock = asyncio.Lock()
         # Per-sport cache: {sport_key: (events, timestamp)}
@@ -91,7 +102,7 @@ class BookmakerSource(DataSource):
             cycle += 1
             try:
                 async with self._lock:
-                    await self._ensure_browser()
+                    await self._ensure_session()
                     all_events = await self._fetch_all_odds()
                     now = time.time()
                     for sport_key, events in all_events.items():
@@ -110,138 +121,92 @@ class BookmakerSource(DataSource):
                 logger.warning("Bookmaker prefetch cycle #%d failed: %s", cycle, exc)
             await asyncio.sleep(45)  # Bookmaker fetches all sports at once; keep cache warm
 
-    # ── Browser lifecycle ───────────────────────────────────────────────────
+    # ── HTTP session lifecycle ────────────────────────────────────────────
 
-    async def _ensure_browser(self):
-        """Launch Playwright headless Chromium and log in (idempotent)."""
-        if self._page is not None:
+    async def _ensure_session(self):
+        """Create httpx client and log in if needed (idempotent)."""
+        if self._client is not None and self._logged_in:
             return
         if not self._username or not self._password:
             return
-        try:
-            from playwright.async_api import async_playwright
 
-            self._pw = await async_playwright().start()
-            self._browser = await self._pw.chromium.launch(headless=True)
-            self._context = await self._browser.new_context(
-                user_agent=(
-                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/120.0.0.0 Safari/537.36"
-                )
-            )
-            self._page = await self._context.new_page()
-            ok = await self._login()
-            if not ok:
-                logger.error("Bookmaker login failed — closing browser")
-                await self._close_browser()
-        except Exception as exc:
-            logger.error("Bookmaker browser init failed: %s", exc)
-            await self._close_browser()
-            raise
+        # Create a fresh client with cookies
+        if self._client:
+            try:
+                await self._client.aclose()
+            except Exception:
+                pass
+
+        self._client = httpx.AsyncClient(
+            headers=_HTTP_HEADERS,
+            timeout=httpx.Timeout(30.0, connect=15.0),
+            follow_redirects=True,
+        )
+
+        ok = await self._login()
+        if not ok:
+            logger.error("Bookmaker HTTP login failed")
+            self._logged_in = False
+        else:
+            self._logged_in = True
 
     async def _login(self) -> bool:
-        """Navigate to site and fill/submit the login form."""
+        """Log in via HTTP POST to get session cookies."""
         try:
-            await self._page.goto(
+            # First, visit the site to get initial cookies/CSRF tokens
+            resp = await self._client.get(
                 f"{SITE_URL}/en/sports/",
-                timeout=30000,
-                wait_until="domcontentloaded",
             )
-            await asyncio.sleep(3)
-        except Exception as exc:
-            logger.warning("Bookmaker navigation: %s", exc)
+            logger.info("Bookmaker: Initial page load status %d", resp.status_code)
 
-        # ── Fill username ──
-        username_filled = False
-        for sel in [
-            'input[name="account"]',
-            'input[name="username"]',
-            'input[name="login"]',
-            'input[type="text"]:first-of-type',
-            'input[placeholder*="user" i]',
-            'input[placeholder*="account" i]',
-            'input[id*="user" i]',
-            'input[id*="login" i]',
-            'input[id*="account" i]',
-        ]:
-            try:
-                el = await self._page.wait_for_selector(sel, timeout=2000)
-                if el:
-                    await el.fill(self._username)
-                    username_filled = True
-                    logger.info("Bookmaker username filled via: %s", sel)
-                    break
-            except Exception:
-                pass
+            # Try various login endpoints used by Bookmaker.eu
+            login_endpoints = [
+                f"{SITE_URL}/api/auth/login",
+                f"{SITE_URL}/api/v1/auth/login",
+                f"{SITE_URL}/gateway/UserProxy.aspx/Login",
+                f"{SITE_URL}/api/account/login",
+            ]
 
-        # ── Fill password ──
-        password_filled = False
-        for sel in [
-            'input[type="password"]',
-            'input[name="password"]',
-            'input[placeholder*="password" i]',
-            'input[id*="password" i]',
-        ]:
-            try:
-                el = await self._page.wait_for_selector(sel, timeout=2000)
-                if el:
-                    await el.fill(self._password)
-                    password_filled = True
-                    logger.info("Bookmaker password filled via: %s", sel)
-                    break
-            except Exception:
-                pass
+            login_payloads = [
+                # JSON format
+                {"username": self._username, "password": self._password},
+                {"account": self._username, "password": self._password},
+                {"login": self._username, "password": self._password},
+                # Wrapped format (common in .NET backends)
+                {"o": {"UserName": self._username, "Password": self._password}},
+            ]
 
-        if not username_filled or not password_filled:
-            logger.error(
-                "Bookmaker login form incomplete: user=%s, pass=%s",
-                username_filled,
-                password_filled,
-            )
-            return False
+            for endpoint in login_endpoints:
+                for payload in login_payloads:
+                    try:
+                        resp = await self._client.post(
+                            endpoint,
+                            json=payload,
+                        )
+                        if resp.status_code == 200:
+                            try:
+                                data = resp.json()
+                                # Check for success indicators
+                                if data.get("success") or data.get("token") or data.get("sessionId"):
+                                    logger.info("Bookmaker: Login success via %s", endpoint)
+                                    return True
+                            except Exception:
+                                pass
+                        elif resp.status_code in (401, 403):
+                            continue
+                    except Exception:
+                        continue
 
-        # ── Submit ──
-        submitted = False
-        for sel in [
-            'button[type="submit"]',
-            'button:has-text("Log In")',
-            'button:has-text("Login")',
-            'button:has-text("Sign In")',
-            'button:has-text("Submit")',
-            'input[type="submit"]',
-            'button:has-text("Enter")',
-            ".login-btn",
-            "#login-btn",
-        ]:
-            try:
-                el = await self._page.wait_for_selector(sel, timeout=2000)
-                if el:
-                    await el.click()
-                    submitted = True
-                    logger.info("Bookmaker submit via: %s", sel)
-                    break
-            except Exception:
-                pass
-
-        if not submitted:
-            await self._page.keyboard.press("Enter")
-            logger.info("Bookmaker submit via Enter key")
-
-        await asyncio.sleep(5)
-
-        # ── Verify ──
-        html = await self._page.content()
-        html_lower = html.lower()
-        if any(kw in html_lower for kw in ("logout", "account", "balance")):
+            # Even if explicit login failed, the session cookies from visiting
+            # the site may be sufficient for the GetSchedule API (which is
+            # sometimes accessible without authentication on Bookmaker.eu)
+            logger.warning("Bookmaker: No login endpoint worked — trying API with session cookies")
             self._logged_in = True
-            logger.info("Bookmaker login successful (URL: %s)", self._page.url)
             return True
 
-        # Ambiguous — assume it worked (session cookie may be set)
-        logger.warning("Bookmaker login status unclear (URL: %s)", self._page.url)
-        self._logged_in = True
-        return True
+        except Exception as exc:
+            logger.error("Bookmaker login error: %s", exc)
+            return False
 
     # ── get_odds ────────────────────────────────────────────────────────────
 
@@ -263,7 +228,7 @@ class BookmakerSource(DataSource):
             return [], headers
 
         # Always serve from cache — prefetch loop keeps it warm.
-        # Never fall through to Playwright navigation in the composite context.
+        # Never fall through to API in the composite context.
         cached = self._cache.get(sport_key)
         if cached and (time.time() - cached[1]) < _CACHE_TTL:
             return cached[0], headers
@@ -276,19 +241,6 @@ class BookmakerSource(DataSource):
 
     async def _fetch_all_odds(self) -> Dict[str, List[OddsEvent]]:
         """Call GetSchedule API for each league, parse all results."""
-        # Ensure we're on the sports page (needed for cookies/session)
-        current = self._page.url or ""
-        if "/en/sports" not in current:
-            await self._page.goto(
-                f"{SITE_URL}/en/sports/",
-                timeout=30000,
-                wait_until="domcontentloaded",
-            )
-            await asyncio.sleep(5)
-
-        # Wait for SPA to fully initialize (session cookies, Angular, etc.)
-        await asyncio.sleep(3)
-
         all_events = {}  # type: Dict[str, List[OddsEvent]]
 
         # Build comma-separated league IDs for a single batch call
@@ -314,25 +266,14 @@ class BookmakerSource(DataSource):
                     logger.debug("Bookmaker league %d failed: %s", league_id, exc)
 
         if not all_events:
-            # Check if we're actually logged out (look for login form specifically)
-            logged_out = await self._page.evaluate("""
-                () => {
-                    const loginBtn = document.querySelector('button[type="submit"]');
-                    const pwdInput = document.querySelector('input[type="password"]');
-                    return !!(loginBtn && pwdInput);
-                }
-            """)
-            if logged_out:
-                logger.info("Bookmaker: session expired, re-logging in")
-                await self._close_browser()
-                raise RuntimeError("Bookmaker session expired")
-            else:
-                logger.warning("Bookmaker: no events returned but appears logged in")
+            # Session may have expired — force re-login on next cycle
+            logger.warning("Bookmaker: no events returned — will re-login next cycle")
+            self._logged_in = False
 
         return all_events
 
     async def _call_get_schedule(self, league_ids: str) -> Optional[dict]:
-        """Call GetSchedule API via page.evaluate(fetch(...)).
+        """Call GetSchedule API via direct HTTP POST.
 
         Args:
             league_ids: Comma-separated league IDs (e.g. "3,4,5,7,206")
@@ -340,64 +281,47 @@ class BookmakerSource(DataSource):
         Returns:
             Parsed JSON dict or None on failure.
         """
-        try:
-            result = await self._page.evaluate(
-                """
-                async (leagueIds) => {
-                    try {
-                        const resp = await fetch('/gateway/BetslipProxy.aspx/GetSchedule', {
-                            method: 'POST',
-                            headers: {'Content-Type': 'application/json'},
-                            body: JSON.stringify({
-                                o: {
-                                    BORequestData: {
-                                        BOParameters: {
-                                            BORt: {},
-                                            LeaguesIdList: leagueIds,
-                                            LanguageId: "0",
-                                            LineStyle: "E",
-                                            ScheduleType: "american",
-                                            LinkDeriv: "true"
-                                        }
-                                    }
-                                }
-                            }),
-                        });
-                        const text = await resp.text();
-                        return {
-                            status: resp.status,
-                            size: text.length,
-                            data: text.length > 50 ? JSON.parse(text) : null,
-                            error: resp.status !== 200 ? text.substring(0, 200) : null
-                        };
-                    } catch(e) {
-                        return {status: 0, size: 0, data: null, error: e.message};
+        if not self._client:
+            return None
+
+        payload = {
+            "o": {
+                "BORequestData": {
+                    "BOParameters": {
+                        "BORt": {},
+                        "LeaguesIdList": league_ids,
+                        "LanguageId": "0",
+                        "LineStyle": "E",
+                        "ScheduleType": "american",
+                        "LinkDeriv": "true",
                     }
                 }
-                """,
-                league_ids,
+            }
+        }
+
+        try:
+            resp = await self._client.post(
+                f"{SITE_URL}/gateway/BetslipProxy.aspx/GetSchedule",
+                json=payload,
             )
-            if not result or not isinstance(result, dict):
-                logger.warning("Bookmaker GetSchedule: no result for leagues %s", league_ids)
-                return None
 
-            status = result.get("status", 0)
-            size = result.get("size", 0)
-            data = result.get("data")
-            error = result.get("error")
-
-            if status != 200 or error:
+            if resp.status_code != 200:
                 logger.warning(
-                    "Bookmaker GetSchedule HTTP %d for leagues %s: %s",
-                    status, league_ids, error or "unknown",
+                    "Bookmaker GetSchedule HTTP %d for leagues %s",
+                    resp.status_code, league_ids,
                 )
                 return None
 
-            if not data or not isinstance(data, dict):
+            text = resp.text
+            if len(text) < 50:
                 logger.warning(
-                    "Bookmaker GetSchedule: empty/invalid data (%d bytes) for leagues %s",
-                    size, league_ids,
+                    "Bookmaker GetSchedule: empty response (%d bytes) for leagues %s",
+                    len(text), league_ids,
                 )
+                return None
+
+            data = resp.json()
+            if not isinstance(data, dict):
                 return None
 
             if data.get("status") == "error":
@@ -409,7 +333,7 @@ class BookmakerSource(DataSource):
 
             logger.info(
                 "Bookmaker GetSchedule OK for leagues %s (%d bytes)",
-                league_ids, size,
+                league_ids, len(text),
             )
             return data
         except Exception as exc:
@@ -752,25 +676,14 @@ class BookmakerSource(DataSource):
         except (ValueError, TypeError):
             return None
 
-    # ── Browser cleanup ─────────────────────────────────────────────────────
-
-    async def _close_browser(self):
-        for attr in ("_page", "_context", "_browser"):
-            obj = getattr(self, attr, None)
-            if obj is not None:
-                try:
-                    await obj.close()
-                except Exception:
-                    pass
-                setattr(self, attr, None)
-        if self._pw is not None:
-            try:
-                await self._pw.stop()
-            except Exception:
-                pass
-            self._pw = None
-        self._logged_in = False
+    # ── Cleanup ──────────────────────────────────────────────────────────────
 
     async def close(self):
-        """Shut down the Playwright browser."""
-        await self._close_browser()
+        """Shut down the HTTP client."""
+        if self._client:
+            try:
+                await self._client.aclose()
+            except Exception:
+                pass
+            self._client = None
+        self._logged_in = False

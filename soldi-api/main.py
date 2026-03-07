@@ -171,7 +171,7 @@ async def lifespan(app: FastAPI):
     def is_enabled(name: str) -> bool:
         return name.lower() not in disabled
 
-    # --- HTTP-only scrapers (lightweight, no Playwright) ---
+    # --- All scrapers are HTTP-based (no Playwright/Chromium required) ---
 
     if is_enabled("fanduel"):
         logger.info("Initializing FanDuel scraper")
@@ -207,62 +207,43 @@ async def lifespan(app: FastAPI):
 
     if is_enabled("hardrock"):
         logger.info("Initializing Hard Rock Bet scraper")
-        hardrock = HardRockBetSource()
-        sources.append(hardrock)
+        sources.append(HardRockBetSource())
 
-    # --- Playwright-based scrapers (require Chromium, ~150-300MB RAM each) ---
-
-    betonline = None
     if is_enabled("betonline"):
         logger.info("Initializing BetOnline scraper")
-        betonline = BetOnlineSource()
-        sources.append(betonline)
+        sources.append(BetOnlineSource())
 
-    bet105 = None
     if is_enabled("bet105"):
-        logger.info("Initializing Bet105 scraper (ppm.bet105.ag)")
-        bet105 = Bet105Source()
-        sources.append(bet105)
+        logger.info("Initializing Bet105 scraper")
+        sources.append(Bet105Source())
 
-    xbet = None
     if is_enabled("xbet"):
         logger.info("Initializing XBet scraper")
-        xbet = XBetSource()
-        sources.append(xbet)
+        sources.append(XBetSource())
 
-    dk = None
     if is_enabled("draftkings"):
-        logger.info("Initializing DraftKings scraper (Playwright)")
-        dk = DraftKingsSource()
-        sources.append(dk)
+        logger.info("Initializing DraftKings scraper")
+        sources.append(DraftKingsSource())
 
-    betmgm = None
     if is_enabled("betmgm"):
-        logger.info("Initializing BetMGM scraper (Playwright)")
-        betmgm = BetMGMSource()
-        sources.append(betmgm)
+        logger.info("Initializing BetMGM scraper")
+        sources.append(BetMGMSource())
 
-    caesars = None
     if is_enabled("caesars"):
         logger.info("Initializing Caesars scraper")
-        caesars = CaesarsSource()
-        sources.append(caesars)
+        sources.append(CaesarsSource())
 
-    buckeye = None
     if is_enabled("buckeye"):
         logger.info("Initializing Buckeye scraper")
-        buckeye = BuckeyeSource()
-        sources.append(buckeye)
+        sources.append(BuckeyeSource())
 
-    # Bookmaker.eu (requires login credentials + Playwright)
-    bookmaker = None
+    # Bookmaker.eu (requires login credentials)
     if is_enabled("bookmaker") and settings.bookmaker_username and settings.bookmaker_password:
         logger.info("Initializing Bookmaker.eu scraper")
-        bookmaker = BookmakerSource(
+        sources.append(BookmakerSource(
             username=settings.bookmaker_username,
             password=settings.bookmaker_password,
-        )
-        sources.append(bookmaker)
+        ))
     elif not is_enabled("bookmaker"):
         logger.info("Bookmaker.eu: disabled via DISABLED_SCRAPERS")
     else:
@@ -281,21 +262,10 @@ async def lifespan(app: FastAPI):
     source_count = len(sources)
     logger.info(f"SoldiAPI started with {source_count} data source(s)")
 
-    # Start Playwright background prefetch tasks (only for enabled sources)
-    if betonline is not None:
-        betonline.start_prefetch()
-    if xbet is not None:
-        xbet.start_prefetch()
-    if bet105 is not None:
-        bet105.start_prefetch()
-    if dk is not None:
-        dk.start_prefetch()
-    if betmgm is not None:
-        betmgm.start_prefetch()
-    if caesars is not None:
-        caesars.start_prefetch()
-    if bookmaker is not None:
-        bookmaker.start_prefetch()
+    # Start background prefetch tasks for sources that have them
+    for src in sources:
+        if hasattr(src, "start_prefetch"):
+            src.start_prefetch()
 
     # Initialize line history database
     line_history.init_db(settings.line_history_db)

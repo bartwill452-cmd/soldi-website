@@ -1,8 +1,8 @@
 """
 XBet sportsbook scraper.
 
-Uses Playwright headless browser to load xbet.ag/sportsbook/ and parse
-odds directly from the server-rendered HTML DOM.
+Uses httpx to fetch the server-rendered HTML from xbet.ag/sportsbook/
+and parses odds using regex and HTML parsing.
 
 XBet renders ALL sports on a single page as HTML (no JSON API). Each game
 is wrapped in a `div.game-line` with Schema.org `Event` markup containing
@@ -16,7 +16,9 @@ import logging
 import re
 import time
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
+
+import httpx
 
 from models import Bookmaker, Market, OddsEvent, Outcome
 from sources.base import DataSource
@@ -93,69 +95,108 @@ _SUPPORTED_SPORTS = {
 # Cache TTL for parsed data
 _CACHE_TTL = 60  # seconds — prefetch loop keeps cache warm every ~30s
 
+# Regex patterns for parsing server-rendered HTML
+# Extract FEATURED sections with their IDs
+_SECTION_RE = re.compile(
+    r'id="scroll-title-FEATURED-(\d+)"[^>]*>(.*?)(?=id="scroll-title-FEATURED-|$)',
+    re.DOTALL,
+)
+
+# Extract league title from section
+_LEAGUE_TITLE_RE = re.compile(
+    r'class="league-title[^"]*"[^>]*>(?:<a[^>]*>)?([^<]+)',
+)
+
+# Extract nav link text for FEATURED sections
+_NAV_LINK_RE = re.compile(
+    r'href="[^"]*FEATURED-(\d+)[^"]*"[^>]*>([^<]+)<',
+)
+
+# Extract game-line blocks
+_GAME_LINE_RE = re.compile(
+    r'class="game-line\b[^"]*"(.*?)(?=class="game-line\b|</section|$)',
+    re.DOTALL,
+)
+
+# Extract Schema.org event name
+_EVENT_NAME_RE = re.compile(
+    r'itemprop="name"\s+content="([^"]+)"',
+)
+_EVENT_NAME_TEXT_RE = re.compile(
+    r'itemprop="name"[^>]*>([^<]+)<',
+)
+
+# Extract Schema.org start date
+_START_DATE_RE = re.compile(
+    r'itemprop="startDate"\s+content="([^"]+)"',
+)
+_START_DATE_TEXT_RE = re.compile(
+    r'itemprop="startDate"[^>]*>([^<]+)<',
+)
+
+# Extract odds values from button/cell text
+_ODDS_PATTERN_RE = re.compile(
+    r'[+-]\d{1,4}(?:\.\d)?(?:\s+[+-]\d{2,4})?|[OU]\s*\d+\.?\d*\s*[+-]?\d{2,4}',
+)
+
 
 class XBetSource(DataSource):
     """Fetches odds from XBet by parsing the server-rendered sportsbook HTML.
 
     XBet renders all sports on a single page (/sportsbook/). This source
-    navigates there with Playwright and parses the DOM to extract odds.
+    fetches the HTML via httpx and parses it with regex to extract odds.
     """
 
     def __init__(self):
-        self._browser = None  # type: Any
-        self._context = None  # type: Any
-        self._page = None  # type: Any
-        self._pw = None  # type: Any
-        self._lock = asyncio.Lock()
+        self._client = httpx.AsyncClient(
+            timeout=30.0,
+            headers={
+                "User-Agent": (
+                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/131.0.0.0 Safari/537.36"
+                ),
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.9",
+            },
+            follow_redirects=True,
+        )
         # Cache: sport_key -> (events, timestamp)
         self._cache: Dict[str, Tuple[List[OddsEvent], float]] = {}
-        self._prefetch_task = None  # type: Any
-        # Timestamp of last full page load
-        self._last_load: float = 0.0
+        self._prefetch_task = None  # type: object
 
     def start_prefetch(self) -> None:
         """Start background prefetch (call after event loop is running)."""
         self._prefetch_task = asyncio.ensure_future(self._prefetch_all())
 
     async def _prefetch_all(self) -> None:
-        """Background task: load the sportsbook page and parse all sports."""
+        """Background task: fetch the sportsbook page and parse all sports."""
         await asyncio.sleep(4)  # Let other sources initialize first
-        logger.info("XBet: Starting continuous background prefetch")
+        logger.info("XBet: Starting continuous background prefetch (HTTP)")
         cycle = 0
         while True:
             cycle += 1
             try:
-                async with self._lock:
-                    await self._ensure_browser()
-                    if self._page is None:
-                        logger.warning("XBet: No browser page, skipping cycle %d", cycle)
-                        await asyncio.sleep(30)
-                        continue
+                all_events = await self._fetch_and_parse_all()
 
-                    # Load the main sportsbook page
-                    all_events = await self._load_and_parse_all()
+                sport_counts = {}  # type: Dict[str, int]
+                for sport_key, events in all_events.items():
+                    self._cache[sport_key] = (events, time.time())
+                    sport_counts[sport_key] = len(events)
 
-                    # Distribute events into per-sport caches
-                    sport_counts = {}  # type: Dict[str, int]
-                    for sport_key, events in all_events.items():
-                        self._cache[sport_key] = (events, time.time())
-                        sport_counts[sport_key] = len(events)
-
-                    total = sum(sport_counts.values())
-                    sports_str = " ".join(
-                        f"{k.split('_', 1)[-1]}:{v}" for k, v in sorted(sport_counts.items()) if v > 0
-                    )
-                    logger.info(
-                        "XBet prefetch cycle #%d: %d events across %d sports (%s)",
-                        cycle, total, len(sport_counts), sports_str,
-                    )
+                total = sum(sport_counts.values())
+                sports_str = " ".join(
+                    f"{k.split('_', 1)[-1]}:{v}" for k, v in sorted(sport_counts.items()) if v > 0
+                )
+                logger.info(
+                    "XBet prefetch cycle #%d: %d events across %d sports (%s)",
+                    cycle, total, len(sport_counts), sports_str,
+                )
 
             except Exception as e:
                 logger.warning("XBet prefetch error: %s: %s", type(e).__name__, e)
-                # Reset browser on errors to recover
-                await self._close_browser()
 
-            await asyncio.sleep(30)  # Full page load takes ~5s; refresh every 30s for fresher data
+            await asyncio.sleep(30)
 
     async def get_odds(
         self,
@@ -178,200 +219,126 @@ class XBetSource(DataSource):
         if cached and (time.time() - cached[1]) < _CACHE_TTL:
             return cached[0], headers
 
-        # Cache miss — prefetch hasn't run yet or cache expired
-        logger.debug(
-            "XBet cache miss for %s (cached=%s)", sport_key, cached is not None,
-            )
         return [], headers
 
     # ------------------------------------------------------------------
-    # Page loading & DOM parsing
+    # HTTP fetching & HTML parsing
     # ------------------------------------------------------------------
 
-    async def _load_and_parse_all(self) -> Dict[str, List[OddsEvent]]:
-        """Navigate to sportsbook and parse all games from the DOM."""
-        if self._page is None:
-            return {}
-
+    async def _fetch_and_parse_all(self) -> Dict[str, List[OddsEvent]]:
+        """Fetch the sportsbook HTML page and parse all games."""
         try:
-            await self._page.goto(
-                f"{SITE_URL}/sportsbook/",
-                timeout=60000,
-                wait_until="load",
-            )
-            # Give JS time to render any dynamic content
-            await asyncio.sleep(3)
+            response = await self._client.get(f"{SITE_URL}/sportsbook/")
+            response.raise_for_status()
+            html = response.text
         except Exception as e:
-            logger.warning("XBet: Navigation error: %s: %s", type(e).__name__, e)
+            logger.warning("XBet: HTTP fetch error: %s: %s", type(e).__name__, e)
             return {}
 
-        self._last_load = time.time()
+        return self._parse_html(html)
 
-        # Parse all game-line elements from the DOM.
-        # XBet renders all sports on one page inside FEATURED sections.
-        # Some sections have proper league titles (.league-title a),
-        # others have empty titles but can be mapped via nav link IDs.
-        raw_games = await self._page.evaluate("""
-            () => {
-                // Step 1: Build nav link ID → sport name mapping
-                const navMap = {};
-                const navLinks = document.querySelectorAll('a[href*="FEATURED-"]');
-                for (const a of navLinks) {
-                    const m = a.href.match(/FEATURED-(\\d+)/);
-                    if (m) {
-                        const text = a.textContent.trim();
-                        if (text && !navMap[m[1]]) navMap[m[1]] = text;
-                    }
-                }
+    def _parse_html(self, html: str) -> Dict[str, List[OddsEvent]]:
+        """Parse the XBet sportsbook HTML into events grouped by sport."""
+        # Build nav link mapping: section ID → league name
+        nav_map = {}  # type: Dict[str, str]
+        for m in _NAV_LINK_RE.finditer(html):
+            section_id = m.group(1)
+            link_text = m.group(2).strip()
+            if link_text and section_id not in nav_map:
+                nav_map[section_id] = link_text
 
-                // Step 2: Parse all FEATURED sections
-                const result = [];
-                const sections = document.querySelectorAll('[id*="FEATURED"]');
-                const seenIds = new Set();  // deduplicate sections with same ID
-
-                for (const section of sections) {
-                    // Skip the aggregate "scroll-title-FEATURED" section (contains all games)
-                    if (section.id === 'scroll-title-FEATURED') continue;
-
-                    // Extract section ID number
-                    const idMatch = section.id.match(/FEATURED-(\\d+)/);
-                    const sectionId = idMatch ? idMatch[1] : '';
-
-                    // Skip sections without a numeric ID (empty suffix = aggregate)
-                    if (!sectionId) continue;
-
-                    // Skip if we already processed this ID (XBet duplicates sections)
-                    if (seenIds.has(sectionId)) continue;
-                    seenIds.add(sectionId);
-
-                    // Determine league name: prefer DOM title, fallback to nav mapping
-                    let league = '';
-                    const titleEl = section.querySelector('.league-title a') || section.querySelector('.league-title');
-                    if (titleEl) {
-                        league = titleEl.textContent.trim();
-                    }
-                    if (!league && sectionId && navMap[sectionId]) {
-                        league = navMap[sectionId];
-                    }
-
-                    // Find all game-line elements in this section
-                    const gameLines = section.querySelectorAll('.game-line');
-                    for (const gl of gameLines) {
-                        // Get Schema.org event data
-                        const nameEl = gl.querySelector('[itemprop="name"]');
-                        const startEl = gl.querySelector('[itemprop="startDate"]');
-                        if (!nameEl) continue;
-
-                        const matchName = (nameEl.getAttribute('content') || nameEl.textContent || '').trim();
-                        const startDate = startEl ? (startEl.getAttribute('content') || startEl.textContent || '').trim() : '';
-                        if (!matchName || matchName === 'Join Xbet Today') continue;
-
-                        // Get odds from button/cell elements
-                        const oddsCells = gl.querySelectorAll(
-                            '.game-line__cell--spread, .game-line__cell--winner, .game-line__cell--total, ' +
-                            '[class*="odds"], [class*="line-value"], .od__container button, ' +
-                            'button.game-line__cell'
-                        );
-                        const oddsTexts = [];
-                        for (const cell of oddsCells) {
-                            const txt = cell.textContent.trim().replace(/\\s+/g, ' ');
-                            if (txt && (txt.match(/[+-]\\d+/) || txt.match(/[OU]\\s*\\d/))) {
-                                oddsTexts.push(txt);
-                            }
-                        }
-
-                        // Fallback: extract odds patterns from od__container text
-                        if (oddsTexts.length === 0) {
-                            const odContainer = gl.querySelector('.od__container');
-                            if (odContainer) {
-                                const text = odContainer.textContent || '';
-                                const patterns = text.match(/[+-]\\d{1,4}(?:\\.\\d)?(?:\\s+-\\d{2,4})?|[OU]\\s*\\d+\\.?\\d*\\s*-?\\d{2,4}/g);
-                                if (patterns) {
-                                    for (const p of patterns) {
-                                        oddsTexts.push(p.trim());
-                                    }
-                                }
-                            }
-                        }
-
-                        result.push({
-                            league: league,
-                            matchName: matchName,
-                            startDate: startDate,
-                            odds: oddsTexts,
-                        });
-                    }
-                }
-                return result;
-            }
-        """)
-
-        # Parse raw data into OddsEvent objects, grouped by sport
+        # Find all FEATURED sections
         events_by_sport: Dict[str, List[OddsEvent]] = {}
-        seen_event_ids: set = set()  # deduplicate across sections
+        seen_event_ids: set = set()
 
-        for raw in raw_games:
-            league = raw.get("league", "")
-            sport_key = self._resolve_league(league)
-            if not sport_key:
-                continue
+        for section_match in _SECTION_RE.finditer(html):
+            section_id = section_match.group(1)
+            section_html = section_match.group(2)
 
-            match_name = raw.get("matchName", "")
-            start_date = raw.get("startDate", "")
-            odds_texts = raw.get("odds", [])
+            # Determine league name
+            league = ""
+            title_m = _LEAGUE_TITLE_RE.search(section_html)
+            if title_m:
+                league = title_m.group(1).strip()
+            if not league and section_id in nav_map:
+                league = nav_map[section_id]
 
-            # Parse team names from "Team1 v Team2"
-            teams = self._parse_match_name(match_name)
-            if not teams:
-                continue
-            away_team, home_team = teams
+            # Find all game-line blocks in this section
+            for game_match in _GAME_LINE_RE.finditer(section_html):
+                game_html = game_match.group(1)
 
-            # Skip futures
-            combined = (away_team + " " + home_team + " " + league).lower()
-            if any(kw in combined for kw in _FUTURES_KEYWORDS):
-                continue
+                # Extract event name
+                name_m = _EVENT_NAME_RE.search(game_html)
+                if not name_m:
+                    name_m = _EVENT_NAME_TEXT_RE.search(game_html)
+                if not name_m:
+                    continue
+                match_name = name_m.group(1).strip()
+                if not match_name or match_name == "Join Xbet Today":
+                    continue
 
-            # Parse start time
-            commence_time = self._parse_start_date(start_date)
+                # Extract start date
+                start_date = ""
+                date_m = _START_DATE_RE.search(game_html)
+                if not date_m:
+                    date_m = _START_DATE_TEXT_RE.search(game_html)
+                if date_m:
+                    start_date = date_m.group(1).strip()
 
-            # Parse odds
-            markets_list = self._parse_odds(odds_texts, away_team, home_team, sport_key)
-            if not markets_list:
-                continue
+                # Extract odds
+                odds_texts = _ODDS_PATTERN_RE.findall(game_html)
 
-            cid = canonical_event_id(sport_key, home_team, away_team, commence_time)
+                # Process this game
+                sport_key = self._resolve_league(league)
+                if not sport_key:
+                    continue
 
-            # Deduplicate (XBet renders some games in multiple sections)
-            if cid in seen_event_ids:
-                continue
-            seen_event_ids.add(cid)
+                teams = self._parse_match_name(match_name)
+                if not teams:
+                    continue
+                away_team, home_team = teams
 
-            sport_title = get_sport_title(sport_key)
+                combined = (away_team + " " + home_team + " " + league).lower()
+                if any(kw in combined for kw in _FUTURES_KEYWORDS):
+                    continue
 
-            event = OddsEvent(
-                id=cid,
-                sport_key=sport_key,
-                sport_title=sport_title,
-                commence_time=commence_time,
-                home_team=home_team,
-                away_team=away_team,
-                bookmakers=[
-                    Bookmaker(
-                        key="xbet",
-                        title="XBet",
-                        markets=markets_list,
-                    )
-                ],
-            )
+                commence_time = self._parse_start_date(start_date)
+                markets_list = self._parse_odds(odds_texts, away_team, home_team, sport_key)
+                if not markets_list:
+                    continue
 
-            if sport_key not in events_by_sport:
-                events_by_sport[sport_key] = []
-            events_by_sport[sport_key].append(event)
+                cid = canonical_event_id(sport_key, home_team, away_team, commence_time)
+
+                if cid in seen_event_ids:
+                    continue
+                seen_event_ids.add(cid)
+
+                sport_title = get_sport_title(sport_key)
+
+                event = OddsEvent(
+                    id=cid,
+                    sport_key=sport_key,
+                    sport_title=sport_title,
+                    commence_time=commence_time,
+                    home_team=home_team,
+                    away_team=away_team,
+                    bookmakers=[
+                        Bookmaker(
+                            key="xbet",
+                            title="XBet",
+                            markets=markets_list,
+                        )
+                    ],
+                )
+
+                if sport_key not in events_by_sport:
+                    events_by_sport[sport_key] = []
+                events_by_sport[sport_key].append(event)
 
         return events_by_sport
 
     # ------------------------------------------------------------------
-    # Parsing helpers
+    # Parsing helpers (unchanged from original)
     # ------------------------------------------------------------------
 
     def _resolve_league(self, league_text: str) -> Optional[str]:
@@ -414,12 +381,8 @@ class XBetSource(DataSource):
         """Parse XBet date format '2026 - 03 - 05 18:00-05:00' to ISO 8601."""
         if not raw:
             return ""
-        # XBet format: "2026 - 03 - 05 18:00-05:00"
-        # Clean up spaces around hyphens in the date portion
         cleaned = raw.strip()
-        # Try to parse with the space-hyphen format
         try:
-            # Remove spaces around date hyphens: "2026 - 03 - 05" → "2026-03-05"
             m = re.match(
                 r"(\d{4})\s*-\s*(\d{2})\s*-\s*(\d{2})\s+(\d{2}:\d{2})([-+]\d{2}:\d{2})?",
                 cleaned,
@@ -440,21 +403,11 @@ class XBetSource(DataSource):
         home_team: str,
         sport_key: str,
     ) -> List[Market]:
-        """Parse odds texts into Market objects.
-
-        Expected pattern (6 items):
-            [away_spread, away_ml, away_total, home_spread, home_ml, home_total]
-        Where:
-            spread = "+9 -110" or "-9 -110"
-            ml = "+301" or "-400"
-            total = "O 229.5 -110" or "U 229.5 -110"
-        """
+        """Parse odds texts into Market objects."""
         markets = []  # type: List[Market]
 
         if len(odds_texts) < 6:
-            # Try to parse whatever we have
             if len(odds_texts) >= 2:
-                # At least 2 = might be just moneylines
                 ml_away = self._safe_int(odds_texts[0])
                 ml_home = self._safe_int(odds_texts[1])
                 if ml_away is not None and ml_home is not None:
@@ -467,15 +420,12 @@ class XBetSource(DataSource):
                     ))
             return markets
 
-        # Standard 6-item pattern: spread, ml, total for away, then home
-        # Away team odds
-        away_spread_text = odds_texts[0]  # "+9 -110"
-        away_ml_text = odds_texts[1]       # "+301"
-        away_total_text = odds_texts[2]    # "O 229.5 -110"
-        # Home team odds
-        home_spread_text = odds_texts[3]  # "-9 -110"
-        home_ml_text = odds_texts[4]       # "-400"
-        home_total_text = odds_texts[5]    # "U 229.5 -110"
+        away_spread_text = odds_texts[0]
+        away_ml_text = odds_texts[1]
+        away_total_text = odds_texts[2]
+        home_spread_text = odds_texts[3]
+        home_ml_text = odds_texts[4]
+        home_total_text = odds_texts[5]
 
         # --- Moneyline ---
         away_ml = self._safe_int(away_ml_text)
@@ -485,7 +435,6 @@ class XBetSource(DataSource):
                 Outcome(name=home_team, price=home_ml),
                 Outcome(name=away_team, price=away_ml),
             ]
-            # Check for draw (soccer): if there are 9 odds, index 6 might be draw
             if len(odds_texts) >= 9 and sport_key.startswith("soccer_"):
                 draw_ml = self._safe_int(odds_texts[6])
                 if draw_ml is not None:
@@ -508,7 +457,6 @@ class XBetSource(DataSource):
         over = self._parse_total_text(away_total_text)
         under = self._parse_total_text(home_total_text)
         if over and under:
-            # Use the same point value (they should match)
             point = over[0]
             markets.append(Market(
                 key="totals",
@@ -555,82 +503,6 @@ class XBetSource(DataSource):
                 return None
         return None
 
-    # ------------------------------------------------------------------
-    # Browser management
-    # ------------------------------------------------------------------
-
-    async def _ensure_browser(self) -> None:
-        """Launch Playwright browser with stealth mode."""
-        if self._page is not None:
-            return
-
-        try:
-            from playwright.async_api import async_playwright
-            self._pw = await async_playwright().start()
-
-            launch_args = [
-                "--disable-blink-features=AutomationControlled",
-                "--no-sandbox",
-                "--disable-dev-shm-usage",
-            ]
-            try:
-                self._browser = await self._pw.chromium.launch(
-                    headless=True,
-                    channel="chrome",
-                    args=launch_args,
-                )
-                logger.info("XBet: Launched system Chrome")
-            except Exception:
-                self._browser = await self._pw.chromium.launch(
-                    headless=True,
-                    args=launch_args,
-                )
-                logger.info("XBet: Launched bundled Chromium (fallback)")
-
-            self._context = await self._browser.new_context(
-                user_agent=(
-                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/131.0.0.0 Safari/537.36"
-                ),
-                viewport={"width": 1920, "height": 1080},
-                locale="en-US",
-            )
-            try:
-                from playwright_stealth import Stealth
-                await Stealth().apply_stealth_async(self._context)
-            except ImportError:
-                await self._context.add_init_script("""
-                    Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
-                    Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']});
-                    Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
-                    window.chrome = {runtime: {}};
-                """)
-            self._page = await self._context.new_page()
-            logger.info("XBet: Playwright browser launched (stealth mode)")
-        except Exception as e:
-            logger.warning("XBet: Failed to launch browser: %s", e)
-            self._page = None
-
-    async def _close_browser(self) -> None:
-        """Close and reset the browser for recovery."""
-        try:
-            if self._page:
-                await self._page.close()
-            if self._context:
-                await self._context.close()
-            if self._browser:
-                await self._browser.close()
-            if self._pw:
-                await self._pw.stop()
-        except Exception as e:
-            logger.debug("XBet: Error closing browser: %s", e)
-        finally:
-            self._page = None
-            self._context = None
-            self._browser = None
-            self._pw = None
-
     async def close(self) -> None:
-        """Shut down the Playwright browser."""
-        await self._close_browser()
+        """Close the HTTP client."""
+        await self._client.aclose()

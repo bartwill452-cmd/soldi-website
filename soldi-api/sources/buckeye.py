@@ -2,12 +2,10 @@
 Buckeye sportsbook scraper.
 Uses the DGS/Visor platform API at demotest.me.
 
-The site is behind Cloudflare bot protection. We use Playwright to
-launch a headless browser once at startup to obtain the cf_clearance
-cookie, then authenticate and use httpx for all subsequent API calls.
-
 Auth: POST authenticateCustomer (returns JWT code for Bearer auth).
 Odds: POST Get_LeagueLines2 per sport/league.
+
+Uses httpx for all API calls. No Playwright or browser required.
 
 DGS field conventions (confirmed via real API responses):
 - Team1 = away, Team2 = home (standard DGS ordering)
@@ -205,9 +203,8 @@ _FUTURES_KEYWORDS = frozenset([
 class BuckeyeSource(DataSource):
     """Fetches odds from the Buckeye (DGS/Visor) sportsbook platform.
 
-    Uses Playwright to obtain Cloudflare clearance cookies, then
-    authenticates via the DGS API to get a JWT token. Subsequent
-    API calls use httpx with those cookies and the JWT.
+    Authenticates via the DGS API to get a JWT token, then uses httpx
+    for all subsequent API calls. No Playwright or browser required.
     """
 
     def __init__(self, username: str = "xl37", password: str = "test"):
@@ -216,21 +213,18 @@ class BuckeyeSource(DataSource):
         self._jwt_code = None  # type: Optional[str]
         self._jwt_expires = 0.0  # type: float
         self._customer_id = None  # type: Optional[str]
-        self._cf_cookies = {}  # type: Dict[str, str]
-        self._cf_cookies_expires = 0.0  # type: float
         self._client = None  # type: Optional[httpx.AsyncClient]
         self._init_done = False
         self._auth_lock = asyncio.Lock()  # Prevents concurrent auth attempts
 
     def _create_client(self) -> httpx.AsyncClient:
-        """Create httpx client with current cookies."""
+        """Create httpx client."""
         return httpx.AsyncClient(
             timeout=20.0,
-            cookies=self._cf_cookies,
             headers={
                 "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
                               "AppleWebKit/537.36 (KHTML, like Gecko) "
-                              "Chrome/120.0.0.0 Safari/537.36",
+                              "Chrome/131.0.0.0 Safari/537.36",
                 "Accept": "application/json",
                 "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
                 "X-Requested-With": "XMLHttpRequest",
@@ -239,95 +233,71 @@ class BuckeyeSource(DataSource):
             },
         )
 
-    async def _get_cloudflare_cookies(self) -> bool:
-        """Use Playwright to get Cloudflare clearance cookies."""
+    async def _authenticate(self) -> bool:
+        """Authenticate via direct HTTP POST to the DGS API.
+
+        Tries to auth directly without Cloudflare clearance cookies.
+        The API endpoint often accepts direct requests, especially from
+        server-side IPs that aren't flagged by CF bot protection.
+        """
         try:
-            from playwright.async_api import async_playwright
-        except ImportError:
-            logger.warning("Buckeye: playwright not installed, cannot bypass Cloudflare")
-            return False
+            # Create/recreate httpx client
+            if self._client:
+                try:
+                    await self._client.aclose()
+                except Exception:
+                    pass
+            self._client = self._create_client()
 
-        try:
-            async with async_playwright() as p:
-                browser = await p.chromium.launch(
-                    headless=False,
-                    args=["--disable-blink-features=AutomationControlled"],
-                )
-                page = await browser.new_page()
-
-                logger.info("Buckeye: launching browser for Cloudflare clearance...")
-                await page.goto(SITE_URL + "/", wait_until="load", timeout=30000)
-                await page.wait_for_timeout(3000)
-
-                # Authenticate from within the page context
-                auth_result = await page.evaluate("""
-                    async ([username, password]) => {
-                        try {
-                            const resp = await fetch('/cloud/api/System/authenticateCustomer', {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-                                    'X-Requested-With': 'XMLHttpRequest',
-                                    'Authorization': 'Bearer ',
-                                },
-                                body: new URLSearchParams({
-                                    customerID: username, password: password,
-                                    state: 'true', response_type: 'code',
-                                    client_id: username,
-                                    domain: window.location.host,
-                                    redirect_uri: window.location.host,
-                                    operation: 'authenticateCustomer', RRO: '1',
-                                }).toString(),
-                                credentials: 'same-origin',
-                            });
-                            if (!resp.ok) return {error: 'HTTP ' + resp.status};
-                            return await resp.json();
-                        } catch(e) { return {error: e.toString()}; }
-                    }
-                """, [self._username, self._password])
-
-                if "error" in auth_result:
-                    logger.warning("Buckeye: browser auth failed: %s", auth_result["error"])
-                    await browser.close()
-                    return False
-
-                # Extract JWT and account info
-                self._jwt_code = auth_result.get("code", "")
-                account_info = auth_result.get("accountInfo", {})
-                self._customer_id = (account_info.get("customerID") or "").strip()
-                self._jwt_expires = time.time() + 1200  # 20 min
-
-                # Extract Cloudflare cookies
-                cookies = await page.context.cookies()
-                self._cf_cookies = {
-                    c["name"]: c["value"]
-                    for c in cookies
-                    if "demotest.me" in c.get("domain", "")
-                }
-                # cf_clearance lasts ~30 min typically
-                self._cf_cookies_expires = time.time() + 1500
-
-                await browser.close()
-
-            logger.info(
-                "Buckeye: authenticated as %s, got %d cookies",
-                self._customer_id, len(self._cf_cookies),
+            resp = await self._client.post(
+                API_BASE + "/System/authenticateCustomer",
+                data={
+                    "customerID": self._username,
+                    "password": self._password,
+                    "state": "true",
+                    "response_type": "code",
+                    "client_id": self._username,
+                    "domain": "demotest.me",
+                    "redirect_uri": "demotest.me",
+                    "operation": "authenticateCustomer",
+                    "RRO": "1",
+                },
+                headers={"Authorization": "Bearer "},
             )
 
-            # Create/recreate httpx client with new cookies
-            if self._client:
-                await self._client.aclose()
-            self._client = self._create_client()
+            if resp.status_code == 403:
+                logger.warning(
+                    "Buckeye: auth blocked by Cloudflare (403) — "
+                    "API may require US-based IP or CF clearance"
+                )
+                return False
+
+            if resp.status_code != 200:
+                logger.warning("Buckeye: auth returned HTTP %d", resp.status_code)
+                return False
+
+            data = resp.json()
+            if "error" in data:
+                logger.warning("Buckeye: auth error: %s", data.get("error"))
+                return False
+
+            self._jwt_code = data.get("code", "")
+            account_info = data.get("accountInfo", {})
+            self._customer_id = (account_info.get("customerID") or "").strip()
+            self._jwt_expires = time.time() + 1200  # 20 min
+
             self._client.headers["Authorization"] = "Bearer %s" % self._jwt_code
             self._init_done = True
+
+            logger.info("Buckeye: authenticated as %s via direct HTTP", self._customer_id)
             return True
 
         except Exception as e:
-            logger.warning("Buckeye: Cloudflare bypass failed: %s", e)
+            logger.warning("Buckeye: authentication failed: %s", e)
             return False
 
     async def _ensure_auth(self) -> bool:
-        """Ensure we have valid cookies and JWT.
+        """Ensure we have a valid JWT.
 
         Uses an asyncio lock so that when many concurrent prop requests
         arrive (e.g. 11 NBA games at once), only ONE request performs the
@@ -336,20 +306,20 @@ class BuckeyeSource(DataSource):
         async with self._auth_lock:
             now = time.time()
 
-            # Need new CF cookies (or first time)
-            if not self._init_done or now >= self._cf_cookies_expires:
-                return await self._get_cloudflare_cookies()
+            # First time or client lost
+            if not self._init_done or not self._client:
+                return await self._authenticate()
 
-            # Need new JWT (CF cookies still valid)
+            # Need new JWT
             if not self._jwt_code or now >= self._jwt_expires:
                 return await self._refresh_jwt()
 
             return True
 
     async def _refresh_jwt(self) -> bool:
-        """Re-authenticate to get a new JWT using existing CF cookies."""
+        """Re-authenticate to get a new JWT."""
         if not self._client:
-            return await self._get_cloudflare_cookies()
+            return await self._authenticate()
 
         try:
             resp = await self._client.post(
@@ -368,9 +338,9 @@ class BuckeyeSource(DataSource):
                 headers={"Authorization": "Bearer "},
             )
 
-            if resp.status_code == 401:
-                # CF cookies expired, need full browser refresh
-                return await self._get_cloudflare_cookies()
+            if resp.status_code in (401, 403):
+                # Session expired or CF block — do full re-auth
+                return await self._authenticate()
 
             resp.raise_for_status()
             data = resp.json()
@@ -383,7 +353,7 @@ class BuckeyeSource(DataSource):
 
         except Exception as e:
             logger.warning("Buckeye: JWT refresh failed: %s", e)
-            return await self._get_cloudflare_cookies()
+            return await self._authenticate()
 
     async def get_odds(
         self,
