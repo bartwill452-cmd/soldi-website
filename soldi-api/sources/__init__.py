@@ -19,7 +19,7 @@ from sources.hardrock import HardRockBetSource
 from sources.betmgm import BetMGMSource
 from sources.caesars import CaesarsSource
 from sources.betus import BetUSSource
-from sources.stakeus import StakeUSSource
+from sources.stakeus import StakeUsSource as StakeUSSource
 
 __all__ = [
     "DataSource",
