@@ -4561,9 +4561,21 @@ app.get('/api/owner/conversions', requireOwnerMember, async (req, res) => {
 });
 
 // ============================================
+// KEEP-ALIVE SELF-PING (prevents Render free tier spin-down)
+// ============================================
+function keepAlive() {
+  const url = process.env.RENDER_EXTERNAL_URL || `http://localhost:${process.env.PORT || 8080}`;
+  setInterval(() => {
+    require('https').get(`${url}/api/health`, () => {}).on('error', () => {});
+    console.log(`[Keep-Alive] Pinged ${url}/api/health`);
+  }, 14 * 60 * 1000); // every 14 minutes
+}
+
+// ============================================
 // START SERVER
 // ============================================
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
   console.log(`Soldi server running on http://localhost:${PORT}`);
+  keepAlive();
 });
