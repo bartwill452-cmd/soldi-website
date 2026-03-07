@@ -35,7 +35,11 @@ PERIOD_PATTERNS = [
     (re.compile(r"2ND[_ ]SET", re.IGNORECASE), "_s2"),
     (re.compile(r"3RD[_ ]SET", re.IGNORECASE), "_s3"),
     (re.compile(r"1ST[_ ]INNING", re.IGNORECASE), "_i1"),
+    (re.compile(r"FIRST[_ ]INNING", re.IGNORECASE), "_i1"),
     (re.compile(r"FIRST[_ ]5[_ ]INNINGS?", re.IGNORECASE), "_f5"),
+    (re.compile(r"FIRST[_ ]7[_ ]INNINGS?", re.IGNORECASE), "_f7"),
+    (re.compile(r"1ST[_ ]5[_ ]INNINGS?", re.IGNORECASE), "_f5"),
+    (re.compile(r"1ST[_ ]7[_ ]INNINGS?", re.IGNORECASE), "_f7"),
 ]
 
 # ─── Player prop patterns ────────────────────────────────────────
@@ -78,6 +82,27 @@ PLAYER_PROP_PATTERNS = [
 
 # ─── Sport-specific micro market patterns ───────────────────────
 MICRO_MARKET_PATTERNS = [
+    # Team totals with period suffixes (must come before generic team_total)
+    (re.compile(r"HOME[_ ]TEAM[_ ]TOTAL.*1ST[_ ]QUARTER", re.IGNORECASE), "team_total_home_q1"),
+    (re.compile(r"AWAY[_ ]TEAM[_ ]TOTAL.*1ST[_ ]QUARTER", re.IGNORECASE), "team_total_away_q1"),
+    (re.compile(r"HOME[_ ]TEAM[_ ]TOTAL.*1ST[_ ]HALF", re.IGNORECASE), "team_total_home_h1"),
+    (re.compile(r"AWAY[_ ]TEAM[_ ]TOTAL.*1ST[_ ]HALF", re.IGNORECASE), "team_total_away_h1"),
+    (re.compile(r"HOME[_ ]TEAM[_ ]TOTAL.*1ST[_ ]PERIOD", re.IGNORECASE), "team_total_home_p1"),
+    (re.compile(r"AWAY[_ ]TEAM[_ ]TOTAL.*1ST[_ ]PERIOD", re.IGNORECASE), "team_total_away_p1"),
+    (re.compile(r"HOME[_ ]TEAM[_ ]TOTAL.*1ST[_ ]INNING", re.IGNORECASE), "team_total_home_i1"),
+    (re.compile(r"AWAY[_ ]TEAM[_ ]TOTAL.*1ST[_ ]INNING", re.IGNORECASE), "team_total_away_i1"),
+    (re.compile(r"HOME[_ ]TEAM[_ ]TOTAL.*(?:FIRST|1ST)[_ ]5[_ ]INNING", re.IGNORECASE), "team_total_home_f5"),
+    (re.compile(r"AWAY[_ ]TEAM[_ ]TOTAL.*(?:FIRST|1ST)[_ ]5[_ ]INNING", re.IGNORECASE), "team_total_away_f5"),
+    (re.compile(r"HOME[_ ]TEAM[_ ]TOTAL.*(?:FIRST|1ST)[_ ]7[_ ]INNING", re.IGNORECASE), "team_total_home_f7"),
+    (re.compile(r"AWAY[_ ]TEAM[_ ]TOTAL.*(?:FIRST|1ST)[_ ]7[_ ]INNING", re.IGNORECASE), "team_total_away_f7"),
+    # Reverse order patterns (period prefix + team total)
+    (re.compile(r"1ST[_ ]QUARTER.*HOME[_ ]TEAM[_ ]TOTAL", re.IGNORECASE), "team_total_home_q1"),
+    (re.compile(r"1ST[_ ]QUARTER.*AWAY[_ ]TEAM[_ ]TOTAL", re.IGNORECASE), "team_total_away_q1"),
+    (re.compile(r"1ST[_ ]HALF.*HOME[_ ]TEAM[_ ]TOTAL", re.IGNORECASE), "team_total_home_h1"),
+    (re.compile(r"1ST[_ ]HALF.*AWAY[_ ]TEAM[_ ]TOTAL", re.IGNORECASE), "team_total_away_h1"),
+    (re.compile(r"1ST[_ ]PERIOD.*HOME[_ ]TEAM[_ ]TOTAL", re.IGNORECASE), "team_total_home_p1"),
+    (re.compile(r"1ST[_ ]PERIOD.*AWAY[_ ]TEAM[_ ]TOTAL", re.IGNORECASE), "team_total_away_p1"),
+    # Generic team totals (must come after period-specific ones)
     (re.compile(r"HOME[_ ]TEAM[_ ]TOTAL", re.IGNORECASE), "team_total_home"),
     (re.compile(r"AWAY[_ ]TEAM[_ ]TOTAL", re.IGNORECASE), "team_total_away"),
     (re.compile(r"TEAM[_ ]TOTAL", re.IGNORECASE), "team_total"),
@@ -97,6 +122,8 @@ MICRO_MARKET_PATTERNS = [
     # MMA/Boxing: fight to go the distance (Yes/No)
     (re.compile(r"(?:WILL[_ ](?:THE[_ ])?)?FIGHT[_ ]GO(?:ES)?[_ ]THE[_ ]DISTANCE", re.IGNORECASE), "fight_to_go_distance"),
     (re.compile(r"GO(?:ES)?[_ ]THE[_ ]DISTANCE", re.IGNORECASE), "fight_to_go_distance"),
+    # MMA/Boxing: total rounds (Over/Under)
+    (re.compile(r"TOTAL[_ ]ROUNDS", re.IGNORECASE), "total_rounds"),
 ]
 
 # ─── Pinnacle period → suffix mapping (per sport type) ──────────
@@ -107,8 +134,8 @@ PINNACLE_PERIOD_MAP = {
     "football": {0: "", 1: "_h1", 2: "_h2", 3: "_q1", 4: "_q2", 5: "_q3", 6: "_q4"},
     # Hockey: period 0=full, 1=1st period, 2=2nd period, 3=3rd period
     "hockey": {0: "", 1: "_p1", 2: "_p2", 3: "_p3"},
-    # Baseball: period 0=full, 1=first 5 innings
-    "baseball": {0: "", 1: "_f5"},
+    # Baseball: period 0=full, 1=first 5 innings, 2=first 7 innings, 3=1st inning
+    "baseball": {0: "", 1: "_f5", 2: "_f7", 3: "_i1"},
     # Soccer: period 0=full, 1=1st half, 2=2nd half
     "soccer": {0: "", 1: "_h1", 2: "_h2"},
     # Tennis: period 0=full, 1=1st set, 2=2nd set, 3=3rd set
@@ -155,9 +182,21 @@ MARKET_DISPLAY_NAMES = {
     "h2h_s1": "Set 1 ML",
     "h2h_s2": "Set 2 ML",
     "h2h_s3": "Set 3 ML",
+    "h2h_i1": "1st Inn Moneyline",
+    "totals_i1": "1st Inn Total",
+    "h2h_3way_i1": "1st Inn 3-Way",
+    "team_total_home_i1": "1st Inn Home TT",
+    "team_total_away_i1": "1st Inn Away TT",
     "h2h_f5": "F5 Moneyline",
     "spreads_f5": "F5 Spread",
     "totals_f5": "F5 Total",
+    "team_total_home_f5": "F5 Home TT",
+    "team_total_away_f5": "F5 Away TT",
+    "h2h_f7": "F7 Moneyline",
+    "spreads_f7": "F7 Spread",
+    "totals_f7": "F7 Total",
+    "team_total_home_f7": "F7 Home TT",
+    "team_total_away_f7": "F7 Away TT",
     "player_points": "Player Points",
     "player_rebounds": "Player Rebounds",
     "player_assists": "Player Assists",
@@ -178,6 +217,12 @@ MARKET_DISPLAY_NAMES = {
     "team_total": "Team Total",
     "team_total_home": "Home Team Total",
     "team_total_away": "Away Team Total",
+    "team_total_home_q1": "Q1 Home TT",
+    "team_total_away_q1": "Q1 Away TT",
+    "team_total_home_h1": "1H Home TT",
+    "team_total_away_h1": "1H Away TT",
+    "team_total_home_p1": "P1 Home TT",
+    "team_total_away_p1": "P1 Away TT",
     "btts": "Both Teams to Score",
     "draw_no_bet": "Draw No Bet",
     "double_chance": "Double Chance",
@@ -187,6 +232,7 @@ MARKET_DISPLAY_NAMES = {
     "alternate_spreads": "Alternate Spreads",
     "alternate_totals": "Alternate Totals",
     "fight_to_go_distance": "Fight to Go Distance",
+    "total_rounds": "Total Rounds",
 }
 
 
@@ -330,8 +376,15 @@ ALL_MARKET_KEYS = [
     "h2h_s1", "h2h_s2", "h2h_s3",
     # Tennis totals split
     "totals_sets", "totals_games",
+    # 1st inning (baseball)
+    "h2h_i1", "totals_i1", "h2h_3way_i1",
+    "team_total_home_i1", "team_total_away_i1",
     # First 5 innings (baseball)
     "h2h_f5", "spreads_f5", "totals_f5",
+    "team_total_home_f5", "team_total_away_f5",
+    # First 7 innings (baseball)
+    "h2h_f7", "spreads_f7", "totals_f7",
+    "team_total_home_f7", "team_total_away_f7",
     # Player props
     "player_points", "player_rebounds", "player_assists",
     "player_threes", "player_pts_reb_ast",
@@ -342,9 +395,13 @@ ALL_MARKET_KEYS = [
     "player_aces", "player_games_won",
     # Micro markets
     "hockey_shots_on_goal", "team_total", "team_total_home", "team_total_away",
+    "team_total_home_q1", "team_total_away_q1",
+    "team_total_home_h1", "team_total_away_h1",
+    "team_total_home_p1", "team_total_away_p1",
     "btts", "draw_no_bet", "double_chance",
     "h2h_3way", "h2h_3way_h1", "h2h_3way_h2",
     "alternate_spreads", "alternate_totals",
     # MMA/Boxing
     "fight_to_go_distance",
+    "total_rounds",
 ]

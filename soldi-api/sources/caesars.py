@@ -86,7 +86,10 @@ _CZR_SPORT_SLUGS = {
 
 _CACHE_TTL = 120  # seconds — prefetch loop takes ~80s to cycle all sports
 _STALE_TTL = 900  # seconds — serve stale data up to 15 minutes (prefetch cycle ~13min)
-_JURISDICTION = "nj"
+
+# Ordered list of state jurisdictions to try (rotate on 403/geo-block)
+_STATE_ROTATION = ["nj", "az", "co", "il", "in", "oh", "pa", "va"]
+_JURISDICTION = "nj"  # default / current working state
 
 
 def _decimal_to_american(decimal_odds: float) -> Optional[int]:
@@ -125,6 +128,10 @@ class CaesarsSource(DataSource):
         self._direct_api_works = None  # type: Optional[bool]
         # Timestamp when direct API was last marked as failed (retry after 5 min)
         self._direct_api_failed_at = 0.0
+        # Current working state for API and Playwright URLs (rotated on 403)
+        self._current_state = "nj"
+        # Index into _STATE_ROTATION for round-robin
+        self._state_idx = 0
 
     def start_prefetch(self) -> None:
         """Start background prefetch of major sports."""
@@ -156,7 +163,7 @@ class CaesarsSource(DataSource):
                                 self._direct_api_works = True
                                 logger.info("Caesars: Direct API works, skipping Playwright")
 
-                    # Fallback to Playwright capture
+                    # Fallback to Playwright capture with state rotation
                     if not events:
                         if self._direct_api_works is None or self._direct_api_works is True:
                             self._direct_api_works = False
@@ -164,7 +171,20 @@ class CaesarsSource(DataSource):
                             logger.info("Caesars: Direct API failed, using Playwright")
                         async with self._lock:
                             await self._ensure_browser()
-                            events = await self._navigate_and_capture(url, sport_key)
+                            # Try current state first, then rotate on failure
+                            pw_url = url.replace("/us/nj/", f"/us/{self._current_state}/")
+                            events = await self._navigate_and_capture(pw_url, sport_key)
+                            if not events:
+                                # Try other states via Playwright
+                                for alt_state in _STATE_ROTATION:
+                                    if alt_state == self._current_state:
+                                        continue
+                                    alt_url = url.replace("/us/nj/", f"/us/{alt_state}/")
+                                    events = await self._navigate_and_capture(alt_url, sport_key)
+                                    if events:
+                                        logger.info("Caesars: Playwright succeeded with state=%s", alt_state)
+                                        self._current_state = alt_state
+                                        break
 
                     self._cache[sport_key] = (events, time.time())
                     logger.info("Caesars prefetch: %s complete (%d events)", sport_key, len(events))
@@ -250,27 +270,53 @@ class CaesarsSource(DataSource):
 
     # ── Direct API Fetching ───────────────────────────────────────────
 
+    def _api_base_for_state(self, state: str) -> str:
+        """Return the API base URL for a given state jurisdiction."""
+        return f"https://api.americanwagering.com/regions/us/locations/{state}/brands/czr/sb/v3"
+
     async def _fetch_direct_api(self, sport_key: str) -> List[OddsEvent]:
-        """Try to fetch events directly from api.americanwagering.com."""
+        """Try to fetch events directly from api.americanwagering.com.
+
+        Rotates through state jurisdictions on 403/geo-block responses.
+        """
         slug = _CZR_SPORT_SLUGS.get(sport_key)
         if not slug:
             return []
 
-        try:
-            # Try the events listing endpoint
-            url = f"{_API_BASE}/{slug}/events"
-            response = await self._http_client.get(url)
-            if response.status_code != 200:
-                return []
+        # Try each state in rotation order, starting from the current working state
+        for attempt in range(len(_STATE_ROTATION)):
+            state_idx = (self._state_idx + attempt) % len(_STATE_ROTATION)
+            state = _STATE_ROTATION[state_idx]
+            api_base = self._api_base_for_state(state)
 
-            data = response.json()
-            if not isinstance(data, (list, dict)):
-                return []
+            try:
+                url = f"{api_base}/{slug}/events"
+                response = await self._http_client.get(url)
 
-            return self._parse_api_response(data, sport_key)
-        except Exception as e:
-            logger.debug("Caesars direct API failed: %s", e)
-            return []
+                if response.status_code == 403:
+                    logger.debug("Caesars: API 403 for state=%s, rotating...", state)
+                    continue
+                if response.status_code != 200:
+                    logger.debug("Caesars: API returned %d for state=%s", response.status_code, state)
+                    continue
+
+                data = response.json()
+                if not isinstance(data, (list, dict)):
+                    continue
+
+                events = self._parse_api_response(data, sport_key)
+                if events:
+                    # Lock in this state as working
+                    if state != self._current_state:
+                        logger.info("Caesars: Switching to state=%s (was %s)", state, self._current_state)
+                        self._current_state = state
+                        self._state_idx = state_idx
+                    return events
+            except Exception as e:
+                logger.debug("Caesars direct API failed for state=%s: %s", state, e)
+                continue
+
+        return []
 
     # ── Playwright Fetching ───────────────────────────────────────────
 
@@ -454,12 +500,12 @@ class CaesarsSource(DataSource):
         if not czr_markets:
             return None
 
-        # Build event URL
+        # Build event URL (use current working state for geo-compatibility)
         event_id = data.get("id", "")
         event_url = "https://sportsbook.caesars.com"
         if event_id:
             event_url = (
-                f"https://sportsbook.caesars.com/us/{_JURISDICTION}/"
+                f"https://sportsbook.caesars.com/us/nj/"
                 f"bet/{event_id}"
             )
 
@@ -601,6 +647,10 @@ class CaesarsSource(DataSource):
             suffix = "_p3"
         elif "first 5" in lower or "1st 5" in lower:
             suffix = "_f5"
+        elif "first 7" in lower or "1st 7" in lower:
+            suffix = "_f7"
+        elif "1st inning" in lower or "first inning" in lower:
+            suffix = "_i1"
         elif "1st set" in lower:
             suffix = "_s1"
         elif "2nd set" in lower:
@@ -618,7 +668,7 @@ class CaesarsSource(DataSource):
         elif "go the distance" in lower or "goes the distance" in lower:
             return "fight_to_go_distance"
         elif "total rounds" in lower:
-            return "totals"
+            return "total_rounds"
         elif "spread" in lower or "handicap" in lower:
             # Skip alternate/alt lines
             if "alternate" in lower or "alt " in lower:
@@ -669,6 +719,18 @@ class CaesarsSource(DataSource):
             suffix = "_q3"
         elif "4th quarter" in lower or "4th qtr" in lower:
             suffix = "_q4"
+        elif "1st period" in lower:
+            suffix = "_p1"
+        elif "2nd period" in lower:
+            suffix = "_p2"
+        elif "3rd period" in lower:
+            suffix = "_p3"
+        elif "first 5" in lower or "1st 5" in lower:
+            suffix = "_f5"
+        elif "first 7" in lower or "1st 7" in lower:
+            suffix = "_f7"
+        elif "1st inning" in lower or "first inning" in lower:
+            suffix = "_i1"
 
         # Check for team name in market name
         home_lower = home_team.lower()
@@ -703,6 +765,13 @@ class CaesarsSource(DataSource):
                 return "Yes"
             elif "no" in lower:
                 return "No"
+            return name
+
+        if market_key == "total_rounds":
+            if "over" in lower:
+                return "Over"
+            elif "under" in lower:
+                return "Under"
             return name
 
         if market_key.startswith("totals"):

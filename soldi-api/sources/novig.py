@@ -4,17 +4,17 @@ Novig P2P exchange scraper.
 Uses Novig's public GraphQL API at api.novig.us to fetch odds data.
 No authentication required for public market data.
 
-Novig is a peer-to-peer sports prediction exchange where odds are
-expressed as probabilities (0.0-1.0) in the `available` field.
-We convert these to American odds for consistency with other sources.
+Novig is a peer-to-peer sports prediction exchange. Prices are derived from the
+order book using buy_price = 1 - opponent's best bid (the actual tradeable ASK price).
+The `available` probability field is only used as a fallback when no order book data
+exists. We convert probabilities to American odds for consistency with other sources.
 
-Liquidity is fetched from the order book batch endpoint. For each outcome,
-we show the available liquidity at the displayed price (how much you can
-match at that line).
+Liquidity is fetched from the order book batch endpoint for ALL market types.
+For each outcome, we show the available liquidity at the displayed price.
 
 API Base: https://api.novig.us/v1/graphql
 Order Book: https://api.novig.us/nbx/v1/markets/book/batch
-Markets: MONEY (h2h), SPREAD, TOTAL, MONEY_1H, SPREAD_1H, TOTAL_1H
+Markets: MONEY (h2h), SPREAD, TOTAL, TEAM_TOTAL, MONEY_1H, SPREAD_1H, TOTAL_1H, TEAM_TOTAL_1H
 """
 
 import asyncio
@@ -64,12 +64,14 @@ _MARKET_TYPE_MAP = {
     "MONEY": "h2h",
     "SPREAD": "spreads",
     "TOTAL": "totals",
+    "TEAM_TOTAL": "team_total",
     "MONEY_1H": "h2h_h1",
     "SPREAD_1H": "spreads_h1",
     "TOTAL_1H": "totals_h1",
+    "TEAM_TOTAL_1H": "team_total_h1",
 }  # type: Dict[str, str]
 
-# Market types we care about
+# Market types we care about (used in GraphQL query filter)
 _WANTED_TYPES = list(_MARKET_TYPE_MAP.keys())
 
 # Cache TTL
@@ -227,15 +229,15 @@ class NovigSource(DataSource):
 
         raw_events = data.get("data", {}).get("event", [])
 
-        # Collect all MONEY market IDs for order book liquidity fetch
-        money_market_ids = []  # type: List[str]
+        # Collect ALL market IDs for order book buy-price + liquidity fetch
+        all_market_ids = []  # type: List[str]
         for ev in raw_events:
             for mkt in ev.get("markets", []):
-                if mkt.get("type") in ("MONEY", "MONEY_1H"):
-                    money_market_ids.append(mkt["id"])
+                if mkt.get("type") in _MARKET_TYPE_MAP and mkt.get("id"):
+                    all_market_ids.append(mkt["id"])
 
-        # Fetch order book liquidity for all moneyline markets in one batch
-        liquidity_map = await self._fetch_orderbook_liquidity(money_market_ids)
+        # Fetch order book data for all markets in one batch
+        liquidity_map = await self._fetch_orderbook_liquidity(all_market_ids)
 
         return self._parse_events(raw_events, sport_key, liquidity_map)
 
@@ -385,16 +387,29 @@ class NovigSource(DataSource):
                     # Pick consensus spread line
                     mkt = _pick_consensus_line(raw_markets)
                     if mkt:
-                        parsed = self._parse_spread(mkt, our_key, home_name, away_name, home_team_raw, away_team_raw)
+                        parsed = self._parse_spread(
+                            mkt, our_key, home_name, away_name,
+                            home_team_raw, away_team_raw, liquidity_map,
+                        )
                         if parsed:
                             parsed_markets.append(parsed)
                 elif novig_type in ("TOTAL", "TOTAL_1H"):
                     # Pick consensus total line
                     mkt = _pick_consensus_line(raw_markets)
                     if mkt:
-                        parsed = self._parse_total(mkt, our_key)
+                        parsed = self._parse_total(mkt, our_key, liquidity_map)
                         if parsed:
                             parsed_markets.append(parsed)
+                elif novig_type in ("TEAM_TOTAL", "TEAM_TOTAL_1H"):
+                    # Team totals: parse each alternate line
+                    for raw_mkt in raw_markets:
+                        parsed = self._parse_team_total(
+                            raw_mkt, our_key, home_name, away_name,
+                            home_team_raw, away_team_raw, liquidity_map,
+                        )
+                        if parsed:
+                            parsed_markets.append(parsed)
+                            break  # take the first valid one (consensus)
 
             if not parsed_markets:
                 continue
@@ -558,11 +573,12 @@ class NovigSource(DataSource):
         away_name: str,
         home_team_raw: dict,
         away_team_raw: dict,
+        liquidity_map: Optional[Dict[str, Dict[str, dict]]] = None,
     ) -> Optional[Market]:
         """Parse a SPREAD or SPREAD_1H market.
 
-        For live games, one side may have available=None. We fall back to
-        altAvailable, then infer from complement probability.
+        Uses order book buy prices when available (actual tradeable price),
+        falling back to the `available` probability field.
         """
         outcomes = mkt.get("outcomes", [])
         strike = mkt.get("strike", 0)
@@ -572,11 +588,13 @@ class NovigSource(DataSource):
         home_syms = self._team_symbols(home_team_raw)
         away_syms = self._team_symbols(away_team_raw)
 
-        # First pass: collect probs and points for each side
+        # First pass: collect probs, points, and outcome IDs for each side
         home_prob = None  # type: Optional[float]
         away_prob = None  # type: Optional[float]
         home_point = None  # type: Optional[float]
         away_point = None  # type: Optional[float]
+        home_outcome_id = None  # type: Optional[str]
+        away_outcome_id = None  # type: Optional[str]
 
         for o in outcomes:
             desc = (o.get("description") or "").upper()
@@ -596,9 +614,11 @@ class NovigSource(DataSource):
             if team_sym in home_syms:
                 home_prob = prob
                 home_point = point
+                home_outcome_id = o.get("id")
             elif team_sym in away_syms:
                 away_prob = prob
                 away_point = point
+                away_outcome_id = o.get("id")
 
         # Infer missing side from complement
         if home_prob is not None and away_prob is None:
@@ -606,45 +626,85 @@ class NovigSource(DataSource):
         elif away_prob is not None and home_prob is None:
             home_prob = 1.0 - away_prob
 
+        # Look up order book buy prices (override `available` probability)
+        market_id = mkt.get("id", "")
+        mkt_book = (liquidity_map or {}).get(market_id, {})
+        home_book = mkt_book.get(home_outcome_id, {}) if home_outcome_id else {}
+        away_book = mkt_book.get(away_outcome_id, {}) if away_outcome_id else {}
+
+        home_buy_price = home_book.get("buy_price") if isinstance(home_book, dict) else None
+        away_buy_price = away_book.get("buy_price") if isinstance(away_book, dict) else None
+
+        # Order book buy price ALWAYS overrides the probability estimate
+        if home_buy_price and 0 < home_buy_price < 1:
+            home_odds = _prob_to_american(home_buy_price)
+        elif home_prob is not None and 0 < home_prob < 1:
+            home_odds = _prob_to_american(home_prob)
+        else:
+            home_odds = None
+
+        if away_buy_price and 0 < away_buy_price < 1:
+            away_odds = _prob_to_american(away_buy_price)
+        elif away_prob is not None and 0 < away_prob < 1:
+            away_odds = _prob_to_american(away_prob)
+        else:
+            away_odds = None
+
         parsed_outcomes = []  # type: List[Outcome]
-        if home_prob is not None and 0 < home_prob < 1:
+        if home_odds is not None:
+            home_liq = None  # type: Optional[float]
+            if isinstance(home_book, dict):
+                home_liq = home_book.get("liquidity")
             parsed_outcomes.append(Outcome(
                 name=home_name,
-                price=_prob_to_american(home_prob),
+                price=home_odds,
                 point=home_point,
+                liquidity=round(home_liq, 2) if home_liq else None,
             ))
-        if away_prob is not None and 0 < away_prob < 1:
+        if away_odds is not None:
+            away_liq = None  # type: Optional[float]
+            if isinstance(away_book, dict):
+                away_liq = away_book.get("liquidity")
             parsed_outcomes.append(Outcome(
                 name=away_name,
-                price=_prob_to_american(away_prob),
+                price=away_odds,
                 point=away_point,
+                liquidity=round(away_liq, 2) if away_liq else None,
             ))
 
         if len(parsed_outcomes) < 2:
             return None
 
-        return Market(key=market_key, outcomes=parsed_outcomes)
+        total_liq = None  # type: Optional[float]
+        liq_vals = [o.liquidity for o in parsed_outcomes if o.liquidity]
+        if liq_vals:
+            total_liq = round(sum(liq_vals), 2)
+
+        return Market(key=market_key, outcomes=parsed_outcomes, liquidity=total_liq)
 
     def _parse_total(
         self,
         mkt: dict,
         market_key: str,
+        liquidity_map: Optional[Dict[str, Dict[str, dict]]] = None,
     ) -> Optional[Market]:
         """Parse a TOTAL or TOTAL_1H market.
 
-        For live games, one side may have available=None. We fall back to
-        altAvailable, then infer from complement probability.
+        Uses order book buy prices when available (actual tradeable price),
+        falling back to the `available` probability field.
         """
         outcomes = mkt.get("outcomes", [])
         strike = mkt.get("strike", 0)
         if len(outcomes) < 2:
             return None
 
-        # First pass: collect probs and points for each side
+        # First pass: collect probs, points, and outcome IDs for each side
         over_prob = None  # type: Optional[float]
         under_prob = None  # type: Optional[float]
         over_point = None  # type: Optional[float]
         under_point = None  # type: Optional[float]
+        over_outcome_id = None  # type: Optional[str]
+        under_outcome_id = None  # type: Optional[str]
 
         for o in outcomes:
             desc = (o.get("description") or "")
@@ -667,9 +727,11 @@ class NovigSource(DataSource):
             if side.lower().startswith("over"):
                 over_prob = prob
                 over_point = point
+                over_outcome_id = o.get("id")
             elif side.lower().startswith("under"):
                 under_prob = prob
                 under_point = point
+                under_outcome_id = o.get("id")
 
         # Infer missing side from complement
         if over_prob is not None and under_prob is None:
@@ -679,24 +741,121 @@ class NovigSource(DataSource):
             over_prob = 1.0 - under_prob
             over_point = under_point
 
+        # Look up order book buy prices (override `available` probability)
+        market_id = mkt.get("id", "")
+        mkt_book = (liquidity_map or {}).get(market_id, {})
+        over_book = mkt_book.get(over_outcome_id, {}) if over_outcome_id else {}
+        under_book = mkt_book.get(under_outcome_id, {}) if under_outcome_id else {}
+
+        over_buy_price = over_book.get("buy_price") if isinstance(over_book, dict) else None
+        under_buy_price = under_book.get("buy_price") if isinstance(under_book, dict) else None
+
+        # Order book buy price ALWAYS overrides the probability estimate
+        if over_buy_price and 0 < over_buy_price < 1:
+            over_odds = _prob_to_american(over_buy_price)
+        elif over_prob is not None and 0 < over_prob < 1:
+            over_odds = _prob_to_american(over_prob)
+        else:
+            over_odds = None
+
+        if under_buy_price and 0 < under_buy_price < 1:
+            under_odds = _prob_to_american(under_buy_price)
+        elif under_prob is not None and 0 < under_prob < 1:
+            under_odds = _prob_to_american(under_prob)
+        else:
+            under_odds = None
+
         parsed_outcomes = []  # type: List[Outcome]
-        if over_prob is not None and 0 < over_prob < 1:
+        if over_odds is not None:
+            over_liq = None  # type: Optional[float]
+            if isinstance(over_book, dict):
+                over_liq = over_book.get("liquidity")
             parsed_outcomes.append(Outcome(
                 name="Over",
-                price=_prob_to_american(over_prob),
+                price=over_odds,
                 point=over_point,
+                liquidity=round(over_liq, 2) if over_liq else None,
             ))
-        if under_prob is not None and 0 < under_prob < 1:
+        if under_odds is not None:
+            under_liq = None  # type: Optional[float]
+            if isinstance(under_book, dict):
+                under_liq = under_book.get("liquidity")
             parsed_outcomes.append(Outcome(
                 name="Under",
-                price=_prob_to_american(under_prob),
+                price=under_odds,
                 point=under_point,
+                liquidity=round(under_liq, 2) if under_liq else None,
             ))
 
         if len(parsed_outcomes) < 2:
             return None
 
-        return Market(key=market_key, outcomes=parsed_outcomes)
+        total_liq = None  # type: Optional[float]
+        liq_vals = [o.liquidity for o in parsed_outcomes if o.liquidity]
+        if liq_vals:
+            total_liq = round(sum(liq_vals), 2)
+
+        return Market(key=market_key, outcomes=parsed_outcomes, liquidity=total_liq)
+
+    def _parse_team_total(
+        self,
+        mkt: dict,
+        market_key: str,
+        home_name: str,
+        away_name: str,
+        home_team_raw: dict,
+        away_team_raw: dict,
+        liquidity_map: Optional[Dict[str, Dict[str, dict]]] = None,
+    ) -> Optional[Market]:
+        """Parse a TEAM_TOTAL or TEAM_TOTAL_1H market.
+
+        Determines home/away from outcome descriptions, then delegates to
+        _parse_total logic for Over/Under pricing.
+        """
+        outcomes = mkt.get("outcomes", [])
+        if len(outcomes) < 2:
+            return None
+
+        home_syms = self._team_symbols(home_team_raw)
+        away_syms = self._team_symbols(away_team_raw)
+
+        # Determine which team from outcome descriptions
+        # Novig team_total descriptions look like "HOU Over 112.5" or "BOS Under 112.5"
+        side = ""
+        for o in outcomes:
+            desc = (o.get("description") or "").upper()
+            parts = desc.split()
+            if parts:
+                team_sym = parts[0].strip()
+                if team_sym in home_syms:
+                    side = "home"
+                    break
+                elif team_sym in away_syms:
+                    side = "away"
+                    break
+
+        if not side:
+            return None
+
+        # Parse as a regular total (Over/Under)
+        # Adjust the key based on home/away and period suffix from market_key
+        parsed = self._parse_total(mkt, market_key, liquidity_map)
+        if parsed is None:
+            return None
+
+        # Set the correct team_total key
+        if side == "home":
+            if "_h1" in market_key:
+                parsed.key = "team_total_home_h1"
+            else:
+                parsed.key = "team_total_home"
+        elif side == "away":
+            if "_h1" in market_key:
+                parsed.key = "team_total_away_h1"
+            else:
+                parsed.key = "team_total_away"
+
+        return parsed
 
     async def close(self) -> None:
         await self._client.aclose()

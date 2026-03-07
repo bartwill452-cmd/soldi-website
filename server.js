@@ -984,21 +984,21 @@ function setOddsCache(key, data, ttlSeconds) {
 
 // Sportsbook definitions (matching SoldiAPI scrapers)
 const ODDS_SPORTSBOOKS = [
-  { key: 'fanduel', name: 'FanDuel', shortName: 'FD' },
-  { key: 'draftkings', name: 'DraftKings', shortName: 'DK' },
-  { key: 'betmgm', name: 'BetMGM', shortName: 'MGM' },
-  { key: 'pinnacle', name: 'Pinnacle', shortName: 'PIN' },
-  { key: 'williamhill_us', name: 'Caesars', shortName: 'CZR' },
-  { key: 'bovada', name: 'Bovada', shortName: 'BOV' },
-  { key: 'betonlineag', name: 'BetOnline', shortName: 'BOL' },
-  { key: 'betrivers', name: 'BetRivers', shortName: 'BR' },
-  { key: 'hardrock', name: 'Hard Rock Bet', shortName: 'HR' },
-  { key: 'novig', name: 'Novig', shortName: 'NOV' },
-  { key: 'bookmaker', name: 'Bookmaker', shortName: 'BM' },
-  { key: 'bet105', name: 'Bet105', shortName: '105' },
-  { key: 'xbet', name: 'XBet', shortName: 'XB' },
-  { key: 'buckeye', name: 'Buckeye', shortName: 'BKY' },
-  { key: 'prophetx', name: 'ProphetX', shortName: 'PX' },
+  { key: 'draftkings', name: 'DraftKings', shortName: 'DK', logo: '/images/books/draftkings.png' },
+  { key: 'fanduel', name: 'FanDuel', shortName: 'FD', logo: '/images/books/fanduel.png' },
+  { key: 'betrivers', name: 'BetRivers', shortName: 'BR', logo: '/images/books/betrivers.png' },
+  { key: 'hardrock', name: 'Hard Rock Bet', shortName: 'HR', logo: '/images/books/hardrock.png' },
+  { key: 'caesars', name: 'Caesars', shortName: 'CZR', logo: '/images/books/caesars.png' },
+  { key: 'betonlineag', name: 'BetOnline', shortName: 'BOL', logo: '/images/books/betonline.png' },
+  { key: 'betus', name: 'BetUS', shortName: 'BUS', logo: '/images/books/betus.png' },
+  { key: 'kalshi', name: 'Kalshi', shortName: 'KAL', logo: '/images/books/kalshi.png' },
+  { key: 'pinnacle', name: 'Pinnacle', shortName: 'PIN', logo: '/images/books/pinnacle.png' },
+  { key: 'bet105', name: 'Bet105', shortName: '105', logo: '/images/books/bet105.png' },
+  { key: 'prophetx', name: 'ProphetX', shortName: 'PX', logo: '/images/books/prophetx.png' },
+  { key: 'novig', name: 'Novig', shortName: 'NOV', logo: '/images/books/novig.png' },
+  { key: 'stakeus', name: 'Stake.us', shortName: 'STK', logo: '/images/books/stakeus.png' },
+  { key: 'bookmaker', name: 'Bookmaker', shortName: 'BM', logo: '/images/books/bookmaker.png' },
+  { key: 'buckeye', name: 'Buckeye', shortName: 'BKY', logo: '/images/books/buckeye.png' },
 ];
 const SHARP_BOOKS = ['pinnacle', 'novig', 'bookmaker'];
 
@@ -1006,29 +1006,14 @@ const ODDS_SPORT_CATEGORIES = [
   { id: 'basketball', name: 'Basketball', icon: '🏀', leagues: [
     { key: 'basketball_nba', name: 'NBA' }, { key: 'basketball_ncaab', name: 'NCAAB' }
   ]},
-  { id: 'football', name: 'Football', icon: '🏈', leagues: [
-    { key: 'americanfootball_nfl', name: 'NFL' }, { key: 'americanfootball_ncaaf', name: 'NCAAF' }
+  { id: 'hockey', name: 'Hockey', icon: '🏒', leagues: [
+    { key: 'icehockey_nhl', name: 'NHL' }
   ]},
   { id: 'baseball', name: 'Baseball', icon: '⚾', leagues: [
     { key: 'baseball_mlb', name: 'MLB' }
   ]},
-  { id: 'hockey', name: 'Hockey', icon: '🏒', leagues: [
-    { key: 'icehockey_nhl', name: 'NHL' }
-  ]},
-  { id: 'soccer', name: 'Soccer', icon: '⚽', leagues: [
-    { key: 'soccer_epl', name: 'EPL' }, { key: 'soccer_spain_la_liga', name: 'La Liga' },
-    { key: 'soccer_germany_bundesliga', name: 'Bundesliga' }, { key: 'soccer_italy_serie_a', name: 'Serie A' },
-    { key: 'soccer_france_ligue_one', name: 'Ligue 1' }, { key: 'soccer_usa_mls', name: 'MLS' },
-    { key: 'soccer_uefa_champs_league', name: 'UCL' }
-  ]},
   { id: 'mma', name: 'MMA', icon: '🥊', leagues: [
     { key: 'mma_mixed_martial_arts', name: 'UFC' }
-  ]},
-  { id: 'tennis', name: 'Tennis', icon: '🎾', leagues: [
-    { key: 'tennis_atp', name: 'ATP' }, { key: 'tennis_wta', name: 'WTA' }
-  ]},
-  { id: 'boxing', name: 'Boxing', icon: '🥊', leagues: [
-    { key: 'boxing_boxing', name: 'Boxing' }
   ]},
 ];
 
@@ -1096,32 +1081,149 @@ function findArbitrageForEvent(allOdds) {
   return null;
 }
 
-// Transform SoldiAPI response to our format (same schema as The Odds API)
+// All market key definitions per sport for the UI
+const SPORT_MARKET_TABS = {
+  basketball_nba: [
+    { key: 'h2h', label: 'Moneyline' },
+    { key: 'spreads', label: 'Spread' },
+    { key: 'totals', label: 'Total' },
+    { key: 'h2h_q1', label: 'Q1 ML' },
+    { key: 'spreads_q1', label: 'Q1 Spread' },
+    { key: 'totals_q1', label: 'Q1 Total' },
+    { key: 'team_total_home_q1', label: 'Q1 Home TT' },
+    { key: 'team_total_away_q1', label: 'Q1 Away TT' },
+    { key: 'h2h_h1', label: '1H ML' },
+    { key: 'spreads_h1', label: '1H Spread' },
+    { key: 'totals_h1', label: '1H Total' },
+    { key: 'team_total_home_h1', label: '1H Home TT' },
+    { key: 'team_total_away_h1', label: '1H Away TT' },
+    { key: 'team_total_home', label: 'Home Team Total' },
+    { key: 'team_total_away', label: 'Away Team Total' },
+  ],
+  basketball_ncaab: [
+    { key: 'h2h', label: 'Moneyline' },
+    { key: 'spreads', label: 'Spread' },
+    { key: 'totals', label: 'Total' },
+    { key: 'h2h_h1', label: '1H ML' },
+    { key: 'spreads_h1', label: '1H Spread' },
+    { key: 'totals_h1', label: '1H Total' },
+    { key: 'team_total_home', label: 'Home Team Total' },
+    { key: 'team_total_away', label: 'Away Team Total' },
+  ],
+  icehockey_nhl: [
+    { key: 'h2h', label: 'Moneyline' },
+    { key: 'spreads', label: 'Puck Line' },
+    { key: 'totals', label: 'Total' },
+    { key: 'team_total_home', label: 'Home Team Total' },
+    { key: 'team_total_away', label: 'Away Team Total' },
+    { key: 'h2h_p1', label: 'P1 ML' },
+    { key: 'spreads_p1', label: 'P1 Spread' },
+    { key: 'totals_p1', label: 'P1 Total' },
+    { key: 'team_total_home_p1', label: 'P1 Home TT' },
+    { key: 'team_total_away_p1', label: 'P1 Away TT' },
+  ],
+  baseball_mlb: [
+    { key: 'h2h', label: 'Moneyline' },
+    { key: 'spreads', label: 'Run Line' },
+    { key: 'totals', label: 'Total' },
+    { key: 'team_total_home', label: 'Home Team Total' },
+    { key: 'team_total_away', label: 'Away Team Total' },
+    { key: 'h2h_i1', label: '1st Inn ML' },
+    { key: 'totals_i1', label: '1st Inn Total' },
+    { key: 'h2h_3way_i1', label: '1st Inn 3-Way' },
+    { key: 'team_total_home_i1', label: '1st Inn Home TT' },
+    { key: 'team_total_away_i1', label: '1st Inn Away TT' },
+    { key: 'h2h_f5', label: 'F5 ML' },
+    { key: 'spreads_f5', label: 'F5 Spread' },
+    { key: 'totals_f5', label: 'F5 Total' },
+    { key: 'team_total_home_f5', label: 'F5 Home TT' },
+    { key: 'team_total_away_f5', label: 'F5 Away TT' },
+    { key: 'h2h_f7', label: 'F7 ML' },
+    { key: 'spreads_f7', label: 'F7 Spread' },
+    { key: 'totals_f7', label: 'F7 Total' },
+    { key: 'team_total_home_f7', label: 'F7 Home TT' },
+    { key: 'team_total_away_f7', label: 'F7 Away TT' },
+  ],
+  mma_mixed_martial_arts: [
+    { key: 'h2h', label: 'Moneyline' },
+    { key: 'totals', label: 'Over/Under Rounds' },
+    { key: 'fight_to_go_distance', label: 'Go The Distance' },
+  ],
+};
+
+// Transform SoldiAPI response to our format — preserves ALL markets per bookmaker
 function transformOddsEvents(rawEvents) {
   return rawEvents.map(event => {
     const bookmakers = (event.bookmakers || []).map(bm => {
-      const result = { key: bm.key, name: bm.title };
+      const result = { key: bm.key, name: bm.title, markets: {} };
       for (const market of bm.markets || []) {
-        if (market.key === 'h2h') {
+        const mk = market.key;
+        // H2H / moneyline-style markets
+        if (mk.startsWith('h2h') || mk === 'fight_to_go_distance') {
           const home = market.outcomes.find(o => o.name === event.home_team);
           const away = market.outcomes.find(o => o.name === event.away_team);
           const draw = market.outcomes.find(o => o.name === 'Draw');
-          result.moneyline = { home: home?.price || 0, away: away?.price || 0, draw: draw?.price || null };
+          const yes = market.outcomes.find(o => o.name === 'Yes');
+          const no = market.outcomes.find(o => o.name === 'No');
+          if (mk === 'fight_to_go_distance') {
+            result.markets[mk] = {
+              home: yes?.price || 0, away: no?.price || 0,
+              homeName: 'Yes', awayName: 'No',
+              liquidity: market.liquidity || null,
+            };
+          } else {
+            result.markets[mk] = {
+              home: home?.price || 0, away: away?.price || 0,
+              draw: draw?.price || null,
+              liquidity: market.liquidity || null,
+            };
+          }
+          // Backward compat for top-level h2h
+          if (mk === 'h2h') {
+            result.moneyline = { home: home?.price || 0, away: away?.price || 0, draw: draw?.price || null };
+          }
         }
-        if (market.key === 'spreads') {
+        // Spread-style markets
+        else if (mk.startsWith('spreads')) {
           const home = market.outcomes.find(o => o.name === event.home_team);
           const away = market.outcomes.find(o => o.name === event.away_team);
-          result.spread = {
+          result.markets[mk] = {
             home: home?.price || 0, homePoint: home?.point || 0,
-            away: away?.price || 0, awayPoint: away?.point || 0
+            away: away?.price || 0, awayPoint: away?.point || 0,
           };
+          if (mk === 'spreads') {
+            result.spread = result.markets[mk];
+          }
         }
-        if (market.key === 'totals') {
+        // Total-style markets
+        else if (mk.startsWith('totals')) {
           const over = market.outcomes.find(o => o.name === 'Over');
           const under = market.outcomes.find(o => o.name === 'Under');
-          result.total = {
+          result.markets[mk] = {
             over: over?.price || 0, overPoint: over?.point || 0,
-            under: under?.price || 0, underPoint: under?.point || 0
+            under: under?.price || 0, underPoint: under?.point || 0,
+          };
+          if (mk === 'totals') {
+            result.total = result.markets[mk];
+          }
+        }
+        // Team totals
+        else if (mk.startsWith('team_total')) {
+          const over = market.outcomes.find(o => o.name === 'Over');
+          const under = market.outcomes.find(o => o.name === 'Under');
+          result.markets[mk] = {
+            over: over?.price || 0, overPoint: over?.point || 0,
+            under: under?.price || 0, underPoint: under?.point || 0,
+          };
+        }
+        // 3-way markets (1st inning 3-way etc)
+        else if (mk.startsWith('h2h_3way')) {
+          const home = market.outcomes.find(o => o.name === event.home_team);
+          const away = market.outcomes.find(o => o.name === event.away_team);
+          const draw = market.outcomes.find(o => o.name === 'Draw');
+          result.markets[mk] = {
+            home: home?.price || 0, away: away?.price || 0,
+            draw: draw?.price || null,
           };
         }
       }
@@ -1135,37 +1237,60 @@ function transformOddsEvents(rawEvents) {
   });
 }
 
-// Calculate +EV bets across all events
+// Calculate +EV bets across all events — supports all sub-markets
 function calculatePositiveEV(events) {
   const evBets = [];
   for (const event of events) {
-    const sharpML = event.bookmakers.filter(b => SHARP_BOOKS.includes(b.key) && b.moneyline);
-    const sharpHomeML = sharpML.map(b => b.moneyline.home).filter(Boolean);
-    const sharpAwayML = sharpML.map(b => b.moneyline.away).filter(Boolean);
-
+    // Collect all unique market keys across all bookmakers
+    const allMarketKeys = new Set();
     for (const bm of event.bookmakers) {
-      if (SHARP_BOOKS.includes(bm.key)) continue;
-      const bookInfo = ODDS_SPORTSBOOKS.find(s => s.key === bm.key);
+      if (bm.markets) Object.keys(bm.markets).forEach(k => allMarketKeys.add(k));
+      if (bm.moneyline) allMarketKeys.add('h2h');
+      if (bm.spread) allMarketKeys.add('spreads');
+      if (bm.total) allMarketKeys.add('totals');
+    }
 
-      // Moneyline EV
-      if (bm.moneyline && sharpHomeML.length > 0) {
-        addEVBet(evBets, event, bm, bookInfo, 'Moneyline', bm.moneyline.home, event.homeTeam, sharpHomeML, sharpAwayML, null);
-        addEVBet(evBets, event, bm, bookInfo, 'Moneyline', bm.moneyline.away, event.awayTeam, sharpAwayML, sharpHomeML, null);
+    for (const marketKey of allMarketKeys) {
+      const isH2H = marketKey.startsWith('h2h') || marketKey === 'fight_to_go_distance';
+      const isSpreads = marketKey.startsWith('spreads');
+      const isTotals = marketKey.startsWith('totals') || marketKey.startsWith('team_total');
+
+      // Get sharp book data for this specific market
+      const sharpData = [];
+      for (const b of event.bookmakers) {
+        if (!SHARP_BOOKS.includes(b.key)) continue;
+        const mkt = b.markets?.[marketKey] || (marketKey === 'h2h' ? b.moneyline : marketKey === 'spreads' ? b.spread : marketKey === 'totals' ? b.total : null);
+        if (mkt) sharpData.push(mkt);
       }
-      // Spread EV
-      if (bm.spread) {
-        const sharpSP = event.bookmakers.filter(b => SHARP_BOOKS.includes(b.key) && b.spread && Math.abs(b.spread.homePoint - bm.spread.homePoint) < 0.01);
-        if (sharpSP.length > 0) {
-          addEVBet(evBets, event, bm, bookInfo, `Spread ${bm.spread.homePoint > 0 ? '+' : ''}${bm.spread.homePoint}`, bm.spread.home, event.homeTeam, sharpSP.map(b => b.spread.home), sharpSP.map(b => b.spread.away), bm.spread.homePoint);
-          addEVBet(evBets, event, bm, bookInfo, `Spread ${bm.spread.awayPoint > 0 ? '+' : ''}${bm.spread.awayPoint}`, bm.spread.away, event.awayTeam, sharpSP.map(b => b.spread.away), sharpSP.map(b => b.spread.home), bm.spread.awayPoint);
-        }
-      }
-      // Total EV
-      if (bm.total) {
-        const sharpTOT = event.bookmakers.filter(b => SHARP_BOOKS.includes(b.key) && b.total && Math.abs(b.total.overPoint - bm.total.overPoint) < 0.01);
-        if (sharpTOT.length > 0) {
-          addEVBet(evBets, event, bm, bookInfo, `Over ${bm.total.overPoint}`, bm.total.over, 'Over', sharpTOT.map(b => b.total.over), sharpTOT.map(b => b.total.under), bm.total.overPoint);
-          addEVBet(evBets, event, bm, bookInfo, `Under ${bm.total.underPoint}`, bm.total.under, 'Under', sharpTOT.map(b => b.total.under), sharpTOT.map(b => b.total.over), bm.total.underPoint);
+      if (sharpData.length === 0) continue;
+
+      for (const bm of event.bookmakers) {
+        if (SHARP_BOOKS.includes(bm.key)) continue;
+        const bookInfo = ODDS_SPORTSBOOKS.find(s => s.key === bm.key);
+        const mkt = bm.markets?.[marketKey] || (marketKey === 'h2h' ? bm.moneyline : marketKey === 'spreads' ? bm.spread : marketKey === 'totals' ? bm.total : null);
+        if (!mkt) continue;
+
+        const label = marketKey.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
+        if (isH2H) {
+          const sharpHome = sharpData.map(s => s.home).filter(Boolean);
+          const sharpAway = sharpData.map(s => s.away).filter(Boolean);
+          if (sharpHome.length > 0) {
+            addEVBet(evBets, event, bm, bookInfo, label, mkt.home, event.homeTeam, sharpHome, sharpAway, null);
+            addEVBet(evBets, event, bm, bookInfo, label, mkt.away, event.awayTeam, sharpAway, sharpHome, null);
+          }
+        } else if (isSpreads) {
+          const matching = sharpData.filter(s => s.homePoint !== undefined && Math.abs(s.homePoint - (mkt.homePoint || 0)) < 0.01);
+          if (matching.length > 0) {
+            addEVBet(evBets, event, bm, bookInfo, label, mkt.home, event.homeTeam, matching.map(s => s.home), matching.map(s => s.away), mkt.homePoint);
+            addEVBet(evBets, event, bm, bookInfo, label, mkt.away, event.awayTeam, matching.map(s => s.away), matching.map(s => s.home), mkt.awayPoint);
+          }
+        } else if (isTotals) {
+          const matching = sharpData.filter(s => s.overPoint !== undefined && Math.abs(s.overPoint - (mkt.overPoint || 0)) < 0.01);
+          if (matching.length > 0) {
+            addEVBet(evBets, event, bm, bookInfo, `${label} O ${mkt.overPoint}`, mkt.over, 'Over', matching.map(s => s.over), matching.map(s => s.under), mkt.overPoint);
+            addEVBet(evBets, event, bm, bookInfo, `${label} U ${mkt.overPoint}`, mkt.under, 'Under', matching.map(s => s.under), matching.map(s => s.over), mkt.overPoint);
+          }
         }
       }
     }
@@ -1191,24 +1316,43 @@ function addEVBet(evBets, event, bm, bookInfo, marketType, odds, team, sharpSide
   }
 }
 
-// Find arbitrage opportunities across all events
+// Find arbitrage opportunities across all events — scans all h2h markets
 function findArbitrageOpportunities(events) {
   const arbs = [];
   for (const event of events) {
-    const bmsWithML = event.bookmakers.filter(b => b.moneyline && b.moneyline.home && b.moneyline.away);
-    if (bmsWithML.length < 2) continue;
-    const oddsArray = bmsWithML.map(bm => ({ bookmaker: bm.key, home: bm.moneyline.home, away: bm.moneyline.away }));
-    const arb = findArbitrageForEvent(oddsArray);
-    if (arb) {
-      arbs.push({
-        eventId: event.id, sport: event.sport, sportKey: event.sportKey,
-        homeTeam: event.homeTeam, awayTeam: event.awayTeam, commenceTime: event.commenceTime,
-        profit: arb.profit,
-        bets: arb.bets.map(b => {
-          const bookInfo = ODDS_SPORTSBOOKS.find(s => s.key === b.bookmaker);
-          return { ...b, bookmakerName: bookInfo?.name || b.bookmaker, team: b.side === 'home' ? event.homeTeam : event.awayTeam };
-        })
-      });
+    // Find all h2h-style market keys
+    const h2hKeys = new Set();
+    for (const bm of event.bookmakers) {
+      if (bm.markets) {
+        Object.keys(bm.markets).forEach(k => {
+          if (k.startsWith('h2h') || k === 'fight_to_go_distance') h2hKeys.add(k);
+        });
+      }
+      if (bm.moneyline) h2hKeys.add('h2h');
+    }
+
+    for (const marketKey of h2hKeys) {
+      const oddsArray = [];
+      for (const bm of event.bookmakers) {
+        const mkt = bm.markets?.[marketKey] || (marketKey === 'h2h' ? bm.moneyline : null);
+        if (mkt && mkt.home && mkt.away) {
+          oddsArray.push({ bookmaker: bm.key, home: mkt.home, away: mkt.away });
+        }
+      }
+      if (oddsArray.length < 2) continue;
+      const arb = findArbitrageForEvent(oddsArray);
+      if (arb) {
+        const label = marketKey === 'h2h' ? 'Moneyline' : marketKey.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+        arbs.push({
+          eventId: event.id, sport: event.sport, sportKey: event.sportKey,
+          homeTeam: event.homeTeam, awayTeam: event.awayTeam, commenceTime: event.commenceTime,
+          profit: arb.profit, marketType: label,
+          bets: arb.bets.map(b => {
+            const bookInfo = ODDS_SPORTSBOOKS.find(s => s.key === b.bookmaker);
+            return { ...b, bookmakerName: bookInfo?.name || b.bookmaker, team: b.side === 'home' ? event.homeTeam : event.awayTeam };
+          })
+        });
+      }
     }
   }
   arbs.sort((a, b) => b.profit - a.profit);
@@ -1231,11 +1375,46 @@ async function fetchOddsEvents(sport) {
   }
   const rawEvents = await apiRes.json();
   const events = transformOddsEvents(rawEvents);
-  // Cache for 30s since SoldiAPI refreshes every ~15-20s
-  setOddsCache(cacheKey, events, 30);
+  // Cache for 5s — refresh interval is now 5 seconds
+  setOddsCache(cacheKey, events, 5);
   console.log(`[SoldiAPI] Fetched ${events.length} events for ${sport}`);
   return { events, cached: false };
 }
+
+// GET /api/odds/markets?sport=basketball_nba - Get market tabs for a sport
+app.get('/api/odds/markets', (req, res) => {
+  const auth = authenticateRequest(req);
+  if (!auth.authenticated) return res.status(401).json({ error: 'Authentication required' });
+  const sport = req.query.sport || 'basketball_nba';
+  const tabs = SPORT_MARKET_TABS[sport] || [
+    { key: 'h2h', label: 'Moneyline' },
+    { key: 'spreads', label: 'Spread' },
+    { key: 'totals', label: 'Total' },
+  ];
+  res.json({ success: true, markets: tabs });
+});
+
+// GET /api/odds/line-history?eventId=...&market=...&bookmaker=... - Line movement
+app.get('/api/odds/line-history', async (req, res) => {
+  const auth = authenticateRequest(req);
+  if (!auth.authenticated) return res.status(401).json({ error: 'Authentication required' });
+  const { eventId, market, bookmaker } = req.query;
+  if (!eventId) return res.status(400).json({ error: 'eventId required' });
+  try {
+    const params = new URLSearchParams();
+    if (market) params.set('market', market);
+    if (bookmaker) params.set('bookmaker', bookmaker);
+    const url = `${SOLDI_API_URL}/api/v1/sports/_/events/${encodeURIComponent(eventId)}/line-history?${params}`;
+    const headers = { 'Authorization': `Bearer ${SOLDI_API_KEY}` };
+    const apiRes = await fetch(url, { headers, signal: AbortSignal.timeout(10000) });
+    if (!apiRes.ok) throw new Error(`SoldiAPI returned ${apiRes.status}`);
+    const data = await apiRes.json();
+    res.json({ success: true, history: data });
+  } catch (err) {
+    console.error('Line history error:', err.message);
+    res.status(502).json({ error: err.message || 'Failed to fetch line history' });
+  }
+});
 
 // GET /api/odds/sports - List sport categories
 app.get('/api/odds/sports', (req, res) => {
@@ -1269,7 +1448,7 @@ app.get('/api/odds/ev', async (req, res) => {
   try {
     const result = await fetchOddsEvents(sport);
     const evBets = calculatePositiveEV(result.events);
-    setOddsCache(evCacheKey, evBets, 120);
+    setOddsCache(evCacheKey, evBets, 10);
     res.json({ success: true, bets: evBets, cached: false });
   } catch (err) {
     console.error('EV calculation error:', err.message);
@@ -1288,7 +1467,7 @@ app.get('/api/odds/arbitrage', async (req, res) => {
   try {
     const result = await fetchOddsEvents(sport);
     const arbs = findArbitrageOpportunities(result.events);
-    setOddsCache(arbCacheKey, arbs, 120);
+    setOddsCache(arbCacheKey, arbs, 10);
     res.json({ success: true, arbs, cached: false });
   } catch (err) {
     console.error('Arbitrage calculation error:', err.message);
