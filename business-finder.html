@@ -365,6 +365,26 @@
       background: rgba(59, 130, 246, 0.25);
     }
 
+    /* Chatbot badges */
+    .chatbot-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 10px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+    }
+    .badge-has-chatbot {
+      background: rgba(168, 85, 247, 0.12);
+      color: #a855f7;
+    }
+    .badge-no-chatbot {
+      background: rgba(34, 197, 94, 0.08);
+      color: #22c55e;
+    }
+
     /* Maps link */
     .maps-link {
       display: inline-flex;
@@ -612,6 +632,7 @@
                   <th>Business Name</th>
                   <th>Phone</th>
                   <th>Address</th>
+                  <th>AI Chatbot</th>
                   <th>Website</th>
                   <th>Maps</th>
                 </tr>
@@ -887,6 +908,11 @@
           ? '<a href="tel:' + biz.phone.replace(/[^0-9]/g, '') + '" style="color:#22c55e; font-weight:600; font-size:14px; white-space:nowrap; text-decoration:none;">' + biz.phone + '</a>'
           : '<span style="color:#52525b;">Not listed</span>';
 
+        // AI Chatbot column
+        const chatbotHtml = biz.hasChatbot
+          ? `<span class="chatbot-badge badge-has-chatbot"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8V4H8"/><rect x="2" y="8" width="20" height="12" rx="2"/><path d="M7 15h0M12 15h0M17 15h0"/></svg> ${biz.chatbotProvider || 'Detected'}</span>`
+          : '<span class="chatbot-badge badge-no-chatbot">None</span>';
+
         // Website link column
         const websiteHtml = biz.websiteUrl
           ? `<a href="${biz.websiteUrl}" target="_blank" rel="noopener" style="color:#3b82f6;font-size:13px;font-weight:500;text-decoration:none;display:inline-flex;align-items:center;gap:4px;" onmouseover="this.style.color='#60a5fa'" onmouseout="this.style.color='#3b82f6'"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg> Visit Site</a>`
@@ -902,6 +928,7 @@
             <td style="font-weight:500; color:#fff;">${biz.name}</td>
             <td>${phoneHtml}</td>
             <td>${biz.address || '--'}</td>
+            <td>${chatbotHtml}</td>
             <td>${websiteHtml}</td>
             <td>${mapsHtml}</td>
           </tr>

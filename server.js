@@ -1459,6 +1459,63 @@ function extractPhoneFromText(text) {
   return '';
 }
 
+// Detect AI chatbot / live chat widgets on a webpage
+function detectChatbot(html) {
+  if (!html) return { hasChatbot: false, chatbotProvider: '' };
+
+  const lowerHtml = html.toLowerCase();
+
+  // Map of chatbot providers and their signatures (ordered by popularity)
+  const chatbotSignatures = [
+    { name: 'Intercom', patterns: ['intercom', 'intercomsettings', 'widget.intercom.io'] },
+    { name: 'Drift', patterns: ['drift.com', 'driftt', 'js.driftt.com'] },
+    { name: 'Tidio', patterns: ['tidio', 'tidiochatcode', 'code.tidio.co'] },
+    { name: 'LiveChat', patterns: ['livechatinc.com', '__lc_inited', 'livechat-static'] },
+    { name: 'Zendesk Chat', patterns: ['zopim', 'static.zdassets.com', 'ze-snippet', 'zendeskwidget'] },
+    { name: 'Crisp', patterns: ['crisp.chat', 'crisp_website_id', 'client.crisp.chat'] },
+    { name: 'Tawk.to', patterns: ['tawk.to', 'tawk_api', 'embed.tawk.to'] },
+    { name: 'HubSpot Chat', patterns: ['js.hs-scripts.com', 'hubspot.com/conversations', 'hs-chat'] },
+    { name: 'Freshchat', patterns: ['freshchat', 'fcwidget', 'wchat.freshchat.com'] },
+    { name: 'Olark', patterns: ['olark', 'static.olark.com'] },
+    { name: 'ChatBot', patterns: ['chatbot.com', 'widget.chatbot.com'] },
+    { name: 'ManyChat', patterns: ['manychat', 'mcwidget'] },
+    { name: 'Podium', patterns: ['podium', 'connect.podium.com'] },
+    { name: 'Birdeye', patterns: ['birdeye.com/widget', 'birdeye'] },
+    { name: 'BotPress', patterns: ['botpress', 'cdn.botpress.cloud'] },
+    { name: 'Kommunicate', patterns: ['kommunicate', 'widget.kommunicate.io'] },
+    { name: 'Chatwoot', patterns: ['chatwoot', 'app.chatwoot.com'] },
+    { name: 'JivoChat', patterns: ['jivochat', 'jivosite.com', 'code.jivosite.com'] },
+    { name: 'Smith.ai', patterns: ['smith.ai', 'smithai'] },
+    { name: 'Dialogflow', patterns: ['dialogflow', 'cloud.google.com/dialogflow'] },
+  ];
+
+  for (const bot of chatbotSignatures) {
+    for (const pattern of bot.patterns) {
+      if (lowerHtml.includes(pattern)) {
+        return { hasChatbot: true, chatbotProvider: bot.name };
+      }
+    }
+  }
+
+  // Generic chat widget detection (catch custom/unknown chatbots)
+  const genericPatterns = [
+    /chat[-_]?widget/i,
+    /live[-_]?chat[-_]?widget/i,
+    /ai[-_]?chat[-_]?bot/i,
+    /class="[^"]*chat[-_]?bubble[^"]*"/i,
+    /id="[^"]*chat[-_]?widget[^"]*"/i,
+    /data-chat[-_]?widget/i,
+  ];
+
+  for (const pattern of genericPatterns) {
+    if (pattern.test(html)) {
+      return { hasChatbot: true, chatbotProvider: 'Chat Widget' };
+    }
+  }
+
+  return { hasChatbot: false, chatbotProvider: '' };
+}
+
 function extractStarRating(text) {
   if (!text) return { rating: null, reviewCount: 0 };
   // Match patterns like "4.5 stars", "4.8/5", "rating: 4.5", "4.5 out of 5", "Rated 4.5"
@@ -1901,12 +1958,11 @@ async function scrapeBusinessListings(niche, location) {
     });
   }
 
-  // Phase 2: For businesses missing phone numbers, scrape from their actual websites
-  const missingPhones = businesses.filter(b => !b.phone && b.websiteUrl);
-  if (missingPhones.length > 0) {
-    // Scrape all businesses missing phones (batch of 5 at a time)
-    for (let i = 0; i < missingPhones.length; i += 5) {
-      const batch = missingPhones.slice(i, i + 5);
+  // Phase 2: Scrape actual business websites for phone numbers + chatbot detection
+  const toScrape = businesses.filter(b => b.websiteUrl);
+  if (toScrape.length > 0) {
+    for (let i = 0; i < toScrape.length; i += 5) {
+      const batch = toScrape.slice(i, i + 5);
       await Promise.allSettled(
         batch.map(async (biz) => {
           try {
@@ -1919,19 +1975,26 @@ async function scrapeBusinessListings(niche, location) {
             const html = await resp.text();
             const chunk = html.substring(0, 80000);
 
-            // Try tel: links first (most reliable)
-            const telMatch = chunk.match(/href=["']tel:([^"']+)["']/i);
-            if (telMatch) {
-              const telDigits = telMatch[1].replace(/[^0-9]/g, '');
-              if (telDigits.length >= 10) {
-                biz.phone = `(${telDigits.slice(-10, -7)}) ${telDigits.slice(-7, -4)}-${telDigits.slice(-4)}`;
-                return;
-              }
-            }
+            // Detect AI chatbot / live chat widget
+            const chatResult = detectChatbot(chunk);
+            biz.hasChatbot = chatResult.hasChatbot;
+            biz.chatbotProvider = chatResult.chatbotProvider;
 
-            // Try regex extraction from page text
-            const phone = extractPhoneFromText(chunk);
-            if (phone) biz.phone = phone;
+            // Extract phone if missing
+            if (!biz.phone) {
+              // Try tel: links first (most reliable)
+              const telMatch = chunk.match(/href=["']tel:([^"']+)["']/i);
+              if (telMatch) {
+                const telDigits = telMatch[1].replace(/[^0-9]/g, '');
+                if (telDigits.length >= 10) {
+                  biz.phone = `(${telDigits.slice(-10, -7)}) ${telDigits.slice(-7, -4)}-${telDigits.slice(-4)}`;
+                  return;
+                }
+              }
+              // Try regex extraction from page text
+              const phone = extractPhoneFromText(chunk);
+              if (phone) biz.phone = phone;
+            }
           } catch { /* timeout or error - skip */ }
         })
       );
@@ -2014,11 +2077,11 @@ async function scrapeReceptionistLeads(category, location) {
     });
   }
 
-  // Phase 2: For leads missing phone numbers, scrape from their actual websites
-  const missingPhones = leads.filter(l => !l.phone && l.websiteUrl);
-  if (missingPhones.length > 0) {
-    for (let i = 0; i < missingPhones.length; i += 5) {
-      const batch = missingPhones.slice(i, i + 5);
+  // Phase 2: Scrape actual websites for phone numbers + chatbot detection
+  const toScrape = leads.filter(l => l.websiteUrl);
+  if (toScrape.length > 0) {
+    for (let i = 0; i < toScrape.length; i += 5) {
+      const batch = toScrape.slice(i, i + 5);
       await Promise.allSettled(
         batch.map(async (lead) => {
           try {
@@ -2031,19 +2094,24 @@ async function scrapeReceptionistLeads(category, location) {
             const html = await resp.text();
             const chunk = html.substring(0, 80000);
 
-            // Try tel: links first (most reliable)
-            const telMatch = chunk.match(/href=["']tel:([^"']+)["']/i);
-            if (telMatch) {
-              const telDigits = telMatch[1].replace(/[^0-9]/g, '');
-              if (telDigits.length >= 10) {
-                lead.phone = `(${telDigits.slice(-10, -7)}) ${telDigits.slice(-7, -4)}-${telDigits.slice(-4)}`;
-                return;
-              }
-            }
+            // Detect AI chatbot / live chat widget
+            const chatResult = detectChatbot(chunk);
+            lead.hasChatbot = chatResult.hasChatbot;
+            lead.chatbotProvider = chatResult.chatbotProvider;
 
-            // Try regex extraction from page text
-            const phone = extractPhoneFromText(chunk);
-            if (phone) lead.phone = phone;
+            // Extract phone if missing
+            if (!lead.phone) {
+              const telMatch = chunk.match(/href=["']tel:([^"']+)["']/i);
+              if (telMatch) {
+                const telDigits = telMatch[1].replace(/[^0-9]/g, '');
+                if (telDigits.length >= 10) {
+                  lead.phone = `(${telDigits.slice(-10, -7)}) ${telDigits.slice(-7, -4)}-${telDigits.slice(-4)}`;
+                  return;
+                }
+              }
+              const phone = extractPhoneFromText(chunk);
+              if (phone) lead.phone = phone;
+            }
           } catch { /* timeout or error - skip */ }
         })
       );
