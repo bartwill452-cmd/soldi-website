@@ -1380,7 +1380,23 @@ app.post('/api/membership/cancel', requireAuth, async (req, res) => {
 // ============================================
 // WEB SCRAPER - DuckDuckGo HTML Search (Free, No API Key)
 // ============================================
-const SCRAPER_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+// Rotating user agents to avoid scraper detection
+const SCRAPER_UAS = [
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0',
+  'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:122.0) Gecko/20100101 Firefox/122.0',
+];
+let uaIndex = 0;
+function getScraperUA() {
+  const ua = SCRAPER_UAS[uaIndex % SCRAPER_UAS.length];
+  uaIndex++;
+  return ua;
+}
+// Keep backward compat for existing references
+const SCRAPER_UA = SCRAPER_UAS[0];
 
 // Directory domains - results from these are NOT the business's own website
 const DIRECTORY_DOMAINS = new Set([
@@ -1834,7 +1850,18 @@ async function fetchSearchResults(query) {
     console.error('Brave HTML failed:', err.message);
   }
 
-  // 4. Fallback to DuckDuckGo HTML
+  // 4. Try Bing HTML scraping (reliable, no API key needed)
+  try {
+    await throttleSearch();
+    const results = await fetchBingResults(query);
+    if (results.length > 0) return results;
+    console.log('Bing returned 0 results, trying DDG...');
+  } catch (err) {
+    errors.push(`Bing: ${err.message}`);
+    console.error('Bing Search failed:', err.message);
+  }
+
+  // 5. Fallback to DuckDuckGo HTML
   try {
     await throttleSearch();
     const results = await fetchDDGResults(query);
@@ -1845,7 +1872,7 @@ async function fetchSearchResults(query) {
     console.error('DDG Search failed:', err.message);
   }
 
-  // 5. Last-resort: Google HTML scraping
+  // 6. Last-resort: Google HTML scraping
   try {
     await throttleSearch();
     const results = await fetchGoogleResults(query);
@@ -1921,7 +1948,7 @@ async function fetchBraveHTMLResults(query) {
 
   const response = await fetch(url, {
     headers: {
-      'User-Agent': SCRAPER_UA,
+      'User-Agent': getScraperUA(),
       'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
       'Accept-Language': 'en-US,en;q=0.9',
     },
@@ -1991,7 +2018,7 @@ async function fetchDDGResults(query) {
   const response = await fetch(url, {
     method: 'POST',
     headers: {
-      'User-Agent': SCRAPER_UA,
+      'User-Agent': getScraperUA(),
       'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
       'Accept-Language': 'en-US,en;q=0.9',
       'Content-Type': 'application/x-www-form-urlencoded',
@@ -2038,13 +2065,72 @@ async function fetchDDGResults(query) {
   return results;
 }
 
+// Bing HTML scraper (reliable fallback, no API key needed)
+function decodeBingUrl(bingUrl) {
+  try {
+    const urlObj = new URL(bingUrl);
+    const u = urlObj.searchParams.get('u');
+    if (u && u.startsWith('a1')) {
+      return Buffer.from(u.slice(2), 'base64').toString('utf-8');
+    }
+  } catch {}
+  return bingUrl;
+}
+
+async function fetchBingResults(query) {
+  const url = `https://www.bing.com/search?q=${encodeURIComponent(query)}&count=20`;
+  const response = await fetch(url, {
+    headers: {
+      'User-Agent': getScraperUA(),
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'Accept-Language': 'en-US,en;q=0.9',
+    },
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!response.ok) {
+    throw new Error(`Bing returned status ${response.status}`);
+  }
+  const html = await response.text();
+  if (html.toLowerCase().includes('captcha') || html.includes('unusual traffic')) {
+    throw new Error('Bing captcha detected');
+  }
+
+  const $ = cheerio.load(html);
+  const results = [];
+  const seenDomains = new Set();
+
+  $('li.b_algo').each((i, el) => {
+    const $el = $(el);
+    const linkEl = $el.find('h2 a').first();
+    const rawHref = linkEl.attr('href') || '';
+    if (!rawHref) return;
+
+    // Decode Bing redirect URL (base64-encoded in ?u= param)
+    const href = decodeBingUrl(rawHref);
+    if (!href || href.includes('bing.com') || href.includes('microsoft.com')) return;
+
+    const domain = extractDomain(href);
+    if (!domain || seenDomains.has(domain)) return;
+    seenDomains.add(domain);
+
+    const title = linkEl.text().trim();
+    const snippet = $el.find('p').text().trim() || $el.find('.b_caption').text().trim();
+
+    if (title && href) {
+      results.push({ title, url: href, siteName: '', snippet: `${title} ${snippet}` });
+    }
+  });
+
+  return results;
+}
+
 // Google Search HTML scraper (last-resort fallback)
 async function fetchGoogleResults(query) {
   const url = `https://www.google.com/search?q=${encodeURIComponent(query)}&num=20&hl=en`;
 
   const response = await fetch(url, {
     headers: {
-      'User-Agent': SCRAPER_UA,
+      'User-Agent': getScraperUA(),
       'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
       'Accept-Language': 'en-US,en;q=0.9',
     },
@@ -2100,10 +2186,10 @@ async function scrapeBusinessListings(niche, location) {
     location = `${cityStateMatch[1].trim()}, ${STATE_NAMES[cityStateMatch[2].toUpperCase()]}`;
   }
 
-  // Use 2 complementary queries for good coverage without overloading search engines
+  // Use 2 complementary queries with strong location signals
   const queries = [
-    `${niche} companies in ${location}`,
-    `best ${niche} ${location} phone number`,
+    `${niche} companies in ${location} contact phone`,
+    `${niche} services ${location} website`,
   ];
 
   // Fetch queries sequentially with a small delay to avoid rate limiting
@@ -2233,10 +2319,10 @@ async function scrapeReceptionistLeads(category, location) {
     location = `${cityStateMatch[1].trim()}, ${STATE_NAMES[cityStateMatch[2].toUpperCase()]}`;
   }
 
-  // Use 2 complementary queries for good coverage
+  // Use 2 complementary queries with strong location signals
   const queries = [
-    `${category} companies in ${location}`,
-    `best ${category} ${location} phone number`,
+    `${category} companies in ${location} contact phone`,
+    `${category} services ${location} website`,
   ];
 
   // Fetch queries sequentially with delay to avoid rate limiting
