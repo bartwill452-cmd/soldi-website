@@ -156,6 +156,7 @@ class PinnacleSource(DataSource):
 
     def _parse(self, matchups: list, markets_data: list, sport_key: str) -> List[OddsEvent]:
         is_soccer = "soccer" in sport_key
+        is_mma = "mma" in sport_key or "boxing" in sport_key
 
         # Build matchup info: id -> {home, away, startTime, participants_by_alignment}
         matchup_map = {}  # type: Dict[int, dict]
@@ -202,9 +203,21 @@ class PinnacleSource(DataSource):
             mid = mkt.get("matchupId")
             if mid is None:
                 continue
-            # Skip alternate lines
+            # Skip alternate lines, BUT keep special market types that Pinnacle
+            # sometimes flags as alternate (e.g. some period markets, MMA totals).
+            # Only skip if isAlternate=True AND it's a standard type (spread/total)
+            # with a non-zero period that we already have a main-line for.
+            mkt_type = mkt.get("type", "")
             if mkt.get("isAlternate", False):
-                continue
+                # Always allow moneyline through (Pinnacle doesn't have alt MLs)
+                # Always allow MMA/boxing special types through
+                # Only skip standard spread/total/team_total alternates
+                if mkt_type in ("spread", "total", "team_total"):
+                    # For MMA, don't skip total alternates (they're O/U rounds)
+                    if mkt_type == "total" and ("mma" in sport_key or "boxing" in sport_key):
+                        pass  # Allow through
+                    else:
+                        continue
             # Include period markets (0=full game, 1=1st half/period, etc.)
             period = mkt.get("period", 0)
             suffix = get_pinnacle_period_suffix(sport_key, period)
@@ -263,7 +276,11 @@ class PinnacleSource(DataSource):
                         seen_keys.add(market_key)
 
                 elif mkt_type == "total":
-                    market_key = "totals" + suffix
+                    # For MMA/boxing, "total" means total rounds
+                    if is_mma:
+                        market_key = "total_rounds" + suffix
+                    else:
+                        market_key = "totals" + suffix
                     if market_key in seen_keys:
                         continue
                     parsed = self._parse_total(prices)
@@ -279,10 +296,34 @@ class PinnacleSource(DataSource):
                     elif side == "away":
                         market_key = "team_total_away" + suffix
                     else:
-                        continue
+                        # Fallback: check designation in prices for side info
+                        has_home = any(p.get("participantId") or p.get("designation") == "home" for p in prices)
+                        if has_home:
+                            market_key = "team_total_home" + suffix
+                        else:
+                            market_key = "team_total_away" + suffix
                     if market_key in seen_keys:
                         continue
                     parsed = self._parse_total(prices)
+                    if parsed:
+                        pin_markets.append(Market(key=market_key, outcomes=parsed))
+                        seen_keys.add(market_key)
+
+                # MMA/Boxing specific market types
+                elif mkt_type == "total_rounds":
+                    market_key = "total_rounds" + suffix
+                    if market_key in seen_keys:
+                        continue
+                    parsed = self._parse_total(prices)
+                    if parsed:
+                        pin_markets.append(Market(key=market_key, outcomes=parsed))
+                        seen_keys.add(market_key)
+
+                elif mkt_type in ("go_the_distance", "fight_to_go_distance", "will_go_distance"):
+                    market_key = "fight_to_go_distance"
+                    if market_key in seen_keys:
+                        continue
+                    parsed = self._parse_yes_no(prices)
                     if parsed:
                         pin_markets.append(Market(key=market_key, outcomes=parsed))
                         seen_keys.add(market_key)
@@ -363,6 +404,23 @@ class PinnacleSource(DataSource):
                 continue
             name = "Over" if designation == "over" else "Under" if designation == "under" else designation
             result.append(Outcome(name=name, price=int(price), point=float(points)))
+        return result if len(result) >= 2 else []
+
+    def _parse_yes_no(self, prices: list) -> List[Outcome]:
+        """Parse a Yes/No market (e.g., fight to go the distance)."""
+        result = []
+        for p in prices:
+            designation = p.get("designation", "")
+            price = p.get("price")
+            if price is None:
+                continue
+            if designation in ("home", "over", "yes"):
+                name = "Yes"
+            elif designation in ("away", "under", "no"):
+                name = "No"
+            else:
+                name = designation.capitalize() if designation else "Unknown"
+            result.append(Outcome(name=name, price=int(price)))
         return result if len(result) >= 2 else []
 
     async def close(self) -> None:

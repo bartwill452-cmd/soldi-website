@@ -18,6 +18,7 @@ from sources import (
     BetMGMSource,
     BetOnlineSource,
     BetRiversSource,
+    BetUSSource,
     BookmakerSource,
     BovadaSource,
     BuckeyeSource,
@@ -32,6 +33,7 @@ from sources import (
     PinnacleSource,
     PolymarketSource,
     ProphetXSource,
+    StakeUSSource,
     TheOddsAPISource,
     XBetSource,
 )
@@ -59,25 +61,13 @@ _ACTIVE_SPORTS: List[str] = [
     "basketball_ncaab",
     "icehockey_nhl",
     "baseball_mlb",
-    "americanfootball_nfl",
-    "americanfootball_ncaaf",
-    "soccer_epl",
-    "soccer_spain_la_liga",
-    "soccer_germany_bundesliga",
-    "soccer_italy_serie_a",
-    "soccer_france_ligue_one",
-    "soccer_usa_mls",
-    "soccer_uefa_champs_league",
-    "tennis_atp",
-    "tennis_wta",
     "mma_mixed_martial_arts",
-    "boxing_boxing",
 ]
 
 # Pause (seconds) AFTER each refresh cycle completes before starting the next.
 # Kept short (5s) so odds update within ~10-15s.  Individual per-source caches
 # (ProphetX 10s, Novig 10s) handle their own rate-limiting internally.
-_REFRESH_PAUSE = 5
+_REFRESH_PAUSE = 3
 
 
 
@@ -267,6 +257,16 @@ async def lifespan(app: FastAPI):
         logger.info("Bookmaker.eu: disabled via DISABLED_SCRAPERS")
     else:
         logger.info("Bookmaker.eu: No credentials configured, skipping")
+
+    # BetUS (HTTP-only, no Playwright)
+    if is_enabled("betus"):
+        logger.info("Initializing BetUS scraper")
+        sources.append(BetUSSource())
+
+    # Stake.us (HTTP-only, GraphQL)
+    if is_enabled("stakeus"):
+        logger.info("Initializing Stake.us scraper")
+        sources.append(StakeUSSource())
 
     # Paid fallback (optional, for remaining sportsbooks)
     if settings.odds_api_key:

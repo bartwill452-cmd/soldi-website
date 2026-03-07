@@ -9,8 +9,18 @@ API endpoints:
   - Markets/Odds:         GET /partner/v2/public/get_multiple_markets?market_types=moneyline,spread,total&event_ids=...
 
 ProphetX is a peer-to-peer sports prediction exchange where selections
-include an order book with multiple price levels. We take the best
-available price (first level) and sum all stakes for liquidity.
+include an order book with multiple price levels.
+
+Each selection side contains BID orders (what people are willing to pay for that outcome).
+To get the actual tradeable ASK price for an outcome, we use the complement of the
+opponent's best bid:
+  ASK price for A = complement of best BID on B
+
+For example, if best bid on Team B is -200 (implied prob ~66.7%), the ASK on Team A
+is the complement (~33.3%), converted to American odds → +200.
+
+Liquidity at the displayed price = the stake available at the best bid on the opponent's side
+(i.e., how much you can actually buy at the shown ASK price).
 
 Odds are returned in American format directly (e.g., -158, +156).
 """
@@ -32,6 +42,25 @@ from sources.sport_mapping import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _american_to_implied_prob(odds: int) -> float:
+    """Convert American odds to implied probability (0.0-1.0)."""
+    if odds < 0:
+        return (-odds) / ((-odds) + 100)
+    elif odds > 0:
+        return 100 / (odds + 100)
+    return 0.5
+
+
+def _implied_prob_to_american(prob: float) -> int:
+    """Convert implied probability (0.0-1.0) to American odds."""
+    if prob <= 0 or prob >= 1:
+        return 0
+    if prob >= 0.5:
+        return round(-100 * prob / (1 - prob))
+    else:
+        return round(100 * (1 - prob) / prob)
 
 BASE_URL = "https://api-ss-staging.betprophet.co"
 TOURNAMENTS_URL = BASE_URL + "/trade/public/api/v1/tournaments"
@@ -370,7 +399,7 @@ class ProphetXSource(DataSource):
                     title="ProphetX",
                     last_update=datetime.now(timezone.utc).isoformat(),
                     markets=parsed_markets,
-                    event_url="https://www.prophetx.co/",
+                    event_url=f"https://www.prophetx.co/event/{event.get('id', '')}",
                 )
             ],
         )
@@ -443,25 +472,75 @@ class ProphetXSource(DataSource):
         self, selections: list, home_team: str, away_team: str,
         comp_id_to_name: Dict[int, str],
     ) -> Optional[Market]:
-        """Parse moneyline market. Take best price from each side.
-        Liquidity = total stake across ALL price levels (full depth).
+        """Parse moneyline market using ASK prices (complement of opponent's best bid).
+
+        selections[0] = side A bids, selections[1] = side B bids.
+        ASK for A = complement of B's best bid (and vice versa).
+        Liquidity for A = stake at B's best bid level (what you can actually buy).
         """
-        outcomes = []  # type: List[Outcome]
-        total_liquidity = 0.0
+        if len(selections) < 2:
+            return None
 
+        # Validate both sides have data
+        valid_sides = []  # type: List[list]
         for side in selections:
-            if not side or not isinstance(side, list):
-                continue
-            # First entry is best price
-            best = side[0]
-            odds = best.get("odds")
-            if odds is None:
-                continue
+            if side and isinstance(side, list) and len(side) > 0:
+                valid_sides.append(side)
+        if len(valid_sides) < 2:
+            return None
 
-            price = int(odds)
+        side_a = valid_sides[0]
+        side_b = valid_sides[1]
+
+        # Extract best bid info from each side
+        best_a = side_a[0]
+        best_b = side_b[0]
+
+        bid_odds_a = best_a.get("odds")
+        bid_odds_b = best_b.get("odds")
+
+        if bid_odds_a is None or bid_odds_b is None:
+            return None
+
+        # Convert bids to implied probabilities
+        bid_prob_a = _american_to_implied_prob(int(bid_odds_a))
+        bid_prob_b = _american_to_implied_prob(int(bid_odds_b))
+
+        # ASK price for A = complement of B's best bid
+        # ASK price for B = complement of A's best bid
+        ask_prob_a = 1.0 - bid_prob_b
+        ask_prob_b = 1.0 - bid_prob_a
+
+        ask_odds_a = _implied_prob_to_american(ask_prob_a)
+        ask_odds_b = _implied_prob_to_american(ask_prob_b)
+
+        if ask_odds_a == 0 or ask_odds_b == 0:
+            return None
+
+        # Liquidity for A = stake at B's best bid (what you can match against)
+        # Liquidity for B = stake at A's best bid
+        liq_a = 0.0
+        best_bid_b_odds = int(bid_odds_b)
+        for level in side_b:
+            if int(level.get("odds", 0)) == best_bid_b_odds:
+                try:
+                    liq_a += float(level.get("stake", 0))
+                except (ValueError, TypeError):
+                    pass
+
+        liq_b = 0.0
+        best_bid_a_odds = int(bid_odds_a)
+        for level in side_a:
+            if int(level.get("odds", 0)) == best_bid_a_odds:
+                try:
+                    liq_b += float(level.get("stake", 0))
+                except (ValueError, TypeError):
+                    pass
+
+        # Determine team names for each side
+        outcomes = []  # type: List[Outcome]
+        for best, ask_odds, liq in [(best_a, ask_odds_a, liq_a), (best_b, ask_odds_b, liq_b)]:
             name = best.get("name", "")
-
-            # Map competitor to home/away
             comp_id = best.get("competitorId")
             resolved = comp_id_to_name.get(comp_id, name)
             if resolved == home_team:
@@ -469,29 +548,15 @@ class ProphetXSource(DataSource):
             elif resolved == away_team:
                 display_name = away_team
             else:
-                # Fallback: try matching by name substring
                 display_name = self._match_team(name, home_team, away_team)
-
-            # Liquidity = total stake across ALL price levels (full depth)
-            side_liquidity = 0.0
-            for level in side:
-                stake = level.get("stake")
-                if stake:
-                    try:
-                        side_liquidity += float(stake)
-                    except (ValueError, TypeError):
-                        pass
-            total_liquidity += side_liquidity
 
             outcomes.append(Outcome(
                 name=display_name,
-                price=price,
-                liquidity=round(side_liquidity, 2) if side_liquidity > 0 else None,
+                price=ask_odds,
+                liquidity=round(liq, 2) if liq > 0 else None,
             ))
 
-        if len(outcomes) < 2:
-            return None
-
+        total_liquidity = liq_a + liq_b
         return Market(
             key="h2h",
             outcomes=outcomes,
@@ -502,25 +567,71 @@ class ProphetXSource(DataSource):
         self, selections: list, home_team: str, away_team: str,
         comp_id_to_name: Dict[int, str],
     ) -> Optional[Market]:
-        """Parse spread market. Take best price and line from each side.
-        Liquidity = total stake across ALL price levels (full depth).
+        """Parse spread market using ASK prices (complement of opponent's best bid).
+
+        Same logic as moneyline: ASK for A = complement of B's best bid.
+        Spread points come from each side's own best level.
+        Liquidity for A = stake at B's best bid level.
         """
-        outcomes = []  # type: List[Outcome]
-        total_liquidity = 0.0
+        if len(selections) < 2:
+            return None
 
+        valid_sides = []  # type: List[list]
         for side in selections:
-            if not side or not isinstance(side, list):
-                continue
-            best = side[0]
-            odds = best.get("odds")
-            if odds is None:
-                continue
+            if side and isinstance(side, list) and len(side) > 0:
+                valid_sides.append(side)
+        if len(valid_sides) < 2:
+            return None
 
-            price = int(odds)
+        side_a = valid_sides[0]
+        side_b = valid_sides[1]
+
+        best_a = side_a[0]
+        best_b = side_b[0]
+
+        bid_odds_a = best_a.get("odds")
+        bid_odds_b = best_b.get("odds")
+
+        if bid_odds_a is None or bid_odds_b is None:
+            return None
+
+        bid_prob_a = _american_to_implied_prob(int(bid_odds_a))
+        bid_prob_b = _american_to_implied_prob(int(bid_odds_b))
+
+        # ASK price = complement of opponent's best bid
+        ask_prob_a = 1.0 - bid_prob_b
+        ask_prob_b = 1.0 - bid_prob_a
+
+        ask_odds_a = _implied_prob_to_american(ask_prob_a)
+        ask_odds_b = _implied_prob_to_american(ask_prob_b)
+
+        if ask_odds_a == 0 or ask_odds_b == 0:
+            return None
+
+        # Liquidity for A = stake at B's best bid level
+        liq_a = 0.0
+        best_bid_b_odds = int(bid_odds_b)
+        for level in side_b:
+            if int(level.get("odds", 0)) == best_bid_b_odds:
+                try:
+                    liq_a += float(level.get("stake", 0))
+                except (ValueError, TypeError):
+                    pass
+
+        liq_b = 0.0
+        best_bid_a_odds = int(bid_odds_a)
+        for level in side_a:
+            if int(level.get("odds", 0)) == best_bid_a_odds:
+                try:
+                    liq_b += float(level.get("stake", 0))
+                except (ValueError, TypeError):
+                    pass
+
+        outcomes = []  # type: List[Outcome]
+        for best, ask_odds, liq in [(best_a, ask_odds_a, liq_a), (best_b, ask_odds_b, liq_b)]:
             name = best.get("name", "")
             line = best.get("line")
 
-            # Get the spread point
             point = None  # type: Optional[float]
             if line is not None:
                 try:
@@ -528,7 +639,6 @@ class ProphetXSource(DataSource):
                 except (ValueError, TypeError):
                     pass
 
-            # Map competitor to home/away
             comp_id = best.get("competitorId")
             resolved = comp_id_to_name.get(comp_id, name)
             if resolved == home_team:
@@ -538,27 +648,14 @@ class ProphetXSource(DataSource):
             else:
                 display_name = self._match_team(name, home_team, away_team)
 
-            # Liquidity = total stake across ALL price levels (full depth)
-            side_liquidity = 0.0
-            for level in side:
-                stake = level.get("stake")
-                if stake:
-                    try:
-                        side_liquidity += float(stake)
-                    except (ValueError, TypeError):
-                        pass
-            total_liquidity += side_liquidity
-
             outcomes.append(Outcome(
                 name=display_name,
-                price=price,
+                price=ask_odds,
                 point=point,
-                liquidity=round(side_liquidity, 2) if side_liquidity > 0 else None,
+                liquidity=round(liq, 2) if liq > 0 else None,
             ))
 
-        if len(outcomes) < 2:
-            return None
-
+        total_liquidity = liq_a + liq_b
         return Market(
             key="spreads",
             outcomes=outcomes,
@@ -566,39 +663,83 @@ class ProphetXSource(DataSource):
         )
 
     def _parse_total(self, selections: list) -> Optional[Market]:
-        """Parse totals (O/U) market. Take best price and line from each side.
-        Liquidity = total stake across ALL price levels (full depth).
+        """Parse totals (O/U) market using ASK prices (complement of opponent's best bid).
+
+        Same two-sided logic: ASK for Over = complement of Under's best bid.
+        Liquidity for Over = stake at Under's best bid level.
         """
-        outcomes = []  # type: List[Outcome]
-        total_liquidity = 0.0
+        if len(selections) < 2:
+            return None
 
+        valid_sides = []  # type: List[list]
         for side in selections:
-            if not side or not isinstance(side, list):
-                continue
-            best = side[0]
-            odds = best.get("odds")
-            if odds is None:
-                continue
+            if side and isinstance(side, list) and len(side) > 0:
+                valid_sides.append(side)
+        if len(valid_sides) < 2:
+            return None
 
-            price = int(odds)
+        side_a = valid_sides[0]
+        side_b = valid_sides[1]
+
+        best_a = side_a[0]
+        best_b = side_b[0]
+
+        bid_odds_a = best_a.get("odds")
+        bid_odds_b = best_b.get("odds")
+
+        if bid_odds_a is None or bid_odds_b is None:
+            return None
+
+        bid_prob_a = _american_to_implied_prob(int(bid_odds_a))
+        bid_prob_b = _american_to_implied_prob(int(bid_odds_b))
+
+        # ASK price = complement of opponent's best bid
+        ask_prob_a = 1.0 - bid_prob_b
+        ask_prob_b = 1.0 - bid_prob_a
+
+        ask_odds_a = _implied_prob_to_american(ask_prob_a)
+        ask_odds_b = _implied_prob_to_american(ask_prob_b)
+
+        if ask_odds_a == 0 or ask_odds_b == 0:
+            return None
+
+        # Liquidity for A = stake at B's best bid level
+        liq_a = 0.0
+        best_bid_b_odds = int(bid_odds_b)
+        for level in side_b:
+            if int(level.get("odds", 0)) == best_bid_b_odds:
+                try:
+                    liq_a += float(level.get("stake", 0))
+                except (ValueError, TypeError):
+                    pass
+
+        liq_b = 0.0
+        best_bid_a_odds = int(bid_odds_a)
+        for level in side_a:
+            if int(level.get("odds", 0)) == best_bid_a_odds:
+                try:
+                    liq_b += float(level.get("stake", 0))
+                except (ValueError, TypeError):
+                    pass
+
+        # Determine Over/Under names
+        outcomes = []  # type: List[Outcome]
+        for idx, (best, ask_odds, liq) in enumerate([(best_a, ask_odds_a, liq_a), (best_b, ask_odds_b, liq_b)]):
             name = (best.get("name") or "").lower()
             line = best.get("line")
 
-            # Determine Over/Under from name
             if "over" in name:
                 display_name = "Over"
             elif "under" in name:
                 display_name = "Under"
             else:
-                # Try from displayName
                 display = (best.get("displayName") or "").lower()
                 if "over" in display:
                     display_name = "Over"
                 elif "under" in display:
                     display_name = "Under"
                 else:
-                    # First side = over, second = under (convention)
-                    display_name = "Over" if len(outcomes) == 0 else "Under"
+                    display_name = "Over" if idx == 0 else "Under"
 
             point = None  # type: Optional[float]
             if line is not None:
@@ -607,27 +748,14 @@ class ProphetXSource(DataSource):
                 except (ValueError, TypeError):
                     pass
 
-            # Liquidity = total stake across ALL price levels (full depth)
-            side_liquidity = 0.0
-            for level in side:
-                stake = level.get("stake")
-                if stake:
-                    try:
-                        side_liquidity += float(stake)
-                    except (ValueError, TypeError):
-                        pass
-            total_liquidity += side_liquidity
-
             outcomes.append(Outcome(
                 name=display_name,
-                price=price,
+                price=ask_odds,
                 point=point,
-                liquidity=round(side_liquidity, 2) if side_liquidity > 0 else None,
+                liquidity=round(liq, 2) if liq > 0 else None,
             ))
 
-        if len(outcomes) < 2:
-            return None
-
+        total_liquidity = liq_a + liq_b
         return Market(
             key="totals",
             outcomes=outcomes,

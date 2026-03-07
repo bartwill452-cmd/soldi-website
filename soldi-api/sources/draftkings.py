@@ -75,6 +75,20 @@ _PERIOD_CATS = [
     "4th-quarter",
 ]
 
+# MLB-specific inning categories
+_MLB_PERIOD_CATS = [
+    "1st-5-innings",
+    "1st-7-innings",
+]
+
+# MMA-specific subcategory pages on DraftKings
+_MMA_CATS = [
+    "fight-lines",
+    "fight-props",
+    "rounds",
+    "method-of-victory",
+]
+
 # Sports that only use halves (no quarters) — skip quarter pages for these
 _HALVES_ONLY_SPORTS = {
     "basketball_ncaab",
@@ -267,17 +281,59 @@ class DraftKingsSource(DataSource):
             )
             events = self._merge_events(events, team_events)
 
+        # 2b. MMA/Boxing: scrape subcategory pages for fight props, rounds, etc.
+        if sport_key in ("mma_mixed_martial_arts", "boxing_boxing"):
+            for mma_cat in _MMA_CATS:
+                mma_url = base_url + "?category=" + mma_cat
+                try:
+                    mma_events = await self._navigate_and_capture(
+                        mma_url, sport_key
+                    )
+                    events = self._merge_events(events, mma_events)
+                except Exception as e:
+                    logger.warning(
+                        "DraftKings MMA: Failed to scrape category %s: %s",
+                        mma_cat, e,
+                    )
+
+            # Also scrape individual event pages for micro markets
+            # (over/under rounds, fight go distance, method of victory)
+            event_urls = await self._discover_mma_event_urls(base_url)
+            for event_url in event_urls:
+                try:
+                    detail_events = await self._navigate_and_capture(
+                        event_url, sport_key
+                    )
+                    events = self._merge_events(events, detail_events)
+                except Exception as e:
+                    logger.warning(
+                        "DraftKings MMA: Failed to scrape event %s: %s",
+                        event_url, e,
+                    )
+
         # 3. Half / quarter period pages (for supported sports)
         if sport_key in _SPORTS_WITH_PERIODS:
             for period_cat in _PERIOD_CATS:
                 # Skip quarter pages for halves-only sports (NCAAB, etc.)
                 if sport_key in _HALVES_ONLY_SPORTS and "quarter" in period_cat:
                     continue
+                # Skip half/quarter pages for MLB (uses innings instead)
+                if sport_key == "baseball_mlb" and ("half" in period_cat or "quarter" in period_cat):
+                    continue
                 period_url = base_url + "?category=" + period_cat
                 period_events = await self._navigate_and_capture(
                     period_url, sport_key
                 )
                 events = self._merge_events(events, period_events)
+
+            # MLB-specific inning categories (1st 5, 1st 7)
+            if sport_key == "baseball_mlb":
+                for inning_cat in _MLB_PERIOD_CATS:
+                    inning_url = base_url + "?category=" + inning_cat
+                    inning_events = await self._navigate_and_capture(
+                        inning_url, sport_key
+                    )
+                    events = self._merge_events(events, inning_events)
 
         # 4. Player props (for supported sports)
         if sport_key in _SPORTS_WITH_PLAYER_PROPS:
@@ -359,6 +415,70 @@ class DraftKingsSource(DataSource):
             )
         except Exception as e:
             logger.warning("DraftKings: Tennis URL discovery failed: %s", e)
+
+    async def _discover_mma_event_urls(self, base_url: str) -> List[str]:
+        """Discover individual MMA/UFC event page URLs from the league page.
+
+        DraftKings hides micro markets (over/under rounds, fight go distance)
+        behind individual event pages. This method extracts the event links
+        from the rendered DOM so we can scrape each one.
+        """
+        await self._ensure_browser()
+        if self._page is None:
+            return []
+
+        try:
+            # The page should already be on the MMA league page from
+            # the prior _navigate_and_capture call, but navigate again
+            # to be safe in case the page state drifted.
+            await self._page.goto(
+                base_url, timeout=15000, wait_until="domcontentloaded"
+            )
+            await asyncio.sleep(2)
+
+            # Extract event detail links from the page
+            links = await self._page.evaluate("""
+                () => {
+                    const results = [];
+                    const seen = new Set();
+                    // DraftKings event links contain /event/ in the path
+                    document.querySelectorAll('a[href*="/event/"]').forEach(a => {
+                        const href = a.href;
+                        if (!seen.has(href) && !href.includes('login')) {
+                            seen.add(href);
+                            results.push(href);
+                        }
+                    });
+                    // Also check for links with /leagues/mma/ or /leagues/boxing/ patterns
+                    // that point to specific fights
+                    document.querySelectorAll('a[href*="/leagues/mma/"], a[href*="/leagues/boxing/"]').forEach(a => {
+                        const href = a.href;
+                        // Only include links that look like individual event pages
+                        // (contain a numeric segment or specific fight identifiers)
+                        if (!seen.has(href) && /\\d{5,}/.test(href)) {
+                            seen.add(href);
+                            results.push(href);
+                        }
+                    });
+                    return results;
+                }
+            """)
+
+            # Deduplicate and limit to avoid scraping too many pages
+            unique_urls = list(dict.fromkeys(links))  # preserve order, deduplicate
+            max_events = 15  # Cap to avoid excessive scraping time
+            if len(unique_urls) > max_events:
+                unique_urls = unique_urls[:max_events]
+
+            logger.info(
+                "DraftKings MMA: Discovered %d event URLs from %s",
+                len(unique_urls), base_url,
+            )
+            return unique_urls
+
+        except Exception as e:
+            logger.warning("DraftKings MMA: Event URL discovery failed: %s", e)
+            return []
 
     async def _navigate_and_capture(
         self,
@@ -478,19 +598,19 @@ class DraftKingsSource(DataSource):
         if not raw_events:
             return []
 
-        # Index markets by eventId
+        # Index markets by eventId (use str() to normalize int/str type mismatches)
         markets_by_event = {}  # type: Dict[str, List[dict]]
         for m in raw_markets:
             eid = m.get("eventId")
-            if eid:
-                markets_by_event.setdefault(eid, []).append(m)
+            if eid is not None:
+                markets_by_event.setdefault(str(eid), []).append(m)
 
-        # Index selections by marketId
+        # Index selections by marketId (use str() to normalize int/str type mismatches)
         sels_by_market = {}  # type: Dict[str, List[dict]]
         for s in raw_selections:
             mid = s.get("marketId")
-            if mid:
-                sels_by_market.setdefault(mid, []).append(s)
+            if mid is not None:
+                sels_by_market.setdefault(str(mid), []).append(s)
 
         sport_title = get_sport_title(sport_key)
         events = []  # type: List[OddsEvent]
@@ -539,8 +659,8 @@ class DraftKingsSource(DataSource):
             home_team = resolve_team_name(home_team)
             away_team = resolve_team_name(away_team)
 
-            # Build markets for this event
-            event_markets = markets_by_event.get(event_id, [])
+            # Build markets for this event (str() to match normalized keys)
+            event_markets = markets_by_event.get(str(event_id), [])
             dk_markets = []  # type: List[Market]
 
             if ("mma" in sport_key or "boxing" in sport_key):
@@ -555,14 +675,14 @@ class DraftKingsSource(DataSource):
                     # Debug: check selections for first market
                     m0 = event_markets[0]
                     m0_id = m0.get("id")
-                    m0_sels = sels_by_market.get(m0_id, [])
+                    m0_sels = sels_by_market.get(str(m0_id), [])
                     logger.info("  market[0] id=%r has %d selections, sels_by_market keys=%s",
                                 m0_id, len(m0_sels), list(sels_by_market.keys())[:5])
 
             for mkt in event_markets:
                 market_id = mkt.get("id")
                 market_name = (mkt.get("name") or "").strip()
-                sels = sels_by_market.get(market_id, [])
+                sels = sels_by_market.get(str(market_id), [])
                 if not sels:
                     continue
 
@@ -643,6 +763,22 @@ class DraftKingsSource(DataSource):
             suffix = "_p3"
         elif "first 5" in lower or "1st 5" in lower:
             suffix = "_f5"
+        elif "first 7" in lower or "1st 7" in lower:
+            suffix = "_f7"
+        elif "first 3" in lower or "1st 3" in lower:
+            suffix = "_f3"
+
+        # MMA round-specific detection (parentheses needed for correct precedence)
+        if ("round 1" in lower or "r1" in lower) and ("over" in lower or "under" in lower or "total" in lower):
+            suffix = "_r1"
+        elif ("round 2" in lower or "r2" in lower) and ("over" in lower or "under" in lower or "total" in lower):
+            suffix = "_r2"
+        elif ("round 3" in lower or "r3" in lower) and ("over" in lower or "under" in lower or "total" in lower):
+            suffix = "_r3"
+        elif ("round 4" in lower or "r4" in lower) and ("over" in lower or "under" in lower or "total" in lower):
+            suffix = "_r4"
+        elif ("round 5" in lower or "r5" in lower) and ("over" in lower or "under" in lower or "total" in lower):
+            suffix = "_r5"
 
         if "moneyline" in lower or "money line" in lower:
             return "h2h" + suffix
@@ -650,12 +786,20 @@ class DraftKingsSource(DataSource):
             return "spreads" + suffix
         elif "total" in lower or "over/under" in lower:
             return "totals" + suffix
-        elif "fight winner" in lower or "bout winner" in lower:
-            return "h2h"
-        elif "fight total" in lower or "total rounds" in lower:
-            return "totals"
-        elif "go the distance" in lower or "goes the distance" in lower:
+        elif "fight winner" in lower or "bout winner" in lower or "fight result" in lower or "to win" in lower:
+            return "h2h" + suffix
+        elif "fight total" in lower or "total rounds" in lower or "over/under rounds" in lower:
+            return "totals" + suffix
+        elif "go the distance" in lower or "goes the distance" in lower or "won't go the distance" in lower:
             return "fight_to_go_distance"
+        elif "method of victory" in lower or "how will" in lower or "method of result" in lower:
+            return "method_of_victory"
+        elif "round betting" in lower or "winning round" in lower or "exact round" in lower:
+            return "winning_round"
+        elif "decision" in lower and ("win" in lower or "by" in lower):
+            return "method_of_victory"
+        elif "ko" in lower or "knockout" in lower or "tko" in lower or "submission" in lower:
+            return "method_of_victory"
 
         return None
 
@@ -867,6 +1011,10 @@ class DraftKingsSource(DataSource):
             suffix = "_p3"
         elif "first 5" in lower or "1st 5" in lower:
             suffix = "_f5"
+        elif "first 7" in lower or "1st 7" in lower:
+            suffix = "_f7"
+        elif "first 3" in lower or "1st 3" in lower:
+            suffix = "_f3"
 
         # Determine which team from the market name
         home_lower = home_team.lower()

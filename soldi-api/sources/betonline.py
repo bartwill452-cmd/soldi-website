@@ -29,13 +29,15 @@ SITE_URL = "https://www.betonline.ag"
 API_URL = "https://api-offering.betonline.ag/api/offering/Sports/offering-by-league"
 
 # OddsScreen sport_key → BetOnline API (sport, league) params
+# Some sport_keys map to multiple API (sport, league) pairs because BetOnline
+# uses different sub-league identifiers that may change or coexist.
 BETONLINE_API_PARAMS: Dict[str, Tuple[str, str]] = {
     "basketball_nba": ("basketball", "nba"),
     "americanfootball_nfl": ("football", "nfl"),
     "icehockey_nhl": ("hockey", "nhl"),
     "baseball_mlb": ("baseball", "mlb"),
-    "basketball_ncaab": ("basketball", "ncaa"),
-    "americanfootball_ncaaf": ("football", "ncaa"),
+    "basketball_ncaab": ("basketball", "ncaab"),
+    "americanfootball_ncaaf": ("football", "ncaaf"),
     "mma_mixed_martial_arts": ("martial-arts", "ufc"),
     "boxing_boxing": ("boxing", "boxing"),
     "soccer_epl": ("soccer", "epl"),
@@ -49,14 +51,23 @@ BETONLINE_API_PARAMS: Dict[str, Tuple[str, str]] = {
     "soccer_usa_mls": ("soccer", "mls"),
 }
 
+# Fallback league identifiers to try when the primary returns no data.
+# BetOnline's API sometimes uses different league slugs (e.g. "ncaa" vs "ncaab").
+_BETONLINE_FALLBACK_LEAGUES: Dict[str, List[Tuple[str, str]]] = {
+    "basketball_ncaab": [("basketball", "ncaa"), ("basketball", "college-basketball")],
+    "americanfootball_ncaaf": [("football", "ncaa"), ("football", "college-football")],
+    "mma_mixed_martial_arts": [("martial-arts", "mma"), ("mma", "ufc"), ("martial-arts", "martial-arts")],
+    "boxing_boxing": [("boxing", "all"), ("martial-arts", "boxing")],
+}
+
 # Sport_key → BetOnline URL paths (for event deep-linking only)
 BETONLINE_SPORT_URLS: Dict[str, str] = {
     "basketball_nba": "sportsbook/basketball/nba",
     "americanfootball_nfl": "sportsbook/football/nfl",
     "icehockey_nhl": "sportsbook/hockey/nhl",
     "baseball_mlb": "sportsbook/baseball/mlb",
-    "basketball_ncaab": "sportsbook/basketball/ncaa",
-    "americanfootball_ncaaf": "sportsbook/football/ncaa",
+    "basketball_ncaab": "sportsbook/basketball/ncaab",
+    "americanfootball_ncaaf": "sportsbook/football/ncaaf",
     "mma_mixed_martial_arts": "sportsbook/martial-arts/ufc",
     "boxing_boxing": "sportsbook/boxing",
     "soccer_epl": "sportsbook/soccer/epl/english-premier-league",
@@ -258,9 +269,27 @@ class BetOnlineSource(DataSource):
         # Fetch full-game lines
         full_game_data = await self._api_call(sport, league)
         if full_game_data is None:
-            return []
+            full_game_data = {}
 
         events = self._parse_offering(full_game_data, sport_key)
+
+        # If primary league returned no events, try fallback league identifiers
+        if not events:
+            fallbacks = _BETONLINE_FALLBACK_LEAGUES.get(sport_key, [])
+            for fb_sport, fb_league in fallbacks:
+                fb_data = await self._api_call(fb_sport, fb_league)
+                if fb_data:
+                    events = self._parse_offering(fb_data, sport_key)
+                    if events:
+                        logger.info(
+                            "BetOnline: Fallback league %s/%s returned %d events for %s",
+                            fb_sport, fb_league, len(events), sport_key,
+                        )
+                        # Use this data for period markets too
+                        full_game_data = fb_data
+                        sport = fb_sport
+                        league = fb_league
+                        break
 
         # Fetch period markets for applicable sports
         if sport_key in _PERIOD_SPORTS and events:
@@ -382,6 +411,7 @@ class BetOnlineSource(DataSource):
         """
         sport_title = get_sport_title(sport_key)
         events = []
+        events_by_id: Dict[str, OddsEvent] = {}  # For MMA dedup/merge
 
         game_offering = data.get("GameOffering")
         if not game_offering:
@@ -401,13 +431,15 @@ class BetOnlineSource(DataSource):
             away_team = resolve_team_name(raw_away)
             home_team = resolve_team_name(raw_home)
 
-            # Skip futures
+            # Skip futures (but not for MMA/boxing where fighter names may match)
             schedule_text = (game.get("ScheduleText") or "").lower()
             if "future" in schedule_text:
                 continue
-            combined = (away_team + " " + home_team).lower()
-            if any(kw in combined for kw in _FUTURES_KEYWORDS):
-                continue
+            is_combat = "mma" in sport_key or "boxing" in sport_key
+            if not is_combat:
+                combined = (away_team + " " + home_team).lower()
+                if any(kw in combined for kw in _FUTURES_KEYWORDS):
+                    continue
 
             # Parse commence time from WagerCutOff
             cutoff = game.get("WagerCutOff", "")
@@ -440,6 +472,27 @@ class BetOnlineSource(DataSource):
                     total_market = Market(key="totals" + period_suffix, outcomes=total_market.outcomes)
                 bol_markets.append(total_market)
 
+            # Team totals – per-team over/under from AwayLine/HomeLine TotalLine
+            if not period_suffix:  # Only for full game (avoid duplicating for periods)
+                away_tt = self._parse_team_total(away_line, away_team, "away")
+                if away_tt:
+                    bol_markets.append(away_tt)
+                home_tt = self._parse_team_total(home_line, home_team, "home")
+                if home_tt:
+                    bol_markets.append(home_tt)
+
+            # MMA-specific: fight to go the distance (Yes/No market)
+            if is_combat:
+                ftgd = self._parse_fight_to_go_distance(game)
+                if ftgd:
+                    bol_markets.append(ftgd)
+                # Also parse total rounds as totals if not already present
+                rounds_mkt = self._parse_total_rounds(game)
+                if rounds_mkt:
+                    has_totals = any(m.key == "totals" for m in bol_markets)
+                    if not has_totals:
+                        bol_markets.append(rounds_mkt)
+
             if not bol_markets:
                 continue
 
@@ -455,22 +508,39 @@ class BetOnlineSource(DataSource):
 
             cid = canonical_event_id(sport_key, home_team, away_team, commence_time)
 
-            events.append(OddsEvent(
-                id=cid,
-                sport_key=sport_key,
-                sport_title=sport_title,
-                commence_time=commence_time,
-                home_team=home_team,
-                away_team=away_team,
-                bookmakers=[
-                    Bookmaker(
-                        key="betonlineag",
-                        title="BetOnline",
-                        markets=bol_markets,
-                        event_url=event_url,
-                    )
-                ],
-            ))
+            # For MMA/boxing, BetOnline returns multiple GamesDescription entries
+            # for the same fight (main line, distance, rounds). Merge them.
+            existing_ev = events_by_id.get(cid) if is_combat else None
+            if existing_ev is not None:
+                # Merge markets into existing event's bookmaker
+                for bm in existing_ev.bookmakers:
+                    if bm.key == "betonlineag":
+                        existing_keys = {m.key for m in bm.markets}
+                        for mkt in bol_markets:
+                            if mkt.key not in existing_keys:
+                                bm.markets.append(mkt)
+                                existing_keys.add(mkt.key)
+                        break
+            else:
+                ev = OddsEvent(
+                    id=cid,
+                    sport_key=sport_key,
+                    sport_title=sport_title,
+                    commence_time=commence_time,
+                    home_team=home_team,
+                    away_team=away_team,
+                    bookmakers=[
+                        Bookmaker(
+                            key="betonlineag",
+                            title="BetOnline",
+                            markets=bol_markets,
+                            event_url=event_url,
+                        )
+                    ],
+                )
+                events.append(ev)
+                if is_combat:
+                    events_by_id[cid] = ev
 
         return events
 
@@ -590,6 +660,107 @@ class BetOnlineSource(DataSource):
                 Outcome(name="Under", price=int(under_odds), point=float(point)),
             ],
         )
+
+    def _parse_team_total(
+        self, side_line: dict, team_name: str, side: str
+    ) -> Optional[Market]:
+        """Extract team total (over/under) from a side's TotalLine."""
+        tt = side_line.get("TotalLine", {})
+        if not isinstance(tt, dict):
+            return None
+        total = tt.get("TotalLine", {}) if isinstance(tt.get("TotalLine"), dict) else tt
+        point = total.get("Point")
+        if not point:
+            point = tt.get("Point")
+        if not point or point == 0:
+            return None
+
+        over_odds = None
+        under_odds = None
+        over_obj = total.get("Over", {})
+        under_obj = total.get("Under", {})
+        if isinstance(over_obj, dict):
+            over_odds = over_obj.get("Line")
+        if isinstance(under_obj, dict):
+            under_odds = under_obj.get("Line")
+
+        if over_odds is None or under_odds is None:
+            return None
+
+        return Market(
+            key=f"team_total_{side}",
+            outcomes=[
+                Outcome(name=f"{team_name} Over", price=int(over_odds), point=float(point)),
+                Outcome(name=f"{team_name} Under", price=int(under_odds), point=float(point)),
+            ],
+        )
+
+    def _parse_fight_to_go_distance(self, game: dict) -> Optional[Market]:
+        """Extract 'fight to go the distance' (Yes/No) from MMA game data.
+
+        BetOnline encodes this as a special market within the game's extra lines
+        or as a separate GameDescription with keywords like 'distance'.
+        """
+        # Check game description for distance market indicators
+        desc = (game.get("Description") or "").lower()
+        schedule = (game.get("ScheduleText") or "").lower()
+
+        if "distance" not in desc and "distance" not in schedule:
+            return None
+
+        away_line = game.get("AwayLine", {})
+        home_line = game.get("HomeLine", {})
+
+        yes_odds = away_line.get("MoneyLine", {}).get("Line")
+        no_odds = home_line.get("MoneyLine", {}).get("Line")
+
+        if yes_odds is None or no_odds is None:
+            return None
+        if yes_odds == 0 and no_odds == 0:
+            return None
+
+        return Market(
+            key="fight_to_go_distance",
+            outcomes=[
+                Outcome(name="Yes", price=int(yes_odds)),
+                Outcome(name="No", price=int(no_odds)),
+            ],
+        )
+
+    def _parse_total_rounds(self, game: dict) -> Optional[Market]:
+        """Extract total rounds (over/under) from MMA game data.
+
+        BetOnline may encode total rounds in the game-level TotalLine
+        or as a Description/ScheduleText containing 'rounds' or 'total'.
+        """
+        desc = (game.get("Description") or "").lower()
+        schedule = (game.get("ScheduleText") or "").lower()
+
+        # If this game entry specifically mentions rounds, parse its TotalLine
+        if "round" in desc or "round" in schedule or "total" in desc:
+            game_total = game.get("TotalLine", {})
+            total = game_total.get("TotalLine", {}) if isinstance(game_total, dict) else {}
+            point = total.get("Point")
+            if not point:
+                point = game_total.get("Point", 0) if isinstance(game_total, dict) else 0
+            if not point or point == 0:
+                return None
+
+            over_odds = total.get("Over", {}).get("Line") if isinstance(total.get("Over"), dict) else None
+            under_odds = total.get("Under", {}).get("Line") if isinstance(total.get("Under"), dict) else None
+
+            if over_odds is None or under_odds is None:
+                return None
+
+            return Market(
+                key="totals",
+                outcomes=[
+                    Outcome(name="Over", price=int(over_odds), point=float(point)),
+                    Outcome(name="Under", price=int(under_odds), point=float(point)),
+                ],
+            )
+
+        return None
 
     def _parse_time(self, cutoff: str) -> str:
         """Convert BetOnline's WagerCutOff to ISO 8601."""

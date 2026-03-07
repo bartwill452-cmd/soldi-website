@@ -140,6 +140,52 @@ class BetRiversSource(DataSource):
         except Exception:
             return None
 
+    @staticmethod
+    def _juice_score(outcomes: List[Outcome]) -> float:
+        """Score how close a set of outcomes is to standard -110/-110 juice.
+
+        Lower score = closer to main line.  Returns the sum of |price + 110|
+        for all outcomes.  For markets that don't have a price component (e.g.
+        moneyline), this is unused — those markets don't have alternate lines.
+        """
+        total = 0.0
+        for o in outcomes:
+            # For standard juice lines, each side is around -110
+            # |(-110) + 110| = 0  (perfect)
+            # |(-105) + 110| = 5
+            # |(+350) + 110| = 460  (clearly alternate)
+            total += abs(o.price + 110)
+        return total
+
+    @staticmethod
+    def _is_alternate_odds(outcomes: List[Outcome]) -> bool:
+        """Return True if the odds look like an alternate (non-standard juice) line.
+
+        Main lines typically have both sides near -110 (i.e. between -125 and +105).
+        Alternate lines have lopsided odds like +350/-500.
+        """
+        for o in outcomes:
+            price = o.price
+            # Standard juice range: -150 to +130 for each side
+            # (slightly wider than -110/-110 to accommodate normal vig variance)
+            if price > 0 and price > 130:
+                return True
+            if price < 0 and price < -150:
+                return True
+        return False
+
+    @staticmethod
+    def _is_alternate_label(label: str) -> bool:
+        """Return True if the label indicates an alternate / non-main-line market."""
+        lower = label.lower()
+        # Explicit alternate keywords
+        if "alternate" in lower or "alt " in lower or "alt_" in lower:
+            return True
+        # "alt spread", "alt total", "alt run line", "alt puck line" with no separator
+        if re.match(r".*\balt\b.*", lower):
+            return True
+        return False
+
     def _parse_event(self, data: dict, sport_key: str, sport_title: str) -> Optional[OddsEvent]:
         event_info = data["event"]
         offers = data["betOffers"]
@@ -169,8 +215,13 @@ class BetRiversSource(DataSource):
         commence_time = event_info.get("start", "")
 
         # Parse bet offers into markets (with period detection)
+        # For spreads/totals, collect ALL candidates per market key and pick the
+        # main line (closest to -110/-110 standard juice) at the end.
         br_markets = []
         seen_keys = set()  # type: set
+        # Candidates: market_key -> list of (juice_score, Market)
+        spread_total_candidates = {}  # type: Dict[str, List[Tuple[float, Market]]]
+
         for offer in offers:
             label = offer.get("criterion", {}).get("label", "")
             outcomes_raw = offer.get("outcomes", [])
@@ -232,11 +283,16 @@ class BetRiversSource(DataSource):
                 # Skip 2-way handicap labels that are really draw no bet
                 if "2-way" in label_lower or "2 way" in label_lower:
                     continue
-                # Skip alternate/alt lines — these are not mainline spreads
-                if "alternate" in label_lower or "alt " in label_lower:
+                # Skip explicitly labeled alternate/alt lines
+                if self._is_alternate_label(label) or self._is_alternate_label(cleaned_label):
                     continue
+                # For MLB, only accept "Run Line" (not "Alternate Run Line")
+                # For NHL, only accept "Puck Line" (not "Alternate Puck Line")
                 base = "spreads"
             elif "total" in label_lower:
+                # Skip explicitly labeled alternate/alt total lines
+                if self._is_alternate_label(label) or self._is_alternate_label(cleaned_label):
+                    continue
                 # Check if this is a team total
                 home_lower = home.lower()
                 away_lower = away.lower()
@@ -272,60 +328,125 @@ class BetRiversSource(DataSource):
                 continue
 
             market_key = base + suffix
-            if market_key in seen_keys:
-                continue
-            seen_keys.add(market_key)
 
             if base == "h2h":
+                if market_key in seen_keys:
+                    continue
                 parsed = self._parse_moneyline(outcomes_raw)
                 if parsed:
                     br_markets.append(Market(key=market_key, outcomes=parsed))
+                    seen_keys.add(market_key)
             elif base == "h2h_3way":
+                if market_key in seen_keys:
+                    continue
                 # 3-way result: home/draw/away (Kambi uses 1/X/2 labels)
                 parsed = self._parse_moneyline_3way(outcomes_raw, home, away)
                 if parsed and len(parsed) >= 3:
                     br_markets.append(Market(key=market_key, outcomes=parsed))
+                    seen_keys.add(market_key)
             elif base == "draw_no_bet":
+                if market_key in seen_keys:
+                    continue
                 # Draw No Bet / Tie No Bet: 2-way (home/away)
                 # Kambi uses 1/2 labels with OT_ONE/OT_TWO types
                 parsed = self._parse_two_way_1x2(outcomes_raw, home, away)
                 if parsed:
                     br_markets.append(Market(key=market_key, outcomes=parsed))
+                    seen_keys.add(market_key)
             elif base == "btts":
+                if market_key in seen_keys:
+                    continue
                 # Both Teams to Score: Yes/No
                 parsed = self._parse_yes_no(outcomes_raw)
                 if parsed:
                     br_markets.append(Market(key=market_key, outcomes=parsed))
+                    seen_keys.add(market_key)
             elif base == "fight_to_go_distance":
+                if market_key in seen_keys:
+                    continue
                 # MMA: Will the fight go the distance? Yes/No
                 parsed = self._parse_yes_no(outcomes_raw)
                 if parsed:
                     br_markets.append(Market(key=market_key, outcomes=parsed))
+                    seen_keys.add(market_key)
             elif base == "total_rounds":
+                if market_key in seen_keys:
+                    continue
                 # MMA: Total rounds (Over/Under)
                 parsed = self._parse_total(outcomes_raw)
                 if parsed:
                     br_markets.append(Market(key=market_key, outcomes=parsed))
+                    seen_keys.add(market_key)
             elif base == "double_chance":
+                if market_key in seen_keys:
+                    continue
                 # Double Chance: 3 outcomes (1X = Home/Draw, 12 = Home/Away, X2 = Draw/Away)
                 parsed = self._parse_double_chance(outcomes_raw, home, away)
                 if parsed:
                     br_markets.append(Market(key=market_key, outcomes=parsed))
+                    seen_keys.add(market_key)
             elif base == "spreads":
                 parsed = self._parse_spread(outcomes_raw)
                 if parsed:
                     # Skip draw-no-bet lines disguised as spreads (±0.5 points)
                     if any(abs(o.point) == 0.5 for o in parsed if o.point is not None):
                         continue
-                    br_markets.append(Market(key=market_key, outcomes=parsed))
+                    # Collect as candidate — pick main line later
+                    score = self._juice_score(parsed)
+                    market = Market(key=market_key, outcomes=parsed)
+                    if market_key not in spread_total_candidates:
+                        spread_total_candidates[market_key] = []
+                    spread_total_candidates[market_key].append((score, market))
             elif base.startswith("team_total_"):
                 parsed = self._parse_total(outcomes_raw)
                 if parsed:
-                    br_markets.append(Market(key=market_key, outcomes=parsed))
+                    # Collect as candidate — pick main line later
+                    score = self._juice_score(parsed)
+                    market = Market(key=market_key, outcomes=parsed)
+                    if market_key not in spread_total_candidates:
+                        spread_total_candidates[market_key] = []
+                    spread_total_candidates[market_key].append((score, market))
             elif base == "totals":
                 parsed = self._parse_total(outcomes_raw)
                 if parsed:
-                    br_markets.append(Market(key=market_key, outcomes=parsed))
+                    # Collect as candidate — pick main line later
+                    score = self._juice_score(parsed)
+                    market = Market(key=market_key, outcomes=parsed)
+                    if market_key not in spread_total_candidates:
+                        spread_total_candidates[market_key] = []
+                    spread_total_candidates[market_key].append((score, market))
+
+        # For spreads/totals/team_totals: pick the main line from candidates
+        # Main line = closest to -110/-110 standard juice, excluding alternate odds
+        for market_key, candidates in spread_total_candidates.items():
+            if market_key in seen_keys:
+                continue
+            # Filter out lines with clearly alternate (non-standard) juice
+            standard_candidates = [
+                (score, mkt) for score, mkt in candidates
+                if not self._is_alternate_odds(mkt.outcomes)
+            ]
+            if standard_candidates:
+                pool = standard_candidates
+            else:
+                # If all candidates look alternate, fall back but log a warning
+                logger.debug(
+                    "BetRivers: all %d candidates for %s look alternate, "
+                    "using best-available line",
+                    len(candidates), market_key,
+                )
+                pool = candidates
+            # Pick the candidate closest to standard -110/-110 juice
+            best_score, best_market = min(pool, key=lambda x: x[0])
+            if best_score > 100:
+                # Even the best candidate has very non-standard juice — likely alternate
+                logger.debug(
+                    "BetRivers: best candidate for %s has juice_score=%.0f "
+                    "(may be alternate), still using it",
+                    market_key, best_score,
+                )
+            br_markets.append(best_market)
+            seen_keys.add(market_key)
 
         if not br_markets:
             return None
