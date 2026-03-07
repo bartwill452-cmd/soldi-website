@@ -752,6 +752,9 @@
       document.getElementById('leadsGate').style.display = 'none';
       document.getElementById('leadsDashboard').classList.add('active');
 
+      // Hide Apply Now buttons for authenticated users
+      document.querySelectorAll('.nav-cta').forEach(el => el.style.display = 'none');
+
       // Show masked key
       const masked = key.substring(0, 10) + '...' + key.substring(key.length - 4);
       document.getElementById('leadsKeyDisplayText').textContent = masked;

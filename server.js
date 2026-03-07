@@ -34,6 +34,7 @@ const WHOP_STORE_SLUG = process.env.WHOP_STORE_SLUG || 'soldi-4def';
 const WHOP_PRODUCT_PATH = process.env.WHOP_PRODUCT_PATH || 'soldi-a9';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'bartwill452@gmail.com';
 const BRAVE_SEARCH_API_KEY = process.env.BRAVE_SEARCH_API_KEY || '';
+const SERPER_API_KEY = process.env.SERPER_API_KEY || '';
 
 // ============================================
 // 2FA VERIFICATION CODE STORE (in-memory)
@@ -1753,24 +1754,76 @@ async function throttleSearch() {
   lastSearchTime = Date.now();
 }
 
-// Fetch search results from Brave API (primary), Brave HTML (secondary), DDG (fallback)
+// Serper.dev API (Google Search results via API — free 2,500 queries)
+async function fetchSerperResults(query) {
+  const response = await fetch('https://google.serper.dev/search', {
+    method: 'POST',
+    headers: {
+      'X-API-KEY': SERPER_API_KEY,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ q: query, num: 20 }),
+    signal: AbortSignal.timeout(10000),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Serper API returned status ${response.status}`);
+  }
+
+  const data = await response.json();
+  const results = [];
+  const seenDomains = new Set();
+
+  for (const item of (data.organic || [])) {
+    const href = item.link || '';
+    if (!href) continue;
+
+    const domain = extractDomain(href);
+    if (!domain || seenDomains.has(domain)) continue;
+    seenDomains.add(domain);
+
+    const title = item.title || '';
+    const snippet = item.snippet || '';
+
+    if (title && href) {
+      results.push({ title, url: href, siteName: '', snippet: `${title} ${snippet}` });
+    }
+  }
+
+  return results;
+}
+
+// Fetch search results — API engines first (reliable), then HTML scrapers (fallback)
 async function fetchSearchResults(query) {
   const errors = [];
 
-  // 1. Try Brave Search API first (most reliable, no rate limiting)
+  // 1. Try Brave Search API (most reliable, no rate limiting)
   if (BRAVE_SEARCH_API_KEY) {
     try {
       await throttleSearch();
       const results = await fetchBraveAPIResults(query);
       if (results.length > 0) return results;
-      console.log('Brave API returned 0 results, trying HTML...');
+      console.log('Brave API returned 0 results, trying next...');
     } catch (err) {
       errors.push(`BraveAPI: ${err.message}`);
       console.error('Brave API failed:', err.message);
     }
   }
 
-  // 2. Try Brave HTML scraping as secondary
+  // 2. Try Serper.dev API (Google search results, free 2,500/month)
+  if (SERPER_API_KEY) {
+    try {
+      await throttleSearch();
+      const results = await fetchSerperResults(query);
+      if (results.length > 0) return results;
+      console.log('Serper returned 0 results, trying next...');
+    } catch (err) {
+      errors.push(`Serper: ${err.message}`);
+      console.error('Serper failed:', err.message);
+    }
+  }
+
+  // 3. Try Brave HTML scraping (can get captcha'd/rate-limited)
   try {
     await throttleSearch();
     const results = await fetchBraveHTMLResults(query);
@@ -1781,7 +1834,7 @@ async function fetchSearchResults(query) {
     console.error('Brave HTML failed:', err.message);
   }
 
-  // 3. Fallback to DuckDuckGo HTML
+  // 4. Fallback to DuckDuckGo HTML
   try {
     await throttleSearch();
     const results = await fetchDDGResults(query);
@@ -1792,7 +1845,7 @@ async function fetchSearchResults(query) {
     console.error('DDG Search failed:', err.message);
   }
 
-  // 4. Last-resort: Google HTML scraping
+  // 5. Last-resort: Google HTML scraping
   try {
     await throttleSearch();
     const results = await fetchGoogleResults(query);
@@ -1802,8 +1855,12 @@ async function fetchSearchResults(query) {
     console.error('Google Search failed:', err.message);
   }
 
-  // If all failed, throw so the endpoint returns a proper error
-  if (errors.length >= 3) {
+  // If all failed, throw with helpful message
+  if (errors.length >= 2) {
+    const hasApiKey = BRAVE_SEARCH_API_KEY || SERPER_API_KEY;
+    if (!hasApiKey) {
+      console.error('ALL search engines failed. No API keys configured — set BRAVE_SEARCH_API_KEY or SERPER_API_KEY env var for reliable results.');
+    }
     throw new Error('Search engines temporarily unavailable. Please try again in a few minutes.');
   }
 
