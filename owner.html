@@ -453,6 +453,59 @@
       <div class="section-label">Conversion Funnel</div>
       <div class="funnel-wrap" id="funnelChart"></div>
       <div class="funnel-summary-row" id="funnelSummary"></div>
+
+      <!-- CONVERSION BREAKDOWN -->
+      <div style="margin-top:32px; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 24px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
+          <div class="section-label" style="margin:0;">User Conversion Breakdown</div>
+        </div>
+        <div class="stats-grid" id="conversionStats" style="margin-bottom:20px;"></div>
+
+        <!-- Section 1: Form → Purchased -->
+        <div style="margin-bottom:24px;">
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+            <div style="width:10px;height:10px;border-radius:50%;background:#22c55e;"></div>
+            <span style="font-size:14px;font-weight:600;color:#e5e5e5;">Filled Form & Purchased</span>
+            <span style="font-size:13px;color:#525252;" id="convFormPurchaseCount"></span>
+          </div>
+          <div style="border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; overflow: hidden;">
+            <table class="data-table">
+              <thead><tr><th>Email</th><th>Name</th><th>Status</th><th>Form Submitted</th><th>Joined</th><th>Interest</th></tr></thead>
+              <tbody id="convFormPurchaseBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Section 2: Direct Purchase (no form) -->
+        <div style="margin-bottom:24px;">
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+            <div style="width:10px;height:10px;border-radius:50%;background:#3b82f6;"></div>
+            <span style="font-size:14px;font-weight:600;color:#e5e5e5;">Purchased Without Form</span>
+            <span style="font-size:13px;color:#525252;" id="convDirectCount"></span>
+          </div>
+          <div style="border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; overflow: hidden;">
+            <table class="data-table">
+              <thead><tr><th>Email</th><th>Name</th><th>Status</th><th>Joined</th></tr></thead>
+              <tbody id="convDirectBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Section 3: Filled Form but didn't purchase -->
+        <div style="margin-bottom:24px;">
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+            <div style="width:10px;height:10px;border-radius:50%;background:#f59e0b;"></div>
+            <span style="font-size:14px;font-weight:600;color:#e5e5e5;">Filled Form — No Purchase</span>
+            <span style="font-size:13px;color:#525252;" id="convFormOnlyCount"></span>
+          </div>
+          <div style="border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; overflow: hidden;">
+            <table class="data-table">
+              <thead><tr><th>Email</th><th>Name</th><th>Submitted</th><th>Interest</th><th>Experience</th><th>Goal</th></tr></thead>
+              <tbody id="convFormOnlyBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
     </div>
 
   </div>
@@ -802,7 +855,7 @@ async function exportCSV() {
 }
 
 // ANALYTICS / TRAFFIC
-async function loadAnalytics() { loadLive(); loadTraffic(); loadFunnel(); }
+async function loadAnalytics() { loadLive(); loadTraffic(); loadFunnel(); loadConversions(); }
 
 async function loadLive() {
   try {
@@ -867,6 +920,75 @@ async function loadFunnel() {
       <div class="funnel-summary-card"><div class="fval" style="color:#3b82f6;">${steps[5].val}</div><div class="flbl">Submissions</div></div>
       <div class="funnel-summary-card"><div class="fval" style="color:#a855f7;">${convRate}%</div><div class="flbl">Conversion Rate</div></div>`;
   } catch {}
+}
+
+async function loadConversions() {
+  try {
+    const data = await apiFetch('/api/owner/conversions');
+    const fp = data.formThenPurchased || {};
+    const dp = data.directPurchased || {};
+    const fo = data.formNoPurchase || {};
+    const rates = data.rates || {};
+
+    // Stats cards
+    $('conversionStats').innerHTML = `
+      <div class="stat-card">
+        <div class="stat-card-header"><span class="stat-card-title">Form → Purchase Rate</span></div>
+        <div class="stat-card-value" style="color:#22c55e;">${rates.formToPayRate || 0}%</div>
+        <div style="font-size:12px;color:#525252;margin-top:4px;">${fp.count || 0} of ${rates.totalSubmissions || 0} form fills converted</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card-header"><span class="stat-card-title">Direct Purchases</span></div>
+        <div class="stat-card-value" style="color:#3b82f6;">${dp.count || 0}</div>
+        <div style="font-size:12px;color:#525252;margin-top:4px;">${rates.directRate || 0}% of all members skipped the form</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card-header"><span class="stat-card-title">Leads Not Converted</span></div>
+        <div class="stat-card-value" style="color:#f59e0b;">${fo.count || 0}</div>
+        <div style="font-size:12px;color:#525252;margin-top:4px;">Filled form but haven't purchased</div>
+      </div>`;
+
+    // Counts
+    $('convFormPurchaseCount').textContent = '(' + (fp.count || 0) + ')';
+    $('convDirectCount').textContent = '(' + (dp.count || 0) + ')';
+    $('convFormOnlyCount').textContent = '(' + (fo.count || 0) + ')';
+
+    // Table 1: Form → Purchased
+    $('convFormPurchaseBody').innerHTML = (fp.users || []).map(u => `
+      <tr>
+        <td class="email-text">${esc(u.email)}</td>
+        <td>${esc(u.name)}</td>
+        <td><span class="status-pill ${u.status}">${esc(u.status.charAt(0).toUpperCase() + u.status.slice(1))}</span></td>
+        <td class="date-text">${fmtDate(u.submittedAt)}</td>
+        <td class="date-text">${fmtDate(u.joinedAt)}</td>
+        <td>${esc(u.interest || '--')}</td>
+      </tr>
+    `).join('') || '<tr><td colspan="6" class="empty-state">None yet</td></tr>';
+
+    // Table 2: Direct Purchase
+    $('convDirectBody').innerHTML = (dp.users || []).map(u => `
+      <tr>
+        <td class="email-text">${esc(u.email)}</td>
+        <td>${esc(u.name)}</td>
+        <td><span class="status-pill ${u.status}">${esc(u.status.charAt(0).toUpperCase() + u.status.slice(1))}</span></td>
+        <td class="date-text">${fmtDate(u.joinedAt)}</td>
+      </tr>
+    `).join('') || '<tr><td colspan="4" class="empty-state">None yet</td></tr>';
+
+    // Table 3: Form only
+    $('convFormOnlyBody').innerHTML = (fo.users || []).map(u => `
+      <tr>
+        <td class="email-text">${esc(u.email)}</td>
+        <td>${esc(u.name)}</td>
+        <td class="date-text">${fmtDate(u.submittedAt)}</td>
+        <td>${esc(u.interest || '--')}</td>
+        <td>${esc(u.experience || '--')}</td>
+        <td>${esc(u.goal || '--')}</td>
+      </tr>
+    `).join('') || '<tr><td colspan="6" class="empty-state">None yet</td></tr>';
+  } catch (err) {
+    console.error('Load conversions error:', err);
+  }
 }
 
 init();

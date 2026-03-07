@@ -3860,6 +3860,92 @@ app.get('/api/owner/overview', requireOwnerMember, async (req, res) => {
   }
 });
 
+// GET /api/owner/conversions — Cross-reference submissions with memberships
+app.get('/api/owner/conversions', requireOwnerMember, async (req, res) => {
+  try {
+    const members = await fetchAllWhopMembers(false);
+    const submissions = loadSubmissions();
+
+    // Build email sets for fast lookup
+    const submissionEmails = new Set(submissions.map(s => (s.email || '').toLowerCase()).filter(Boolean));
+    const memberEmails = new Set(members.map(m => (m.email || '').toLowerCase()).filter(Boolean));
+
+    // 1. Members who filled out form AND purchased
+    const formThenPurchased = [];
+    // 2. Members who purchased WITHOUT filling out form
+    const directPurchased = [];
+    // 3. Users who filled out form but did NOT purchase
+    const formNoPurchase = [];
+
+    for (const m of members) {
+      const email = (m.email || '').toLowerCase();
+      if (!email) continue;
+      const hasSubmission = submissionEmails.has(email);
+      const sub = hasSubmission ? submissions.find(s => (s.email || '').toLowerCase() === email) : null;
+      const memberInfo = {
+        email: m.email,
+        name: m.name || m.username || '',
+        status: m.status,
+        joinedAt: m.createdAt,
+        renewalDate: m.renewalDate,
+      };
+      if (hasSubmission) {
+        formThenPurchased.push({
+          ...memberInfo,
+          submittedAt: sub ? sub.submittedAt : null,
+          interest: sub ? sub.interest : null,
+          experience: sub ? sub.experience : null,
+        });
+      } else {
+        directPurchased.push(memberInfo);
+      }
+    }
+
+    for (const s of submissions) {
+      const email = (s.email || '').toLowerCase();
+      if (!email) continue;
+      if (!memberEmails.has(email)) {
+        formNoPurchase.push({
+          email: s.email,
+          name: (s.firstName || '') + ' ' + (s.lastName || ''),
+          submittedAt: s.submittedAt,
+          interest: s.interest,
+          experience: s.experience,
+          phone: s.phone,
+          goal: s.goal,
+        });
+      }
+    }
+
+    // Sort each group by most recent first
+    formThenPurchased.sort((a, b) => new Date(b.joinedAt || 0) - new Date(a.joinedAt || 0));
+    directPurchased.sort((a, b) => new Date(b.joinedAt || 0) - new Date(a.joinedAt || 0));
+    formNoPurchase.sort((a, b) => new Date(b.submittedAt || 0) - new Date(a.submittedAt || 0));
+
+    // Conversion rates
+    const totalMembers = members.length;
+    const totalSubmissions = submissions.length;
+    const formToPayRate = totalSubmissions > 0 ? Math.round((formThenPurchased.length / totalSubmissions) * 1000) / 10 : 0;
+    const directRate = totalMembers > 0 ? Math.round((directPurchased.length / totalMembers) * 1000) / 10 : 0;
+
+    res.json({
+      formThenPurchased: { count: formThenPurchased.length, users: formThenPurchased },
+      directPurchased: { count: directPurchased.length, users: directPurchased },
+      formNoPurchase: { count: formNoPurchase.length, users: formNoPurchase },
+      rates: {
+        formToPayRate,
+        directRate,
+        totalMembers,
+        totalSubmissions,
+        formFillRate: totalSubmissions, // raw count of form fills
+      },
+    });
+  } catch (err) {
+    console.error('Conversions error:', err);
+    res.status(500).json({ error: 'Failed to fetch conversion data' });
+  }
+});
+
 // ============================================
 // START SERVER
 // ============================================
