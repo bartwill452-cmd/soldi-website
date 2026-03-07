@@ -108,7 +108,17 @@
       background: rgba(13,17,23,0.98);
     }
 
-    /* Sportsbook icon in header */
+    /* Sportsbook logo in header */
+    .book-logo {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      margin: 0 auto 4px;
+      object-fit: contain;
+      background: rgba(255,255,255,0.06);
+      padding: 2px;
+    }
+    /* Fallback text icon when no image */
     .book-icon {
       width: 36px;
       height: 36px;
@@ -122,21 +132,6 @@
       color: #fff;
       letter-spacing: -0.5px;
     }
-    .book-icon-fd { background: #1493ff; }
-    .book-icon-dk { background: #53b44b; }
-    .book-icon-mgm { background: #c5a44e; }
-    .book-icon-pin { background: #cc2131; }
-    .book-icon-czr { background: #0a3a2a; }
-    .book-icon-bov { background: #b22222; }
-    .book-icon-bol { background: #ff6600; }
-    .book-icon-br { background: #1e90ff; }
-    .book-icon-hr { background: #ff1493; }
-    .book-icon-nov { background: #6c3baa; }
-    .book-icon-bm { background: #c0392b; }
-    .book-icon-105 { background: #2c3e50; }
-    .book-icon-xb { background: #e74c3c; }
-    .book-icon-bky { background: #27ae60; }
-    .book-icon-px { background: #8e44ad; }
     .book-icon-best { background: linear-gradient(135deg, #22c55e, #16a34a); }
     .book-icon-avg { background: rgba(255,255,255,0.15); color: #a1a1aa; }
 
@@ -296,6 +291,7 @@
       .ev-card { grid-template-columns: 1fr; }
       .ev-right { justify-content: flex-start; }
       .arb-legs { grid-template-columns: 1fr; }
+      .book-logo { width: 30px; height: 30px; border-radius: 8px; }
       .book-icon { width: 30px; height: 30px; font-size: 9px; border-radius: 8px; }
       .book-label { font-size: 9px; }
       .odds-val { font-size: 11px; min-width: 48px; padding: 3px 4px; }
@@ -394,23 +390,23 @@ let evData = [];
 let arbData = [];
 let refreshTimer = null;
 
-// Sportsbook metadata for icons
+// Sportsbook metadata with logo images
 const BOOK_META = {
-  fanduel:       { short: 'FD',  name: 'FanDuel',      iconClass: 'book-icon-fd' },
-  draftkings:    { short: 'DK',  name: 'DraftKings',   iconClass: 'book-icon-dk' },
-  betmgm:        { short: 'MGM', name: 'BetMGM',       iconClass: 'book-icon-mgm' },
-  pinnacle:      { short: 'PIN', name: 'Pinnacle',      iconClass: 'book-icon-pin' },
-  williamhill_us:{ short: 'CZR', name: 'Caesars',       iconClass: 'book-icon-czr' },
-  bovada:        { short: 'BOV', name: 'Bovada',        iconClass: 'book-icon-bov' },
-  betonlineag:   { short: 'BOL', name: 'BetOnline',     iconClass: 'book-icon-bol' },
-  betrivers:     { short: 'BR',  name: 'BetRivers',     iconClass: 'book-icon-br' },
-  hardrock:      { short: 'HR',  name: 'Hard Rock',     iconClass: 'book-icon-hr' },
-  novig:         { short: 'NOV', name: 'Novig',         iconClass: 'book-icon-nov' },
-  bookmaker:     { short: 'BM',  name: 'Bookmaker',     iconClass: 'book-icon-bm' },
-  bet105:        { short: '105', name: 'Bet105',        iconClass: 'book-icon-105' },
-  xbet:          { short: 'XB',  name: 'XBet',          iconClass: 'book-icon-xb' },
-  buckeye:       { short: 'BKY', name: 'Buckeye',       iconClass: 'book-icon-bky' },
-  prophetx:      { short: 'PX',  name: 'ProphetX',      iconClass: 'book-icon-px' },
+  fanduel:       { short: 'FD',  name: 'FanDuel',      logo: '/images/books/fanduel.png' },
+  draftkings:    { short: 'DK',  name: 'DraftKings',   logo: '/images/books/draftkings.png' },
+  betmgm:        { short: 'MGM', name: 'BetMGM',       logo: '/images/books/betmgm.png' },
+  pinnacle:      { short: 'PIN', name: 'Pinnacle',      logo: '/images/books/pinnacle.png' },
+  williamhill_us:{ short: 'CZR', name: 'Caesars',       logo: '/images/books/caesars.png' },
+  bovada:        { short: 'BOV', name: 'Bovada',        logo: '/images/books/bovada.png' },
+  betonlineag:   { short: 'BOL', name: 'BetOnline',     logo: '/images/books/betonline.png' },
+  betrivers:     { short: 'BR',  name: 'BetRivers',     logo: '/images/books/betrivers.png' },
+  hardrock:      { short: 'HR',  name: 'Hard Rock',     logo: '/images/books/hardrock.png' },
+  novig:         { short: 'NOV', name: 'Novig',         logo: '/images/books/novig.png' },
+  bookmaker:     { short: 'BM',  name: 'Bookmaker',     logo: '/images/books/bookmaker.png' },
+  bet105:        { short: '105', name: 'Bet105',        logo: '/images/books/bet105.png' },
+  xbet:          { short: 'XB',  name: 'XBet',          logo: '/images/books/xbet.png' },
+  buckeye:       { short: 'BKY', name: 'Buckeye',       logo: '/images/books/buckeye.png' },
+  prophetx:      { short: 'PX',  name: 'ProphetX',      logo: '/images/books/prophetx.png' },
 };
 
 function getAuthHeaders() {
@@ -645,13 +641,21 @@ function renderOddsScreen() {
     <div class="book-icon book-icon-avg">AVG</div>
     <div class="book-label">Average</div>
   </th>`;
-  // Sportsbook columns
+  // Sportsbook columns with actual logos
   bookKeys.forEach(key => {
-    const meta = BOOK_META[key] || { short: key.substring(0, 3).toUpperCase(), name: key, iconClass: '' };
-    html += `<th>
-      <div class="book-icon ${meta.iconClass}">${meta.short}</div>
-      <div class="book-label">${meta.name}</div>
-    </th>`;
+    const meta = BOOK_META[key] || { short: key.substring(0, 3).toUpperCase(), name: key, logo: '' };
+    if (meta.logo) {
+      html += `<th>
+        <img class="book-logo" src="${meta.logo}" alt="${meta.name}" title="${meta.name}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+        <div class="book-icon" style="display:none;background:rgba(255,255,255,0.1)">${meta.short}</div>
+        <div class="book-label">${meta.name}</div>
+      </th>`;
+    } else {
+      html += `<th>
+        <div class="book-icon" style="background:rgba(255,255,255,0.1)">${meta.short}</div>
+        <div class="book-label">${meta.name}</div>
+      </th>`;
+    }
   });
   html += '</tr></thead>';
 
