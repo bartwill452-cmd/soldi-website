@@ -578,14 +578,14 @@ function renderAnalyticsPage(data) {
 
   // Balance
   $('totalBalance').textContent = fmt$(rev.thisMonth || 0);
-  $('availableBalance').textContent = fmt$(rev.thisMonth || 0) + ' available';
-  $('headerBalance').textContent = fmt$0(rev.mrr || 0);
+  $('availableBalance').textContent = fmt$(rev.thisMonth || 0) + ' this month';
+  $('headerBalance').textContent = fmt$0(rev.mrr || 0) + ' MRR';
   $('payoutsValue').textContent = '--';
 
   // Revenue chart
   loadRevenueChart();
 
-  // Stats grid
+  // Stats grid with real data
   renderStatsGrid(rev, mem, data.submissions || {});
 }
 
@@ -609,39 +609,30 @@ async function loadRevenueChart() {
 
 function renderStatsGrid(rev, mem, subs) {
   const cards = [
-    { title: 'Gross revenue', value: fmt$(rev.thisMonth || 0), chart: true },
-    { title: 'New users', value: String(mem.new || 0), change: mem.new > 0 ? '+' + mem.new : null, chart: true },
-    { title: 'MRR', value: fmt$(rev.mrr || 0), chart: true },
-    { title: 'ARR', value: fmt$((rev.mrr || 0) * 12), chart: true },
-    { title: 'Churn rate', value: (mem.churnRate || 0) + '%', chart: true },
-    { title: 'Active members', value: String(mem.active || 0), chart: false },
+    { title: 'Gross revenue', value: fmt$(rev.thisMonth || 0), sub: 'This month' },
+    { title: 'New users', value: String(mem.new || 0), change: mem.new > 0 ? '+' + mem.new : null, sub: 'This month' },
+    { title: 'MRR', value: fmt$(rev.mrr || 0), sub: (mem.paying || 0) + ' paying member' + ((mem.paying || 0) !== 1 ? 's' : '') },
+    { title: 'ARR', value: fmt$((rev.mrr || 0) * 12), sub: 'Projected annually' },
+    { title: 'Churn rate', value: (mem.churnRate || 0) + '%', sub: 'This month' },
+    { title: 'Members', value: String(mem.active || 0) + ' active', sub: (mem.trialing || 0) + ' trialing, ' + (mem.total || 0) + ' total' },
   ];
 
   $('statsGrid').innerHTML = cards.map(c => `
     <div class="stat-card">
       <div class="stat-card-header">
         <span class="stat-card-title">${c.title}</span>
-        <button class="stat-card-toggle"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></button>
       </div>
       <div class="stat-card-value">${c.value}</div>
       ${c.change ? `<span class="stat-card-change up">${c.change}</span>` : ''}
-      ${c.chart ? `<div class="stat-card-chart">${generateMiniChart()}</div><div class="stat-card-dates"><span>Feb 28</span><span>Today</span></div>` : ''}
+      ${c.sub ? `<div style="font-size:12px;color:#525252;margin-top:4px;">${c.sub}</div>` : ''}
     </div>
   `).join('');
-}
-
-function generateMiniChart() {
-  const bars = [];
-  for (let i = 0; i < 14; i++) {
-    const h = Math.max(Math.random() * 100, 5);
-    bars.push(`<div class="stat-mini-bar" style="height:${h}%"></div>`);
-  }
-  return bars.join('');
 }
 
 function setRange(days, btn) {
   document.querySelectorAll('.stats-filter-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
+  // Range filtering would require historical data storage — currently shows current state
 }
 
 // MEMBERS

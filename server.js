@@ -3682,18 +3682,30 @@ app.get('/api/owner/revenue', requireOwnerMember, async (req, res) => {
     if (cached) return res.json(cached);
 
     const members = await fetchAllWhopMembers(false);
-    const activeCount = members.filter(m => ['active', 'trialing', 'canceling'].includes(m.status)).length;
-    const mrr = activeCount * WHOP_PLAN_PRICE;
+    // MRR only counts actively paying members (not trialing — they haven't paid yet)
+    const payingCount = members.filter(m => m.status === 'active').length;
+    const trialingCount = members.filter(m => m.status === 'trialing').length;
+    const cancelingCount = members.filter(m => m.status === 'canceling').length;
+    const activeCount = payingCount + trialingCount + cancelingCount;
+    // MRR = only paying + canceling (canceling still pays until end of period)
+    const mrr = (payingCount + cancelingCount) * WHOP_PLAN_PRICE;
 
     const now = new Date();
     const todayStr = now.toISOString().split('T')[0];
+    const yesterday = new Date(now); yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
     const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
     // Try Whop payments API for real revenue data
-    let revenueToday = 0, revenueThisWeek = 0, revenueThisMonth = 0;
+    let revenueToday = 0, revenueYesterday = 0, revenueThisWeek = 0, revenueThisMonth = 0;
     let paymentsAvailable = false;
+    const dailyMap = {}; // date string -> amount for chart
+    // Init last 7 days with 0
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now); d.setDate(d.getDate() - i);
+      dailyMap[d.toISOString().split('T')[0]] = 0;
+    }
     try {
       let payPage = 1;
       const maxPayPages = 10;
@@ -3707,11 +3719,15 @@ app.get('/api/owner/revenue', requireOwnerMember, async (req, res) => {
         paymentsAvailable = true;
         for (const p of payments) {
           if (p.status !== 'paid') continue;
-          const amount = (p.final_amount || p.amount || 0) / 100; // cents to dollars
+          const amount = (p.final_amount || p.amount || 0) / 100;
           const paidAt = new Date(p.paid_at || p.created_at);
-          if (paidAt.toISOString().split('T')[0] === todayStr) revenueToday += amount;
+          const paidDateStr = paidAt.toISOString().split('T')[0];
+          if (paidDateStr === todayStr) revenueToday += amount;
+          if (paidDateStr === yesterdayStr) revenueYesterday += amount;
           if (paidAt >= weekAgo) revenueThisWeek += amount;
-          if (paidAt >= monthAgo) revenueThisMonth += amount;
+          if (paidAt >= monthStart) revenueThisMonth += amount;
+          // Accumulate daily chart data
+          if (dailyMap.hasOwnProperty(paidDateStr)) dailyMap[paidDateStr] += amount;
         }
         if (!payData.page_info || !payData.page_info.has_next_page) break;
         payPage++;
@@ -3720,12 +3736,8 @@ app.get('/api/owner/revenue', requireOwnerMember, async (req, res) => {
       console.error('Whop payments API error:', payErr.message);
     }
 
-    // Fallback: estimate from member count if payments API unavailable
-    if (!paymentsAvailable) {
-      revenueThisMonth = mrr;
-      revenueThisWeek = Math.round(mrr / 4.3);
-      revenueToday = Math.round(mrr / 30);
-    }
+    // If no payments API data, show $0 (don't fake estimates)
+    // The MRR is still calculated from member count
 
     // New members this month & churn
     const newThisMonth = members.filter(m => m.createdAt && new Date(m.createdAt) >= monthStart).length;
@@ -3734,20 +3746,20 @@ app.get('/api/owner/revenue', requireOwnerMember, async (req, res) => {
     const churnRate = activeStart > 0 ? Math.round((canceledThisMonth / activeStart) * 1000) / 10 : 0;
 
     // Daily revenue for chart (last 7 days)
-    const dailyRevenue = [];
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(now);
-      d.setDate(d.getDate() - i);
-      const ds = d.toISOString().split('T')[0];
-      dailyRevenue.push({ date: ds, amount: paymentsAvailable ? 0 : Math.round(mrr / 30) });
-    }
+    const dailyRevenue = Object.entries(dailyMap).sort().map(([date, amount]) => ({
+      date,
+      amount: Math.round(amount * 100) / 100,
+    }));
 
     const result = {
       mrr: Math.round(mrr * 100) / 100,
       revenueToday: Math.round(revenueToday * 100) / 100,
+      revenueYesterday: Math.round(revenueYesterday * 100) / 100,
       revenueThisWeek: Math.round(revenueThisWeek * 100) / 100,
       revenueThisMonth: Math.round(revenueThisMonth * 100) / 100,
       activeMembers: activeCount,
+      payingMembers: payingCount,
+      trialingMembers: trialingCount,
       totalMembers: members.length,
       newMembersThisMonth: newThisMonth,
       churnRate,
@@ -3766,47 +3778,79 @@ app.get('/api/owner/revenue', requireOwnerMember, async (req, res) => {
 // GET /api/owner/overview — Combined overview stats
 app.get('/api/owner/overview', requireOwnerMember, async (req, res) => {
   try {
-    // Revenue + member data
-    const revenueRes = await new Promise((resolve) => {
-      const mockReq = { headers: req.headers, query: {} };
-      const mockRes = { json: resolve, status: () => ({ json: (e) => resolve({ error: true, ...e }) }) };
-      // Inline the revenue logic
-      resolve(null);
-    });
+    const members = await fetchAllWhopMembers(false);
+    const payingCount = members.filter(m => m.status === 'active').length;
+    const trialingCount = members.filter(m => m.status === 'trialing').length;
+    const cancelingCount = members.filter(m => m.status === 'canceling').length;
+    const activeCount = payingCount + trialingCount + cancelingCount;
+    const mrr = (payingCount + cancelingCount) * WHOP_PLAN_PRICE;
 
-    // Fetch revenue data directly
-    let revenue = getOwnerCache('whop_revenue', 5 * 60 * 1000);
-    if (!revenue) {
-      // Trigger revenue fetch
-      const members = await fetchAllWhopMembers(false);
-      const activeCount = members.filter(m => ['active', 'trialing', 'canceling'].includes(m.status)).length;
-      const mrr = activeCount * WHOP_PLAN_PRICE;
-      const now = new Date();
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-      const newThisMonth = members.filter(m => m.createdAt && new Date(m.createdAt) >= monthStart).length;
-      const canceledThisMonth = members.filter(m => m.status === 'canceled' && m.cancelAt && new Date(m.cancelAt) >= monthStart).length;
-      const activeStart = activeCount + canceledThisMonth - newThisMonth;
-      const churnRate = activeStart > 0 ? Math.round((canceledThisMonth / activeStart) * 1000) / 10 : 0;
-      revenue = { mrr, revenueToday: Math.round(mrr / 30), revenueThisWeek: Math.round(mrr / 4.3), revenueThisMonth: mrr, activeMembers: activeCount, totalMembers: members.length, newMembersThisMonth: newThisMonth, churnRate };
+    const now = new Date();
+    const todayStr = now.toISOString().split('T')[0];
+    const yesterday = new Date(now); yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
+    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    // Fetch real payment data from Whop
+    let revenueToday = 0, revenueYesterday = 0, revenueThisWeek = 0, revenueThisMonth = 0;
+    try {
+      let payPage = 1;
+      while (payPage <= 10) {
+        const payUrl = `https://api.whop.com/api/v1/payments?company_id=${WHOP_COMPANY_ID}&page=${payPage}&per=50`;
+        const payRes = await fetch(payUrl, { headers: { Authorization: `Bearer ${WHOP_API_KEY}` } });
+        if (!payRes.ok) break;
+        const payData = await payRes.json();
+        const payments = payData.data || [];
+        if (payments.length === 0) break;
+        for (const p of payments) {
+          if (p.status !== 'paid') continue;
+          const amount = (p.final_amount || p.amount || 0) / 100;
+          const paidAt = new Date(p.paid_at || p.created_at);
+          const paidDateStr = paidAt.toISOString().split('T')[0];
+          if (paidDateStr === todayStr) revenueToday += amount;
+          if (paidDateStr === yesterdayStr) revenueYesterday += amount;
+          if (paidAt >= weekAgo) revenueThisWeek += amount;
+          if (paidAt >= monthStart) revenueThisMonth += amount;
+        }
+        if (!payData.page_info || !payData.page_info.has_next_page) break;
+        payPage++;
+      }
+    } catch (payErr) {
+      console.error('Overview payments error:', payErr.message);
     }
+
+    const newThisMonth = members.filter(m => m.createdAt && new Date(m.createdAt) >= monthStart).length;
+    const canceledThisMonth = members.filter(m => m.status === 'canceled' && m.cancelAt && new Date(m.cancelAt) >= monthStart).length;
+    const activeStart = activeCount + canceledThisMonth - newThisMonth;
+    const churnRate = activeStart > 0 ? Math.round((canceledThisMonth / activeStart) * 1000) / 10 : 0;
 
     // Submissions stats
     const submissions = loadSubmissions();
-    const now = new Date();
-    const todayStr = now.toISOString().split('T')[0];
-    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     const subStats = {
       total: submissions.length,
       today: submissions.filter(s => s.submittedAt && s.submittedAt.startsWith(todayStr)).length,
       thisWeek: submissions.filter(s => s.submittedAt && new Date(s.submittedAt) >= weekAgo).length,
     };
 
-    // Live visitors
     const liveVisitors = activeSessions ? activeSessions.size : 0;
 
     res.json({
-      revenue: { mrr: revenue.mrr, today: revenue.revenueToday, thisWeek: revenue.revenueThisWeek, thisMonth: revenue.revenueThisMonth },
-      members: { active: revenue.activeMembers, total: revenue.totalMembers, new: revenue.newMembersThisMonth, churnRate: revenue.churnRate },
+      revenue: {
+        mrr: Math.round(mrr * 100) / 100,
+        today: Math.round(revenueToday * 100) / 100,
+        yesterday: Math.round(revenueYesterday * 100) / 100,
+        thisWeek: Math.round(revenueThisWeek * 100) / 100,
+        thisMonth: Math.round(revenueThisMonth * 100) / 100,
+      },
+      members: {
+        active: activeCount,
+        paying: payingCount,
+        trialing: trialingCount,
+        total: members.length,
+        new: newThisMonth,
+        churnRate,
+      },
       submissions: subStats,
       liveVisitors,
     });
