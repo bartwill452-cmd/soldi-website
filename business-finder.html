@@ -365,15 +365,6 @@
       background: rgba(59, 130, 246, 0.25);
     }
 
-    /* Rating stars */
-    .rating-display {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-    }
-    .rating-star { color: #eab308; font-size: 12px; }
-    .rating-num { font-size: 13px; color: #a1a1aa; }
-
     /* Maps link */
     .maps-link {
       display: inline-flex;
@@ -619,9 +610,8 @@
                 <tr>
                   <th>Status</th>
                   <th>Business Name</th>
-                  <th>Address</th>
                   <th>Phone</th>
-                  <th>Rating</th>
+                  <th>Address</th>
                   <th>Website</th>
                   <th>Maps</th>
                 </tr>
@@ -887,23 +877,19 @@
         const badgeClass = biz.hasWebsite ? 'badge-has-website' : 'badge-no-website';
         const badgeText = biz.hasWebsite ? 'Has Website' : 'No Website';
 
-        // Make "Has Website" badge clickable
-        const badgeHtml = biz.hasWebsite && biz.websiteUrl
-          ? `<a href="${biz.websiteUrl}" target="_blank" class="website-badge ${badgeClass}" style="text-decoration:none;">${badgeText}</a>`
+        // Make "Has Website" badge always clickable when URL exists
+        const badgeHtml = biz.websiteUrl
+          ? `<a href="${biz.websiteUrl}" target="_blank" rel="noopener" class="website-badge ${badgeClass}" style="text-decoration:none;">${badgeText}</a>`
           : `<span class="website-badge ${badgeClass}">${badgeText}</span>`;
 
-        let ratingHtml = '<span style="color:#52525b;">--</span>';
-        if (biz.rating) {
-          const stars = Math.round(biz.rating);
-          const starHtml = Array(5).fill(0).map((_, i) =>
-            `<span class="rating-star">${i < stars ? '\u2605' : '\u2606'}</span>`
-          ).join('');
-          ratingHtml = `<div class="rating-display">${starHtml} <span class="rating-num">${biz.rating} (${biz.reviewCount})</span></div>`;
-        }
+        // Phone column
+        const phoneHtml = biz.phone
+          ? '<a href="tel:' + biz.phone.replace(/[^0-9]/g, '') + '" style="color:#22c55e; font-weight:600; font-size:14px; white-space:nowrap; text-decoration:none;">' + biz.phone + '</a>'
+          : '<span style="color:#52525b;">Not listed</span>';
 
         // Website link column
-        const websiteHtml = biz.hasWebsite && biz.websiteUrl
-          ? `<a href="${biz.websiteUrl}" target="_blank" style="color:#3b82f6;font-size:13px;font-weight:500;text-decoration:none;display:inline-flex;align-items:center;gap:4px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg> Visit</a>`
+        const websiteHtml = biz.websiteUrl
+          ? `<a href="${biz.websiteUrl}" target="_blank" rel="noopener" style="color:#3b82f6;font-size:13px;font-weight:500;text-decoration:none;display:inline-flex;align-items:center;gap:4px;" onmouseover="this.style.color='#60a5fa'" onmouseout="this.style.color='#3b82f6'"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg> Visit Site</a>`
           : '<span style="color:#52525b;">--</span>';
 
         const mapsHtml = biz.googleMapsUrl
@@ -914,9 +900,8 @@
           <tr class="${rowClass}">
             <td>${badgeHtml}</td>
             <td style="font-weight:500; color:#fff;">${biz.name}</td>
-            <td>${biz.address}</td>
-            <td>${biz.phone ? '<a href="tel:' + biz.phone.replace(/[^0-9]/g, '') + '" style="color:#22c55e; font-weight:600; font-size:14px; white-space:nowrap; text-decoration:none;">' + biz.phone + '</a>' : '<span style="color:#52525b;">--</span>'}</td>
-            <td>${ratingHtml}</td>
+            <td>${phoneHtml}</td>
+            <td>${biz.address || '--'}</td>
             <td>${websiteHtml}</td>
             <td>${mapsHtml}</td>
           </tr>

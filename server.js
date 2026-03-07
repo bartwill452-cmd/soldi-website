@@ -1506,6 +1506,54 @@ function extractAddressFromText(text) {
   return match ? match[1].trim() : '';
 }
 
+// Try to extract a city name from snippet text
+function extractCityFromSnippet(text) {
+  if (!text) return '';
+  // Match "in CityName" or "CityName, ST" patterns
+  const patterns = [
+    /(?:in|near|serving|located in)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*),?\s*[A-Z]{2}\b/i,
+    /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*),\s*(?:FL|CA|TX|NY|GA|NC|OH|PA|MI|IL|NJ|VA|WA|AZ|MA|TN|IN|MO|MD|WI|CO|MN|SC|AL|LA|KY|OR|OK|CT|UT|IA|NV|AR|MS|KS|NM|NE|WV|ID|HI|NH|ME|MT|RI|DE|SD|ND|AK|VT|WY|DC)\b/,
+  ];
+  for (const pattern of patterns) {
+    const m = text.match(pattern);
+    if (m && m[1] && m[1].length >= 3 && m[1].length <= 30) {
+      return m[1].trim();
+    }
+  }
+  return '';
+}
+
+// State abbreviation to full name mapping
+const STATE_NAMES = {
+  'AL': 'Alabama', 'AK': 'Alaska', 'AZ': 'Arizona', 'AR': 'Arkansas',
+  'CA': 'California', 'CO': 'Colorado', 'CT': 'Connecticut', 'DE': 'Delaware',
+  'FL': 'Florida', 'GA': 'Georgia', 'HI': 'Hawaii', 'ID': 'Idaho',
+  'IL': 'Illinois', 'IN': 'Indiana', 'IA': 'Iowa', 'KS': 'Kansas',
+  'KY': 'Kentucky', 'LA': 'Louisiana', 'ME': 'Maine', 'MD': 'Maryland',
+  'MA': 'Massachusetts', 'MI': 'Michigan', 'MN': 'Minnesota', 'MS': 'Mississippi',
+  'MO': 'Missouri', 'MT': 'Montana', 'NE': 'Nebraska', 'NV': 'Nevada',
+  'NH': 'New Hampshire', 'NJ': 'New Jersey', 'NM': 'New Mexico', 'NY': 'New York',
+  'NC': 'North Carolina', 'ND': 'North Dakota', 'OH': 'Ohio', 'OK': 'Oklahoma',
+  'OR': 'Oregon', 'PA': 'Pennsylvania', 'RI': 'Rhode Island', 'SC': 'South Carolina',
+  'SD': 'South Dakota', 'TN': 'Tennessee', 'TX': 'Texas', 'UT': 'Utah',
+  'VT': 'Vermont', 'VA': 'Virginia', 'WA': 'Washington', 'WV': 'West Virginia',
+  'WI': 'Wisconsin', 'WY': 'Wyoming', 'DC': 'Washington DC'
+};
+
+// Get a user-friendly city name from the location parameter
+function getCityFromLocation(location) {
+  if (!location) return '';
+  const loc = location.trim();
+  // "City, ST" → "City"
+  const cityStateMatch = loc.match(/^([A-Za-z\s]+),\s*[A-Z]{2}$/);
+  if (cityStateMatch) return cityStateMatch[1].trim();
+  // Just a state abbreviation → full state name
+  const stateUpper = loc.toUpperCase();
+  if (STATE_NAMES[stateUpper]) return STATE_NAMES[stateUpper];
+  // Otherwise return as-is
+  return loc;
+}
+
 function cleanBusinessName(title) {
   if (!title) return '';
   let name = title.trim();
@@ -1831,14 +1879,12 @@ async function scrapeBusinessListings(niche, location) {
     seenNames.add(normName);
 
     // Extract phone from snippet, title, and URL text
-    const combinedText = `${result.snippet || ''} ${result.title || ''} ${result.url || ''}`;
     const phone = extractPhoneFromText(result.snippet) || extractPhoneFromText(result.title) || extractPhoneFromText(result.url);
 
-    // Extract address from snippet
-    const address = extractAddressFromText(result.snippet) || location;
-
-    // Extract star rating from snippet
-    const { rating, reviewCount } = extractStarRating(combinedText);
+    // Extract address — prefer full address from snippet, fall back to city name
+    const fullAddr = extractAddressFromText(result.snippet);
+    const snippetCity = extractCityFromSnippet(result.snippet);
+    const address = fullAddr || snippetCity || getCityFromLocation(location);
 
     // Build Google Maps URL
     const mapsQuery = encodeURIComponent(`${name} ${location}`);
@@ -1849,36 +1895,47 @@ async function scrapeBusinessListings(niche, location) {
       address,
       phone,
       googleMapsUrl,
-      rating,
-      reviewCount,
       hasWebsite: true,
       websiteUrl: result.url,
       status: 'OPERATIONAL'
     });
   }
 
-  // Phase 2: For businesses missing phone numbers, try to scrape from their website
+  // Phase 2: For businesses missing phone numbers, scrape from their actual websites
   const missingPhones = businesses.filter(b => !b.phone && b.websiteUrl);
   if (missingPhones.length > 0) {
-    // Scrape up to 10 sites in parallel to avoid being too slow
-    const toScrape = missingPhones.slice(0, 10);
-    const scrapeResults = await Promise.allSettled(
-      toScrape.map(async (biz) => {
-        try {
-          const resp = await fetch(biz.websiteUrl, {
-            headers: { 'User-Agent': SCRAPER_UA, 'Accept': 'text/html' },
-            signal: AbortSignal.timeout(5000),
-            redirect: 'follow',
-          });
-          if (!resp.ok) return null;
-          const html = await resp.text();
-          // Only search the first 50KB to save memory/time
-          const chunk = html.substring(0, 50000);
-          const phone = extractPhoneFromText(chunk);
-          if (phone) biz.phone = phone;
-        } catch { /* timeout or error - skip */ }
-      })
-    );
+    // Scrape all businesses missing phones (batch of 5 at a time)
+    for (let i = 0; i < missingPhones.length; i += 5) {
+      const batch = missingPhones.slice(i, i + 5);
+      await Promise.allSettled(
+        batch.map(async (biz) => {
+          try {
+            const resp = await fetch(biz.websiteUrl, {
+              headers: { 'User-Agent': SCRAPER_UA, 'Accept': 'text/html' },
+              signal: AbortSignal.timeout(6000),
+              redirect: 'follow',
+            });
+            if (!resp.ok) return null;
+            const html = await resp.text();
+            const chunk = html.substring(0, 80000);
+
+            // Try tel: links first (most reliable)
+            const telMatch = chunk.match(/href=["']tel:([^"']+)["']/i);
+            if (telMatch) {
+              const telDigits = telMatch[1].replace(/[^0-9]/g, '');
+              if (telDigits.length >= 10) {
+                biz.phone = `(${telDigits.slice(-10, -7)}) ${telDigits.slice(-7, -4)}-${telDigits.slice(-4)}`;
+                return;
+              }
+            }
+
+            // Try regex extraction from page text
+            const phone = extractPhoneFromText(chunk);
+            if (phone) biz.phone = phone;
+          } catch { /* timeout or error - skip */ }
+        })
+      );
+    }
   }
 
   return businesses;
@@ -1936,11 +1993,11 @@ async function scrapeReceptionistLeads(category, location) {
 
     // Extract phone from snippet, title, and URL text
     const phone = extractPhoneFromText(result.snippet) || extractPhoneFromText(result.title) || extractPhoneFromText(result.url);
-    const address = extractAddressFromText(result.snippet) || location;
 
-    // Extract star rating from snippet
-    const combinedText = `${result.snippet || ''} ${result.title || ''}`;
-    const { rating, reviewCount } = extractStarRating(combinedText);
+    // Extract address — prefer full address from snippet, fall back to city name
+    const fullAddr = extractAddressFromText(result.snippet);
+    const snippetCity = extractCityFromSnippet(result.snippet);
+    const address = fullAddr || snippetCity || getCityFromLocation(location);
 
     const mapsQuery = encodeURIComponent(`${name} ${location}`);
     const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${mapsQuery}`;
@@ -1950,13 +2007,47 @@ async function scrapeReceptionistLeads(category, location) {
       address,
       phone,
       googleMapsUrl,
-      rating,
-      reviewCount,
       hasWebsite: true,
       websiteUrl: result.url,
       category,
       status: 'OPERATIONAL'
     });
+  }
+
+  // Phase 2: For leads missing phone numbers, scrape from their actual websites
+  const missingPhones = leads.filter(l => !l.phone && l.websiteUrl);
+  if (missingPhones.length > 0) {
+    for (let i = 0; i < missingPhones.length; i += 5) {
+      const batch = missingPhones.slice(i, i + 5);
+      await Promise.allSettled(
+        batch.map(async (lead) => {
+          try {
+            const resp = await fetch(lead.websiteUrl, {
+              headers: { 'User-Agent': SCRAPER_UA, 'Accept': 'text/html' },
+              signal: AbortSignal.timeout(6000),
+              redirect: 'follow',
+            });
+            if (!resp.ok) return null;
+            const html = await resp.text();
+            const chunk = html.substring(0, 80000);
+
+            // Try tel: links first (most reliable)
+            const telMatch = chunk.match(/href=["']tel:([^"']+)["']/i);
+            if (telMatch) {
+              const telDigits = telMatch[1].replace(/[^0-9]/g, '');
+              if (telDigits.length >= 10) {
+                lead.phone = `(${telDigits.slice(-10, -7)}) ${telDigits.slice(-7, -4)}-${telDigits.slice(-4)}`;
+                return;
+              }
+            }
+
+            // Try regex extraction from page text
+            const phone = extractPhoneFromText(chunk);
+            if (phone) lead.phone = phone;
+          } catch { /* timeout or error - skip */ }
+        })
+      );
+    }
   }
 
   return leads;
@@ -2216,9 +2307,23 @@ app.get('/api/receptionist-leads/search', async (req, res) => {
   const auth = authenticateRequest(req);
   if (!auth.authenticated) return res.status(401).json({ error: 'Authentication required' });
 
-  const { category, location } = req.query;
+  const { category, city, state } = req.query;
+  // Support legacy 'location' param or new city/state params
+  let location = req.query.location || '';
   if (!category) return res.status(400).json({ error: 'Industry category is required' });
-  if (!location) return res.status(400).json({ error: 'Location is required' });
+
+  // Build location from city + state if not provided as single string
+  if (!location && (city || state)) {
+    if (city && state) {
+      location = `${city}, ${state}`;
+    } else if (state) {
+      location = state;
+    } else if (city) {
+      location = city;
+    }
+  }
+
+  if (!location) return res.status(400).json({ error: 'Location is required. Provide a city, state, or both.' });
 
   // Check rate limit
   if (!checkReceptionistRateLimit(auth.apiKey || auth.email)) {
