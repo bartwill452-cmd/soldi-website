@@ -222,6 +222,12 @@
         </button>
       </div>
 
+      <!-- Owner Dashboard Banner (hidden by default) -->
+      <a href="/owner.html" id="ownerDashLink" style="display:none;margin-bottom:24px;padding:16px 24px;background:linear-gradient(135deg,rgba(16,185,129,0.12),rgba(59,130,246,0.08));border:1px solid rgba(16,185,129,0.2);border-radius:14px;color:#10b981;font-weight:700;font-size:15px;text-decoration:none;align-items:center;gap:12px;justify-content:space-between;" onmouseover="this.style.background='linear-gradient(135deg,rgba(16,185,129,0.2),rgba(59,130,246,0.12))'" onmouseout="this.style.background='linear-gradient(135deg,rgba(16,185,129,0.12),rgba(59,130,246,0.08))'">
+        <span>Owner Dashboard — Revenue, Members, Analytics, Submissions</span>
+        <span style="font-size:18px;">&#8594;</span>
+      </a>
+
       <div class="dashboard-grid">
         <!-- Membership Status Card -->
         <div class="dash-card">
@@ -1447,6 +1453,12 @@
     function showDashboard(user, apiKey) {
       document.getElementById('dashboard').style.display = 'block';
       document.getElementById('dashboardEmail').textContent = user.firstName || user.name || user.email;
+
+      // Show Owner Dashboard link for admin
+      const ownerLinkEl = document.getElementById('ownerDashLink');
+      if (ownerLinkEl && user.email && user.email.toLowerCase() === 'bartwill452@gmail.com') {
+        ownerLinkEl.style.display = 'block';
+      }
 
       const statusEl = document.getElementById('dashStatus');
       const badge = statusEl.querySelector('.status-badge');

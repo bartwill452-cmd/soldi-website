@@ -349,16 +349,22 @@ function requireAdmin(req, res, next) {
   }
   try {
     const decoded = jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
-    if (decoded.type !== 'admin') {
-      return res.status(403).json({ error: 'Admin access required' });
+    // Standard admin JWT check
+    if (decoded.type === 'admin') {
+      const admins = loadAdmins();
+      const admin = admins.find(a => a.id === decoded.adminId);
+      if (!admin) {
+        return res.status(401).json({ error: 'Admin account not found' });
+      }
+      req.admin = admin;
+      return next();
     }
-    const admins = loadAdmins();
-    const admin = admins.find(a => a.id === decoded.adminId);
-    if (!admin) {
-      return res.status(401).json({ error: 'Admin account not found' });
+    // Owner member JWT check (from 2FA login as bartwill452@gmail.com)
+    if (decoded.membershipId === 'admin' && decoded.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
+      req.admin = { id: 'owner', email: decoded.email, role: 'owner' };
+      return next();
     }
-    req.admin = admin;
-    next();
+    return res.status(403).json({ error: 'Admin access required' });
   } catch {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
@@ -3518,6 +3524,295 @@ Keep it concise and practical.`;
   } catch (err) {
     console.error('TikTok analyze error:', err);
     res.status(500).json({ error: 'Failed to analyze video' });
+  }
+});
+
+// ============================================
+// OWNER DASHBOARD — Whop-like admin panel for site owner
+// ============================================
+const WHOP_PLAN_PRICE = parseFloat(process.env.WHOP_PLAN_PRICE) || 49;
+const ownerCache = new Map();
+
+function getOwnerCache(key, ttlMs) {
+  const cached = ownerCache.get(key);
+  if (cached && Date.now() - cached.ts < ttlMs) return cached.data;
+  return null;
+}
+
+function setOwnerCache(key, data) {
+  ownerCache.set(key, { data, ts: Date.now() });
+}
+
+function requireOwnerMember(req, res, next) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
+  try {
+    const decoded = jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
+    if (decoded.membershipId === 'admin' && decoded.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
+      req.user = decoded;
+      return next();
+    }
+    if (decoded.type === 'admin') {
+      const admins = loadAdmins();
+      const admin = admins.find(a => a.id === decoded.adminId);
+      if (admin && admin.role === 'owner') { req.user = decoded; return next(); }
+    }
+    return res.status(403).json({ error: 'Owner access required' });
+  } catch {
+    return res.status(401).json({ error: 'Invalid or expired token' });
+  }
+}
+
+// Fetch all Whop memberships (cached 2 min)
+async function fetchAllWhopMembers(forceRefresh) {
+  if (!forceRefresh) {
+    const cached = getOwnerCache('whop_members', 2 * 60 * 1000);
+    if (cached) return cached;
+  }
+  if (!WHOP_API_KEY || WHOP_API_KEY === 'YOUR_API_KEY_HERE') return [];
+  const allMembers = [];
+  let page = 1;
+  const maxPages = 40;
+  while (page <= maxPages) {
+    try {
+      const url = `https://api.whop.com/api/v1/memberships?company_id=${WHOP_COMPANY_ID}&page=${page}&per=50`;
+      const response = await fetch(url, { headers: { Authorization: `Bearer ${WHOP_API_KEY}` } });
+      if (!response.ok) break;
+      const data = await response.json();
+      const memberships = data.data || [];
+      if (memberships.length === 0) break;
+      for (const m of memberships) {
+        allMembers.push({
+          id: m.id,
+          email: m.user?.email || m.email || '',
+          name: m.user?.name || m.user?.username || '',
+          username: m.user?.username || '',
+          status: m.status,
+          createdAt: m.created_at,
+          renewalDate: m.next_renewal_date || m.renewal_period_end || null,
+          cancelAt: m.cancel_at || null,
+          validUntil: m.valid_until || null,
+          planName: m.product?.name || 'Soldi',
+        });
+      }
+      if (!data.page_info || !data.page_info.has_next_page) break;
+      page++;
+    } catch (err) {
+      console.error('Whop member fetch error page', page, err);
+      break;
+    }
+  }
+  setOwnerCache('whop_members', allMembers);
+  return allMembers;
+}
+
+// GET /api/owner/members — List all members with search/filter/pagination
+app.get('/api/owner/members', requireOwnerMember, async (req, res) => {
+  try {
+    const refresh = req.query.refresh === 'true';
+    let members = await fetchAllWhopMembers(refresh);
+    const search = (req.query.search || '').toLowerCase();
+    const statusFilter = req.query.status || '';
+    if (search) {
+      members = members.filter(m => m.email.toLowerCase().includes(search) || m.name.toLowerCase().includes(search) || m.username.toLowerCase().includes(search));
+    }
+    if (statusFilter) {
+      members = members.filter(m => m.status === statusFilter);
+    }
+    const summary = { active: 0, trialing: 0, canceling: 0, canceled: 0, expired: 0 };
+    const allMembers = await fetchAllWhopMembers(false);
+    for (const m of allMembers) { if (summary.hasOwnProperty(m.status)) summary[m.status]++; }
+    const page = parseInt(req.query.page) || 1;
+    const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+    const total = members.length;
+    const totalPages = Math.ceil(total / limit);
+    const start = (page - 1) * limit;
+    const paged = members.slice(start, start + limit);
+    res.json({ members: paged, total, page, limit, totalPages, summary });
+  } catch (err) {
+    console.error('Owner members error:', err);
+    res.status(500).json({ error: 'Failed to fetch members' });
+  }
+});
+
+// POST /api/owner/members/:id/pause — Pause a membership
+app.post('/api/owner/members/:id/pause', requireOwnerMember, async (req, res) => {
+  try {
+    const url = `https://api.whop.com/api/v1/memberships/${req.params.id}/pause?company_id=${WHOP_COMPANY_ID}`;
+    const response = await fetch(url, { method: 'POST', headers: { Authorization: `Bearer ${WHOP_API_KEY}`, 'Content-Type': 'application/json' } });
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error('Pause error:', response.status, errText);
+      return res.status(502).json({ error: 'Failed to pause membership' });
+    }
+    const result = await response.json();
+    ownerCache.delete('whop_members');
+    res.json({ success: true, status: result.status, message: 'Membership paused' });
+  } catch (err) {
+    console.error('Pause error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/owner/members/:id/cancel — Cancel a membership (owner-initiated)
+app.post('/api/owner/members/:id/cancel', requireOwnerMember, async (req, res) => {
+  try {
+    const url = `https://api.whop.com/api/v1/memberships/${req.params.id}/cancel?company_id=${WHOP_COMPANY_ID}`;
+    const response = await fetch(url, { method: 'POST', headers: { Authorization: `Bearer ${WHOP_API_KEY}`, 'Content-Type': 'application/json' } });
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error('Cancel error:', response.status, errText);
+      return res.status(502).json({ error: 'Failed to cancel membership' });
+    }
+    const result = await response.json();
+    ownerCache.delete('whop_members');
+    res.json({ success: true, status: result.status, cancelAt: result.cancel_at, message: 'Membership canceled' });
+  } catch (err) {
+    console.error('Cancel error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/owner/revenue — MRR and revenue metrics
+app.get('/api/owner/revenue', requireOwnerMember, async (req, res) => {
+  try {
+    const cached = getOwnerCache('whop_revenue', 5 * 60 * 1000);
+    if (cached) return res.json(cached);
+
+    const members = await fetchAllWhopMembers(false);
+    const activeCount = members.filter(m => ['active', 'trialing', 'canceling'].includes(m.status)).length;
+    const mrr = activeCount * WHOP_PLAN_PRICE;
+
+    const now = new Date();
+    const todayStr = now.toISOString().split('T')[0];
+    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    // Try Whop payments API for real revenue data
+    let revenueToday = 0, revenueThisWeek = 0, revenueThisMonth = 0;
+    let paymentsAvailable = false;
+    try {
+      let payPage = 1;
+      const maxPayPages = 10;
+      while (payPage <= maxPayPages) {
+        const payUrl = `https://api.whop.com/api/v1/payments?company_id=${WHOP_COMPANY_ID}&page=${payPage}&per=50`;
+        const payRes = await fetch(payUrl, { headers: { Authorization: `Bearer ${WHOP_API_KEY}` } });
+        if (!payRes.ok) break;
+        const payData = await payRes.json();
+        const payments = payData.data || [];
+        if (payments.length === 0) break;
+        paymentsAvailable = true;
+        for (const p of payments) {
+          if (p.status !== 'paid') continue;
+          const amount = (p.final_amount || p.amount || 0) / 100; // cents to dollars
+          const paidAt = new Date(p.paid_at || p.created_at);
+          if (paidAt.toISOString().split('T')[0] === todayStr) revenueToday += amount;
+          if (paidAt >= weekAgo) revenueThisWeek += amount;
+          if (paidAt >= monthAgo) revenueThisMonth += amount;
+        }
+        if (!payData.page_info || !payData.page_info.has_next_page) break;
+        payPage++;
+      }
+    } catch (payErr) {
+      console.error('Whop payments API error:', payErr.message);
+    }
+
+    // Fallback: estimate from member count if payments API unavailable
+    if (!paymentsAvailable) {
+      revenueThisMonth = mrr;
+      revenueThisWeek = Math.round(mrr / 4.3);
+      revenueToday = Math.round(mrr / 30);
+    }
+
+    // New members this month & churn
+    const newThisMonth = members.filter(m => m.createdAt && new Date(m.createdAt) >= monthStart).length;
+    const canceledThisMonth = members.filter(m => m.status === 'canceled' && m.cancelAt && new Date(m.cancelAt) >= monthStart).length;
+    const activeStart = activeCount + canceledThisMonth - newThisMonth;
+    const churnRate = activeStart > 0 ? Math.round((canceledThisMonth / activeStart) * 1000) / 10 : 0;
+
+    // Daily revenue for chart (last 7 days)
+    const dailyRevenue = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      const ds = d.toISOString().split('T')[0];
+      dailyRevenue.push({ date: ds, amount: paymentsAvailable ? 0 : Math.round(mrr / 30) });
+    }
+
+    const result = {
+      mrr: Math.round(mrr * 100) / 100,
+      revenueToday: Math.round(revenueToday * 100) / 100,
+      revenueThisWeek: Math.round(revenueThisWeek * 100) / 100,
+      revenueThisMonth: Math.round(revenueThisMonth * 100) / 100,
+      activeMembers: activeCount,
+      totalMembers: members.length,
+      newMembersThisMonth: newThisMonth,
+      churnRate,
+      dailyRevenue,
+      paymentsAvailable,
+      currency: 'USD'
+    };
+    setOwnerCache('whop_revenue', result);
+    res.json(result);
+  } catch (err) {
+    console.error('Revenue error:', err);
+    res.status(500).json({ error: 'Failed to fetch revenue data' });
+  }
+});
+
+// GET /api/owner/overview — Combined overview stats
+app.get('/api/owner/overview', requireOwnerMember, async (req, res) => {
+  try {
+    // Revenue + member data
+    const revenueRes = await new Promise((resolve) => {
+      const mockReq = { headers: req.headers, query: {} };
+      const mockRes = { json: resolve, status: () => ({ json: (e) => resolve({ error: true, ...e }) }) };
+      // Inline the revenue logic
+      resolve(null);
+    });
+
+    // Fetch revenue data directly
+    let revenue = getOwnerCache('whop_revenue', 5 * 60 * 1000);
+    if (!revenue) {
+      // Trigger revenue fetch
+      const members = await fetchAllWhopMembers(false);
+      const activeCount = members.filter(m => ['active', 'trialing', 'canceling'].includes(m.status)).length;
+      const mrr = activeCount * WHOP_PLAN_PRICE;
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const newThisMonth = members.filter(m => m.createdAt && new Date(m.createdAt) >= monthStart).length;
+      const canceledThisMonth = members.filter(m => m.status === 'canceled' && m.cancelAt && new Date(m.cancelAt) >= monthStart).length;
+      const activeStart = activeCount + canceledThisMonth - newThisMonth;
+      const churnRate = activeStart > 0 ? Math.round((canceledThisMonth / activeStart) * 1000) / 10 : 0;
+      revenue = { mrr, revenueToday: Math.round(mrr / 30), revenueThisWeek: Math.round(mrr / 4.3), revenueThisMonth: mrr, activeMembers: activeCount, totalMembers: members.length, newMembersThisMonth: newThisMonth, churnRate };
+    }
+
+    // Submissions stats
+    const submissions = loadSubmissions();
+    const now = new Date();
+    const todayStr = now.toISOString().split('T')[0];
+    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const subStats = {
+      total: submissions.length,
+      today: submissions.filter(s => s.submittedAt && s.submittedAt.startsWith(todayStr)).length,
+      thisWeek: submissions.filter(s => s.submittedAt && new Date(s.submittedAt) >= weekAgo).length,
+    };
+
+    // Live visitors
+    const liveVisitors = activeSessions ? activeSessions.size : 0;
+
+    res.json({
+      revenue: { mrr: revenue.mrr, today: revenue.revenueToday, thisWeek: revenue.revenueThisWeek, thisMonth: revenue.revenueThisMonth },
+      members: { active: revenue.activeMembers, total: revenue.totalMembers, new: revenue.newMembersThisMonth, churnRate: revenue.churnRate },
+      submissions: subStats,
+      liveVisitors,
+    });
+  } catch (err) {
+    console.error('Overview error:', err);
+    res.status(500).json({ error: 'Failed to fetch overview' });
   }
 });
 
