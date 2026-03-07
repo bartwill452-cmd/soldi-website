@@ -4,3 +4,5 @@ data/
 _frames/
 soldi-*.png
 soldi-*.mp4
+__pycache__/
+*.db
