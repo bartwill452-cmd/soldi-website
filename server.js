@@ -7,17 +7,31 @@ const path = require('path');
 const cheerio = require('cheerio');
 const bcrypt = require('bcryptjs');
 
-// Resend for post-purchase welcome emails
+// Nodemailer for sending emails via Gmail SMTP
+const nodemailer = require('nodemailer');
+let mailTransporter = null;
+const GMAIL_USER = process.env.GMAIL_USER || 'soldihq@gmail.com';
+const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD || '';
+
+if (GMAIL_APP_PASSWORD) {
+  mailTransporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: { user: GMAIL_USER, pass: GMAIL_APP_PASSWORD }
+  });
+  console.log(`[Mail] Gmail SMTP initialized for ${GMAIL_USER}`);
+} else {
+  console.log('[Mail] GMAIL_APP_PASSWORD not set — email sending disabled');
+}
+
+// Legacy Resend support (fallback if Gmail not configured)
 let resend = null;
 try {
   const { Resend } = require('resend');
-  if (process.env.RESEND_API_KEY) {
+  if (process.env.RESEND_API_KEY && !mailTransporter) {
     resend = new Resend(process.env.RESEND_API_KEY);
-    console.log('[Resend] Email service initialized');
+    console.log('[Resend] Email service initialized (fallback)');
   }
-} catch (e) {
-  console.log('[Resend] Package not installed - email sending disabled');
-}
+} catch (e) {}
 
 const app = express();
 
@@ -451,8 +465,22 @@ app.post('/api/send-verification', async (req, res) => {
   const code = generateVerificationCode();
   verificationCodes.set(emailLower, { code, expiresAt: Date.now() + CODE_EXPIRY_MS, sentAt: Date.now() });
 
-  // Send code via email
-  if (resend) {
+  // Send code via email (Gmail SMTP preferred, Resend fallback)
+  if (mailTransporter) {
+    try {
+      await mailTransporter.sendMail({
+        from: `Soldi <${GMAIL_USER}>`,
+        to: email,
+        subject: `${code} — Your Soldi verification code`,
+        html: buildVerificationCodeEmailHtml(code)
+      });
+      console.log(`[2FA] Verification code sent to ${email} via Gmail`);
+    } catch (emailErr) {
+      console.error('[2FA] Gmail send error:', emailErr);
+      verificationCodes.delete(emailLower);
+      return res.status(500).json({ error: 'Failed to send verification email. Please try again.' });
+    }
+  } else if (resend) {
     try {
       await resend.emails.send({
         from: 'Soldi <onboarding@resend.dev>',
@@ -460,14 +488,14 @@ app.post('/api/send-verification', async (req, res) => {
         subject: `${code} — Your Soldi verification code`,
         html: buildVerificationCodeEmailHtml(code)
       });
-      console.log(`[2FA] Verification code sent to ${email}`);
+      console.log(`[2FA] Verification code sent to ${email} via Resend`);
     } catch (emailErr) {
-      console.error('[2FA] Email send error:', emailErr);
+      console.error('[2FA] Resend send error:', emailErr);
       verificationCodes.delete(emailLower);
       return res.status(500).json({ error: 'Failed to send verification email. Please try again.' });
     }
   } else {
-    console.log(`[2FA] Resend not configured — code for ${email}: ${code}`);
+    console.log(`[2FA] No email service configured — code for ${email}: ${code}`);
   }
 
   return res.json({ success: true, message: 'Verification code sent to your email' });
@@ -859,14 +887,23 @@ app.post('/api/webhooks/whop', async (req, res) => {
       const name = membership?.user?.name || membership?.user?.username || null;
       const firstName = name ? name.split(' ')[0] : null;
 
-      if (email && resend) {
+      if (email && (mailTransporter || resend)) {
         try {
-          await resend.emails.send({
-            from: 'Soldi <onboarding@resend.dev>',
-            to: email,
-            subject: 'Welcome to Soldi — Get Started Now',
-            html: buildWelcomeEmailHtml(firstName || 'there', email)
-          });
+          if (mailTransporter) {
+            await mailTransporter.sendMail({
+              from: `Soldi <${GMAIL_USER}>`,
+              to: email,
+              subject: 'Welcome to Soldi — Get Started Now',
+              html: buildWelcomeEmailHtml(firstName || 'there', email)
+            });
+          } else {
+            await resend.emails.send({
+              from: 'Soldi <onboarding@resend.dev>',
+              to: email,
+              subject: 'Welcome to Soldi — Get Started Now',
+              html: buildWelcomeEmailHtml(firstName || 'there', email)
+            });
+          }
           console.log(`[Webhook] Welcome email sent to ${email}`);
         } catch (emailErr) {
           console.error('[Webhook] Email send error:', emailErr);
@@ -3287,13 +3324,11 @@ app.post('/api/submissions', async (req, res) => {
     saveSubmissions(submissions);
 
     // Send welcome email with Discord invite + free resources (non-blocking)
-    if (resend) {
+    if (mailTransporter || resend) {
       const name = (firstName || '').trim() || 'there';
-      resend.emails.send({
-        from: 'Soldi <onboarding@resend.dev>',
-        to: submission.email,
-        subject: `Welcome to Soldi, ${name}! Here's your free access`,
-        html: `
+      const welcomeSubject = `Welcome to Soldi, ${name}! Here's your free access`;
+      const welcomeTo = submission.email;
+      const welcomeHtmlContent = `
 <!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -3361,12 +3396,31 @@ app.post('/api/submissions', async (req, res) => {
 </div>
 </body>
 </html>
-        `.trim(),
-      }).then(() => {
-        console.log(`[Resend] Welcome email sent to ${submission.email}`);
-      }).catch(err => {
-        console.error('[Resend] Failed to send welcome email:', err.message);
-      });
+        `.trim();
+
+      if (mailTransporter) {
+        mailTransporter.sendMail({
+          from: `Soldi <${GMAIL_USER}>`,
+          to: welcomeTo,
+          subject: welcomeSubject,
+          html: welcomeHtmlContent
+        }).then(() => {
+          console.log(`[Mail] Welcome email sent to ${welcomeTo}`);
+        }).catch(err => {
+          console.error('[Mail] Failed to send welcome email:', err.message);
+        });
+      } else {
+        resend.emails.send({
+          from: 'Soldi <onboarding@resend.dev>',
+          to: welcomeTo,
+          subject: welcomeSubject,
+          html: welcomeHtmlContent
+        }).then(() => {
+          console.log(`[Resend] Welcome email sent to ${welcomeTo}`);
+        }).catch(err => {
+          console.error('[Resend] Failed to send welcome email:', err.message);
+        });
+      }
     }
 
     return res.status(201).json({ success: true, discordInvite: DISCORD_INVITE_URL });
