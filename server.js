@@ -554,7 +554,12 @@ app.post('/api/verify-code', async (req, res) => {
     }
 
     const fullName = found.user?.name || found.user?.username || null;
-    const firstName = fullName ? fullName.split(' ')[0] : null;
+    let firstName = fullName ? fullName.split(' ')[0] : null;
+    // If no name from Whop, derive a display name from the email
+    if (!firstName) {
+      const emailUser = (found.user?.email || found.email || '').split('@')[0].replace(/[._\-+]/g, ' ').trim();
+      if (emailUser) firstName = emailUser.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+    }
 
     const token = jwt.sign(
       { membershipId: found.id, email: found.user?.email || found.email, name: fullName, firstName, status: found.status, affiliateLink, affiliateUsername, createdAt: found.created_at },
@@ -715,7 +720,12 @@ app.post('/api/verify-membership', async (req, res) => {
 
     // Extract first name from Whop user data
     const fullName = found.user?.name || found.user?.username || null;
-    const firstName = fullName ? fullName.split(' ')[0] : null;
+    let firstName = fullName ? fullName.split(' ')[0] : null;
+    // If no name from Whop, derive a display name from the email
+    if (!firstName) {
+      const emailUser = (found.user?.email || found.email || '').split('@')[0].replace(/[._\-+]/g, ' ').trim();
+      if (emailUser) firstName = emailUser.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+    }
 
     // Sign JWT (14 day expiry)
     const token = jwt.sign(
@@ -1884,6 +1894,16 @@ async function fetchDDGResults(query) {
 
 // Scrape businesses using multiple search queries for better coverage
 async function scrapeBusinessListings(niche, location) {
+  // Convert 2-letter state abbreviation to full name for better search results
+  if (/^[A-Z]{2}$/i.test(location.trim()) && STATE_NAMES[location.trim().toUpperCase()]) {
+    location = STATE_NAMES[location.trim().toUpperCase()];
+  }
+  // Also expand abbreviation in "City, ST" format
+  const cityStateMatch = location.match(/^(.+),\s*([A-Z]{2})$/i);
+  if (cityStateMatch && STATE_NAMES[cityStateMatch[2].toUpperCase()]) {
+    location = `${cityStateMatch[1].trim()}, ${STATE_NAMES[cityStateMatch[2].toUpperCase()]}`;
+  }
+
   // Run multiple varied queries for broader results
   const queries = [
     `${niche} in ${location} phone address`,
@@ -2006,6 +2026,16 @@ async function scrapeBusinessListings(niche, location) {
 
 // Scrape receptionist leads using multiple search queries for better coverage
 async function scrapeReceptionistLeads(category, location) {
+  // Convert 2-letter state abbreviation to full name for better search results
+  if (/^[A-Z]{2}$/i.test(location.trim()) && STATE_NAMES[location.trim().toUpperCase()]) {
+    location = STATE_NAMES[location.trim().toUpperCase()];
+  }
+  // Also expand abbreviation in "City, ST" format
+  const cityStateMatch = location.match(/^(.+),\s*([A-Z]{2})$/i);
+  if (cityStateMatch && STATE_NAMES[cityStateMatch[2].toUpperCase()]) {
+    location = `${cityStateMatch[1].trim()}, ${STATE_NAMES[cityStateMatch[2].toUpperCase()]}`;
+  }
+
   // Run multiple varied queries for broader results
   const queries = [
     `${category} in ${location} phone`,
