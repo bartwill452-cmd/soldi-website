@@ -33,6 +33,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-change-me';
 const WHOP_STORE_SLUG = process.env.WHOP_STORE_SLUG || 'soldi-4def';
 const WHOP_PRODUCT_PATH = process.env.WHOP_PRODUCT_PATH || 'soldi-a9';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'bartwill452@gmail.com';
+const BRAVE_SEARCH_API_KEY = process.env.BRAVE_SEARCH_API_KEY || '';
 
 // ============================================
 // 2FA VERIFICATION CODE STORE (in-memory)
@@ -1741,39 +1742,124 @@ function pickBusinessName(result) {
   return '';
 }
 
-// Fetch search results from Brave Search (primary) with DDG fallback
+// Global search engine throttle — minimum 1 second between requests to any search engine
+let lastSearchTime = 0;
+async function throttleSearch() {
+  const now = Date.now();
+  const elapsed = now - lastSearchTime;
+  if (elapsed < 1000) {
+    await new Promise(r => setTimeout(r, 1000 - elapsed));
+  }
+  lastSearchTime = Date.now();
+}
+
+// Fetch search results from Brave API (primary), Brave HTML (secondary), DDG (fallback)
 async function fetchSearchResults(query) {
   const errors = [];
 
-  // Try Brave Search first
-  try {
-    const results = await fetchBraveResults(query);
-    if (results.length > 0) return results;
-    console.log('Brave returned 0 results, trying DDG...');
-  } catch (err) {
-    errors.push(`Brave: ${err.message}`);
-    console.error('Brave Search failed:', err.message);
+  // 1. Try Brave Search API first (most reliable, no rate limiting)
+  if (BRAVE_SEARCH_API_KEY) {
+    try {
+      await throttleSearch();
+      const results = await fetchBraveAPIResults(query);
+      if (results.length > 0) return results;
+      console.log('Brave API returned 0 results, trying HTML...');
+    } catch (err) {
+      errors.push(`BraveAPI: ${err.message}`);
+      console.error('Brave API failed:', err.message);
+    }
   }
 
-  // Fallback to DuckDuckGo HTML
+  // 2. Try Brave HTML scraping as secondary
   try {
+    await throttleSearch();
+    const results = await fetchBraveHTMLResults(query);
+    if (results.length > 0) return results;
+    console.log('Brave HTML returned 0 results, trying DDG...');
+  } catch (err) {
+    errors.push(`BraveHTML: ${err.message}`);
+    console.error('Brave HTML failed:', err.message);
+  }
+
+  // 3. Fallback to DuckDuckGo HTML
+  try {
+    await throttleSearch();
     const results = await fetchDDGResults(query);
     if (results.length > 0) return results;
+    console.log('DDG returned 0 results, trying Google...');
   } catch (err) {
     errors.push(`DDG: ${err.message}`);
     console.error('DDG Search failed:', err.message);
   }
 
-  // If both failed, throw so the endpoint returns a proper error
-  if (errors.length === 2) {
+  // 4. Last-resort: Google HTML scraping
+  try {
+    await throttleSearch();
+    const results = await fetchGoogleResults(query);
+    if (results.length > 0) return results;
+  } catch (err) {
+    errors.push(`Google: ${err.message}`);
+    console.error('Google Search failed:', err.message);
+  }
+
+  // If all failed, throw so the endpoint returns a proper error
+  if (errors.length >= 3) {
     throw new Error('Search engines temporarily unavailable. Please try again in a few minutes.');
   }
 
   return [];
 }
 
-// Brave Search HTML scraper
-async function fetchBraveResults(query) {
+// Brave Search API (official, reliable, no captcha)
+async function fetchBraveAPIResults(query) {
+  const url = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=20`;
+
+  const response = await fetch(url, {
+    headers: {
+      'Accept': 'application/json',
+      'Accept-Encoding': 'gzip',
+      'X-Subscription-Token': BRAVE_SEARCH_API_KEY,
+    },
+    signal: AbortSignal.timeout(10000),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Brave API returned status ${response.status}`);
+  }
+
+  const data = await response.json();
+  const results = [];
+  const seenDomains = new Set();
+
+  const webResults = data.web?.results || [];
+  for (const item of webResults) {
+    const href = item.url || '';
+    if (!href) continue;
+
+    const domain = extractDomain(href);
+    if (!domain || seenDomains.has(domain)) continue;
+    seenDomains.add(domain);
+
+    const title = item.title || '';
+    const desc = item.description || '';
+    // Brave API provides profile.name for the site brand
+    const siteName = item.profile?.name || item.meta_url?.hostname?.replace(/^www\./, '') || '';
+
+    if (title && href) {
+      results.push({
+        title,
+        url: href,
+        siteName,
+        snippet: `${title} ${desc}`,
+      });
+    }
+  }
+
+  return results;
+}
+
+// Brave Search HTML scraper (secondary — can get rate-limited)
+async function fetchBraveHTMLResults(query) {
   const url = `https://search.brave.com/search?q=${encodeURIComponent(query)}`;
 
   const response = await fetch(url, {
@@ -1790,6 +1876,12 @@ async function fetchBraveResults(query) {
   }
 
   const html = await response.text();
+
+  // Detect captcha / rate limiting
+  if (html.toLowerCase().includes('captcha') || html.includes('cf-challenge') || html.toLowerCase().includes('too many requests')) {
+    throw new Error('Brave Search rate limited / captcha');
+  }
+
   const $ = cheerio.load(html);
   const results = [];
   const seenDomains = new Set();
@@ -1805,11 +1897,8 @@ async function fetchBraveResults(query) {
     if (!href || href.startsWith('/search') || href.includes('brave.com')) return;
 
     // Get the site/brand name from the .site-name-content element
-    // Brave format: "Brand Name domain.com › breadcrumbs"
     let siteName = $el.find('.site-name-content').first().text().trim()
-      .replace(/\s*›.*$/, '') // Remove breadcrumbs like " › home › locations"
-      .trim();
-    // Remove the domain suffix (e.g., "Roto-Rooter rotorooter.com" → "Roto-Rooter")
+      .replace(/\s*›.*$/, '').trim();
     siteName = siteName.replace(/\s+[a-z0-9][-a-z0-9]*\.[a-z]{2,}(\.[a-z]{2,})?\s*$/i, '').trim();
 
     // Get the page title
@@ -1820,7 +1909,7 @@ async function fetchBraveResults(query) {
     const desc = $el.find('.snippet-description').text().trim() ||
                  $el.find('.snippet-content .description').text().trim();
 
-    // Deduplicate by domain — skip sub-pages of same domain
+    // Deduplicate by domain
     const domain = extractDomain(href);
     if (!domain || seenDomains.has(domain)) return;
     seenDomains.add(domain);
@@ -1829,7 +1918,7 @@ async function fetchBraveResults(query) {
       results.push({
         title,
         url: href,
-        siteName, // Clean brand name from Brave
+        siteName,
         snippet: `${title} ${desc}`,
       });
     }
@@ -1892,7 +1981,57 @@ async function fetchDDGResults(query) {
   return results;
 }
 
-// Scrape businesses using multiple search queries for better coverage
+// Google Search HTML scraper (last-resort fallback)
+async function fetchGoogleResults(query) {
+  const url = `https://www.google.com/search?q=${encodeURIComponent(query)}&num=20&hl=en`;
+
+  const response = await fetch(url, {
+    headers: {
+      'User-Agent': SCRAPER_UA,
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'Accept-Language': 'en-US,en;q=0.9',
+    },
+    signal: AbortSignal.timeout(10000),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Google returned status ${response.status}`);
+  }
+
+  const html = await response.text();
+
+  // Detect captcha
+  if (html.includes('captcha') || html.includes('unusual traffic')) {
+    throw new Error('Google captcha detected');
+  }
+
+  const $ = cheerio.load(html);
+  const results = [];
+  const seenDomains = new Set();
+
+  // Google search results are in div.g elements
+  $('div.g').each((i, el) => {
+    const $el = $(el);
+    const linkEl = $el.find('a[href^="http"]').first();
+    const href = linkEl.attr('href') || '';
+    if (!href || href.includes('google.com') || href.includes('webcache')) return;
+
+    const title = $el.find('h3').first().text().trim();
+    const snippet = $el.find('.VwiC3b, [data-sncf], .IsZvec').first().text().trim();
+
+    const domain = extractDomain(href);
+    if (!domain || seenDomains.has(domain)) return;
+    seenDomains.add(domain);
+
+    if (title && href) {
+      results.push({ title, url: href, siteName: '', snippet: `${title} ${snippet}` });
+    }
+  });
+
+  return results;
+}
+
+// Scrape businesses using search queries
 async function scrapeBusinessListings(niche, location) {
   // Convert 2-letter state abbreviation to full name for better search results
   if (/^[A-Z]{2}$/i.test(location.trim()) && STATE_NAMES[location.trim().toUpperCase()]) {
@@ -1904,23 +2043,24 @@ async function scrapeBusinessListings(niche, location) {
     location = `${cityStateMatch[1].trim()}, ${STATE_NAMES[cityStateMatch[2].toUpperCase()]}`;
   }
 
-  // Run multiple varied queries for broader results
+  // Use 2 complementary queries for good coverage without overloading search engines
   const queries = [
-    `${niche} in ${location} phone address`,
-    `best ${niche} ${location} contact number`,
-    `${niche} near ${location} reviews phone`,
+    `${niche} companies in ${location}`,
+    `best ${niche} ${location} phone number`,
   ];
 
-  // Fetch all queries in parallel
-  const allRawResults = await Promise.allSettled(
-    queries.map(q => fetchSearchResults(q))
-  );
-
-  // Merge all results
+  // Fetch queries sequentially with a small delay to avoid rate limiting
   const mergedRaw = [];
-  for (const result of allRawResults) {
-    if (result.status === 'fulfilled' && Array.isArray(result.value)) {
-      mergedRaw.push(...result.value);
+  for (const q of queries) {
+    try {
+      const results = await fetchSearchResults(q);
+      if (Array.isArray(results)) mergedRaw.push(...results);
+    } catch (err) {
+      console.error('Query failed:', q, err.message);
+    }
+    // Small delay between queries to avoid hammering search engines
+    if (queries.indexOf(q) < queries.length - 1) {
+      await new Promise(r => setTimeout(r, 500));
     }
   }
 
@@ -2036,23 +2176,23 @@ async function scrapeReceptionistLeads(category, location) {
     location = `${cityStateMatch[1].trim()}, ${STATE_NAMES[cityStateMatch[2].toUpperCase()]}`;
   }
 
-  // Run multiple varied queries for broader results
+  // Use 2 complementary queries for good coverage
   const queries = [
-    `${category} in ${location} phone`,
-    `best ${category} ${location} contact number reviews`,
-    `${category} near ${location} phone address rating`,
+    `${category} companies in ${location}`,
+    `best ${category} ${location} phone number`,
   ];
 
-  // Fetch all queries in parallel
-  const allRawResults = await Promise.allSettled(
-    queries.map(q => fetchSearchResults(q))
-  );
-
-  // Merge all results
+  // Fetch queries sequentially with delay to avoid rate limiting
   const mergedRaw = [];
-  for (const result of allRawResults) {
-    if (result.status === 'fulfilled' && Array.isArray(result.value)) {
-      mergedRaw.push(...result.value);
+  for (const q of queries) {
+    try {
+      const results = await fetchSearchResults(q);
+      if (Array.isArray(results)) mergedRaw.push(...results);
+    } catch (err) {
+      console.error('Query failed:', q, err.message);
+    }
+    if (queries.indexOf(q) < queries.length - 1) {
+      await new Promise(r => setTimeout(r, 500));
     }
   }
 
@@ -2158,7 +2298,7 @@ const BUSINESS_CACHE = new Map(); // key: "niche|location" -> { data, timestamp 
 const RATE_LIMITS = new Map();    // key: apiKey -> { searches: [{timestamp}], ... }
 const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
 const RATE_LIMIT_WINDOW = 5 * 60 * 1000; // 5 minutes
-const RATE_LIMIT_MAX = 10; // max 10 searches per 5 min
+const RATE_LIMIT_MAX = 30; // max 30 searches per 5 min
 
 function getCacheKey(niche, location) {
   return `${niche.toLowerCase().trim()}|${location.toLowerCase().trim()}`;
