@@ -2728,7 +2728,9 @@ app.get('/api/chatbot/widget/:id', (req, res) => {
 // ============================================
 // FORM SUBMISSIONS (replaces Formspree)
 // ============================================
-app.post('/api/submissions', (req, res) => {
+const DISCORD_INVITE_URL = 'https://discord.gg/HStNMpCAH5';
+
+app.post('/api/submissions', async (req, res) => {
   try {
     const { firstName, lastName, email, phone, instagram, experience, interest, goal,
             utm_source, utm_medium, utm_campaign } = req.body;
@@ -2755,7 +2757,90 @@ app.post('/api/submissions', (req, res) => {
     submissions.unshift(submission);
     saveSubmissions(submissions);
 
-    return res.status(201).json({ success: true });
+    // Send welcome email with Discord invite + free resources (non-blocking)
+    if (resend) {
+      const name = (firstName || '').trim() || 'there';
+      resend.emails.send({
+        from: 'Soldi <onboarding@resend.dev>',
+        to: submission.email,
+        subject: `Welcome to Soldi, ${name}! Here's your free access`,
+        html: `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#050507;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<div style="max-width:600px;margin:0 auto;padding:40px 24px;">
+
+  <div style="text-align:center;margin-bottom:32px;">
+    <div style="display:inline-block;width:48px;height:48px;background:#10b981;border-radius:12px;line-height:48px;font-size:24px;font-weight:700;color:#fff;">S</div>
+    <h1 style="color:#fff;font-size:28px;margin:16px 0 0;">Welcome to Soldi</h1>
+  </div>
+
+  <p style="color:#d1d5db;font-size:16px;line-height:1.6;">Hey ${name},</p>
+  <p style="color:#d1d5db;font-size:16px;line-height:1.6;">Thanks for applying! We're excited to have you. Here's what you get access to right now — completely free:</p>
+
+  <!-- Discord Invite -->
+  <div style="background:#111;border:1px solid #22c55e;border-radius:12px;padding:24px;margin:24px 0;text-align:center;">
+    <h2 style="color:#22c55e;font-size:20px;margin:0 0 8px;">Join Our Free Discord Community</h2>
+    <p style="color:#9ca3af;font-size:14px;margin:0 0 16px;">Connect with other members, get free resources, and start your journey.</p>
+    <a href="${DISCORD_INVITE_URL}" style="display:inline-block;background:#5865F2;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:600;font-size:16px;">Join Discord Server</a>
+  </div>
+
+  <!-- Free Resources -->
+  <div style="background:#111;border:1px solid #1e293b;border-radius:12px;padding:24px;margin:24px 0;">
+    <h2 style="color:#fff;font-size:18px;margin:0 0 16px;">Your Free Resources</h2>
+
+    <div style="padding:12px 0;border-bottom:1px solid #1e293b;">
+      <span style="color:#22c55e;font-weight:600;">1.</span>
+      <span style="color:#fff;font-weight:500;"> Beginner's Roadmap to $1K/Month</span>
+      <p style="color:#9ca3af;font-size:13px;margin:4px 0 0 18px;">Step-by-step path from zero to your first $1K online — available in #start-here on Discord.</p>
+    </div>
+
+    <div style="padding:12px 0;border-bottom:1px solid #1e293b;">
+      <span style="color:#22c55e;font-weight:600;">2.</span>
+      <span style="color:#fff;font-weight:500;"> Free Sports Betting Bankroll Calculator</span>
+      <p style="color:#9ca3af;font-size:13px;margin:4px 0 0 18px;">Manage your bankroll like a pro — pinned in #free-money.</p>
+    </div>
+
+    <div style="padding:12px 0;border-bottom:1px solid #1e293b;">
+      <span style="color:#22c55e;font-weight:600;">3.</span>
+      <span style="color:#fff;font-weight:500;"> AI Prompt Pack (20 Money-Making Prompts)</span>
+      <p style="color:#9ca3af;font-size:13px;margin:4px 0 0 18px;">Ready-to-use prompts for selling AI services — in #free-money.</p>
+    </div>
+
+    <div style="padding:12px 0;border-bottom:1px solid #1e293b;">
+      <span style="color:#22c55e;font-weight:600;">4.</span>
+      <span style="color:#fff;font-weight:500;"> E-Commerce Product Research Checklist</span>
+      <p style="color:#9ca3af;font-size:13px;margin:4px 0 0 18px;">Find winning products before you spend a dollar — in #free-money.</p>
+    </div>
+
+    <div style="padding:12px 0;">
+      <span style="color:#22c55e;font-weight:600;">5.</span>
+      <span style="color:#fff;font-weight:500;"> Weekly Free Picks & Market Insights</span>
+      <p style="color:#9ca3af;font-size:13px;margin:4px 0 0 18px;">Free weekly plays posted in the Discord every week.</p>
+    </div>
+  </div>
+
+  <!-- CTA -->
+  <div style="text-align:center;margin:32px 0;">
+    <p style="color:#9ca3af;font-size:14px;">Ready to unlock everything? Get full access to all income streams, tools, and 1-on-1 support:</p>
+    <a href="https://whop.com/checkout/plan_Q93fIRTfIo5g7/" style="display:inline-block;background:#22c55e;color:#000;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:700;font-size:16px;margin-top:12px;">Activate Full Membership</a>
+  </div>
+
+  <hr style="border:none;border-top:1px solid #1e293b;margin:32px 0;">
+  <p style="color:#52525b;font-size:12px;text-align:center;">Soldi — The All-In-One Blueprint to Make Money Online</p>
+</div>
+</body>
+</html>
+        `.trim(),
+      }).then(() => {
+        console.log(`[Resend] Welcome email sent to ${submission.email}`);
+      }).catch(err => {
+        console.error('[Resend] Failed to send welcome email:', err.message);
+      });
+    }
+
+    return res.status(201).json({ success: true, discordInvite: DISCORD_INVITE_URL });
   } catch (err) {
     console.error('Submission error:', err);
     return res.status(500).json({ error: 'Failed to save submission' });
