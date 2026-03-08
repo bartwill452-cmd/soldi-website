@@ -7,34 +7,74 @@ const path = require('path');
 const cheerio = require('cheerio');
 const bcrypt = require('bcryptjs');
 
-// Nodemailer for sending emails via Gmail SMTP
+// Email services (Resend HTTP API preferred, Gmail SMTP fallback for local dev)
 const nodemailer = require('nodemailer');
-let mailTransporter = null;
 const GMAIL_USER = process.env.GMAIL_USER || 'soldihq@gmail.com';
 const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD || '';
+const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
 
+// Resend (HTTP-based — works on all hosting including Render)
+let resend = null;
+try {
+  const { Resend } = require('resend');
+  if (RESEND_API_KEY) {
+    resend = new Resend(RESEND_API_KEY);
+    console.log('[Mail] Resend HTTP email service initialized (primary)');
+  }
+} catch (e) {}
+
+// Gmail SMTP (fallback — works locally but blocked on Render/most PaaS)
+let mailTransporter = null;
 if (GMAIL_APP_PASSWORD) {
   mailTransporter = nodemailer.createTransport({
     service: 'gmail',
     auth: { user: GMAIL_USER, pass: GMAIL_APP_PASSWORD },
-    connectionTimeout: 10000,  // 10s to establish connection
-    greetingTimeout: 10000,    // 10s for SMTP greeting
-    socketTimeout: 10000       // 10s for socket inactivity
+    connectionTimeout: 8000,
+    greetingTimeout: 8000,
+    socketTimeout: 8000
   });
-  console.log(`[Mail] Gmail SMTP initialized for ${GMAIL_USER}`);
-} else {
-  console.log('[Mail] GMAIL_APP_PASSWORD not set — email sending disabled');
+  console.log(`[Mail] Gmail SMTP initialized for ${GMAIL_USER} (fallback)`);
 }
 
-// Legacy Resend support (fallback if Gmail not configured)
-let resend = null;
-try {
-  const { Resend } = require('resend');
-  if (process.env.RESEND_API_KEY && !mailTransporter) {
-    resend = new Resend(process.env.RESEND_API_KEY);
-    console.log('[Resend] Email service initialized (fallback)');
+if (!resend && !mailTransporter) {
+  console.log('[Mail] WARNING: No email service configured — email sending disabled');
+}
+
+// Unified email sender: tries Resend first (HTTP), falls back to Gmail SMTP
+async function sendEmail({ to, subject, html }) {
+  // Try Resend (HTTP-based, preferred)
+  if (resend) {
+    try {
+      const result = await resend.emails.send({
+        from: 'Soldi <onboarding@resend.dev>',
+        to,
+        subject,
+        html
+      });
+      if (result.error) throw new Error(result.error.message || JSON.stringify(result.error));
+      console.log(`[Mail] Sent to ${to} via Resend`);
+      return { success: true, provider: 'resend' };
+    } catch (err) {
+      console.error(`[Mail] Resend failed for ${to}:`, err.message || err);
+      // Fall through to Gmail SMTP
+    }
   }
-} catch (e) {}
+
+  // Try Gmail SMTP (fallback)
+  if (mailTransporter) {
+    try {
+      const sendPromise = mailTransporter.sendMail({ from: `Soldi <${GMAIL_USER}>`, to, subject, html });
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Gmail SMTP timed out (10s)')), 10000));
+      await Promise.race([sendPromise, timeoutPromise]);
+      console.log(`[Mail] Sent to ${to} via Gmail SMTP`);
+      return { success: true, provider: 'gmail' };
+    } catch (err) {
+      console.error(`[Mail] Gmail SMTP failed for ${to}:`, err.message || err);
+    }
+  }
+
+  return { success: false, error: 'All email providers failed' };
+}
 
 const app = express();
 
@@ -489,41 +529,19 @@ app.post('/api/send-verification', async (req, res) => {
   const code = generateVerificationCode();
   verificationCodes.set(emailLower, { code, expiresAt: Date.now() + CODE_EXPIRY_MS, sentAt: Date.now() });
 
-  // Send code via email (Gmail SMTP preferred, Resend fallback)
-  if (mailTransporter) {
-    try {
-      console.log(`[2FA] Sending code to ${email} via Gmail SMTP...`);
-      const sendPromise = mailTransporter.sendMail({
-        from: `Soldi <${GMAIL_USER}>`,
-        to: email,
-        subject: `${code} — Your Soldi verification code`,
-        html: buildVerificationCodeEmailHtml(code)
-      });
-      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Email send timed out after 15s')), 15000));
-      await Promise.race([sendPromise, timeoutPromise]);
-      console.log(`[2FA] Verification code sent to ${email} via Gmail`);
-    } catch (emailErr) {
-      console.error('[2FA] Gmail send error:', emailErr.message || emailErr);
-      verificationCodes.delete(emailLower);
-      return res.status(500).json({ error: 'Failed to send verification email. Please try again.' });
-    }
-  } else if (resend) {
-    try {
-      await resend.emails.send({
-        from: 'Soldi <onboarding@resend.dev>',
-        to: email,
-        subject: `${code} — Your Soldi verification code`,
-        html: buildVerificationCodeEmailHtml(code)
-      });
-      console.log(`[2FA] Verification code sent to ${email} via Resend`);
-    } catch (emailErr) {
-      console.error('[2FA] Resend send error:', emailErr);
-      verificationCodes.delete(emailLower);
-      return res.status(500).json({ error: 'Failed to send verification email. Please try again.' });
-    }
-  } else {
-    console.log(`[2FA] No email service configured — code for ${email}: ${code}`);
+  // Send code via email (Resend HTTP preferred, Gmail SMTP fallback)
+  const emailResult = await sendEmail({
+    to: email,
+    subject: `${code} — Your Soldi verification code`,
+    html: buildVerificationCodeEmailHtml(code)
+  });
+
+  if (!emailResult.success) {
+    console.error(`[2FA] All email providers failed for ${email}`);
+    verificationCodes.delete(emailLower);
+    return res.status(500).json({ error: 'Failed to send verification email. Please try again.' });
   }
+  console.log(`[2FA] Code sent to ${email} via ${emailResult.provider}`);
 
   return res.json({ success: true, message: 'Verification code sent to your email' });
 });
@@ -889,6 +907,7 @@ app.get('/api/health', (req, res) => {
 app.get('/api/debug/whop-test', async (req, res) => {
   const hasKey = !!WHOP_API_KEY && WHOP_API_KEY !== 'YOUR_API_KEY_HERE';
   const hasCompany = !!WHOP_COMPANY_ID;
+  const hasResend = !!resend;
   const hasMail = !!mailTransporter;
   if (!hasKey) return res.json({ whopKey: false, error: 'No API key' });
   try {
@@ -906,7 +925,7 @@ app.get('/api/debug/whop-test', async (req, res) => {
         smtpOk = true;
       } catch (e) { smtpErr = e.message; }
     }
-    res.json({ whopKey: true, companyId: hasCompany, mailConfigured: hasMail, smtpOk, smtpErr, whopStatus: response.status, whopResponseTime: `${elapsed}ms`, memberCount: data.data?.length || 0, hasNextPage: data.page_info?.has_next_page || false });
+    res.json({ whopKey: true, companyId: hasCompany, resendConfigured: hasResend, gmailSmtp: hasMail, smtpOk, smtpErr, whopStatus: response.status, whopResponseTime: `${elapsed}ms`, memberCount: data.data?.length || 0, hasNextPage: data.page_info?.has_next_page || false });
   } catch (err) {
     res.json({ whopKey: true, companyId: hasCompany, mailConfigured: hasMail, error: err.name === 'AbortError' ? 'Whop API timed out (8s)' : err.message });
   }
@@ -941,27 +960,14 @@ app.post('/api/webhooks/whop', async (req, res) => {
       const name = membership?.user?.name || membership?.user?.username || null;
       const firstName = name ? name.split(' ')[0] : null;
 
-      if (email && (mailTransporter || resend)) {
-        try {
-          if (mailTransporter) {
-            await mailTransporter.sendMail({
-              from: `Soldi <${GMAIL_USER}>`,
-              to: email,
-              subject: 'Welcome to Soldi — Get Started Now',
-              html: buildWelcomeEmailHtml(firstName || 'there', email)
-            });
-          } else {
-            await resend.emails.send({
-              from: 'Soldi <onboarding@resend.dev>',
-              to: email,
-              subject: 'Welcome to Soldi — Get Started Now',
-              html: buildWelcomeEmailHtml(firstName || 'there', email)
-            });
-          }
-          console.log(`[Webhook] Welcome email sent to ${email}`);
-        } catch (emailErr) {
-          console.error('[Webhook] Email send error:', emailErr);
-        }
+      if (email && (resend || mailTransporter)) {
+        const result = await sendEmail({
+          to: email,
+          subject: 'Welcome to Soldi — Get Started Now',
+          html: buildWelcomeEmailHtml(firstName || 'there', email)
+        });
+        if (result.success) console.log(`[Webhook] Welcome email sent to ${email} via ${result.provider}`);
+        else console.error(`[Webhook] Welcome email failed for ${email}`);
       }
     }
 
@@ -3452,29 +3458,9 @@ app.post('/api/submissions', async (req, res) => {
 </html>
         `.trim();
 
-      if (mailTransporter) {
-        mailTransporter.sendMail({
-          from: `Soldi <${GMAIL_USER}>`,
-          to: welcomeTo,
-          subject: welcomeSubject,
-          html: welcomeHtmlContent
-        }).then(() => {
-          console.log(`[Mail] Welcome email sent to ${welcomeTo}`);
-        }).catch(err => {
-          console.error('[Mail] Failed to send welcome email:', err.message);
-        });
-      } else {
-        resend.emails.send({
-          from: 'Soldi <onboarding@resend.dev>',
-          to: welcomeTo,
-          subject: welcomeSubject,
-          html: welcomeHtmlContent
-        }).then(() => {
-          console.log(`[Resend] Welcome email sent to ${welcomeTo}`);
-        }).catch(err => {
-          console.error('[Resend] Failed to send welcome email:', err.message);
-        });
-      }
+      sendEmail({ to: welcomeTo, subject: welcomeSubject, html: welcomeHtmlContent })
+        .then(r => r.success ? console.log(`[Mail] Welcome email sent to ${welcomeTo} via ${r.provider}`) : console.error(`[Mail] Welcome email failed for ${welcomeTo}`))
+        .catch(err => console.error('[Mail] Welcome email error:', err.message));
     }
 
     return res.status(201).json({ success: true, discordInvite: DISCORD_INVITE_URL });
