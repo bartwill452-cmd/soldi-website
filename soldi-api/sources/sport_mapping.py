@@ -1925,6 +1925,13 @@ KALSHI_SERIES_TICKERS = {
         "game": "KXNBAGAME",
         "spread": "KXNBASPREAD",
         "total": "KXNBATOTAL",
+        "game_1h": "KXNBA1HWINNER",
+        "spread_1h": "KXNBA1HSPREAD",
+        "total_1h": "KXNBA1HTOTAL",
+        "game_q1": "KXNBA1QWINNER",
+        "spread_q1": "KXNBA1QSPREAD",
+        "total_q1": "KXNBA1QTOTAL",
+        "team_total": "KXNBATEAMTOTAL",
     },
     "americanfootball_nfl": {
         "game": "KXNFLGAME",

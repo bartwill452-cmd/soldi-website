@@ -189,12 +189,29 @@ class KalshiSource(DataSource):
             spread_ticker = series.get("spread")
             total_ticker = series.get("total")
 
-            # Fetch game, spread, and total series concurrently
-            game_data, spread_data, total_data = await asyncio.gather(
+            # Period market tickers (1H, Q1)
+            game_1h_ticker = series.get("game_1h")
+            spread_1h_ticker = series.get("spread_1h")
+            total_1h_ticker = series.get("total_1h")
+            game_q1_ticker = series.get("game_q1")
+            spread_q1_ticker = series.get("spread_q1")
+            total_q1_ticker = series.get("total_q1")
+
+            # Fetch all series concurrently (game + spread + total + period markets)
+            results = await asyncio.gather(
                 self._fetch_events(game_ticker),
                 self._safe_fetch(spread_ticker),
                 self._safe_fetch(total_ticker),
+                self._safe_fetch(game_1h_ticker),
+                self._safe_fetch(spread_1h_ticker),
+                self._safe_fetch(total_1h_ticker),
+                self._safe_fetch(game_q1_ticker),
+                self._safe_fetch(spread_q1_ticker),
+                self._safe_fetch(total_q1_ticker),
             )
+            (game_data, spread_data, total_data,
+             game_1h_data, spread_1h_data, total_1h_data,
+             game_q1_data, spread_q1_data, total_q1_data) = results
 
             team_map = KALSHI_TEAMS.get(sport_key, {})
             sport_title = get_sport_title(sport_key)
@@ -206,15 +223,29 @@ class KalshiSource(DataSource):
             spread_map = self._build_spread_map(spread_data, team_map)
             total_map = self._build_total_map(total_data)
 
-            # Merge spread/total markets into game events
+            # Build period market maps (1H, Q1)
+            game_1h_map = self._build_moneyline_map(game_1h_data, team_map, "h2h_h1")
+            spread_1h_map = self._build_spread_map(spread_1h_data, team_map, "spreads_h1")
+            total_1h_map = self._build_total_map(total_1h_data, "totals_h1")
+            game_q1_map = self._build_moneyline_map(game_q1_data, team_map, "h2h_q1")
+            spread_q1_map = self._build_spread_map(spread_q1_data, team_map, "spreads_q1")
+            total_q1_map = self._build_total_map(total_q1_data, "totals_q1")
+
+            # All period market maps to merge
+            period_maps = [
+                spread_map, total_map,
+                game_1h_map, spread_1h_map, total_1h_map,
+                game_q1_map, spread_q1_map, total_q1_map,
+            ]
+
+            # Merge all markets into game events
             events = []  # type: List[OddsEvent]
             for dt_key, ev in events_keyed:
                 if ev.bookmakers and dt_key:
                     bm = ev.bookmakers[0]
-                    if dt_key in spread_map:
-                        bm.markets.append(spread_map[dt_key])
-                    if dt_key in total_map:
-                        bm.markets.append(total_map[dt_key])
+                    for pmap in period_maps:
+                        if dt_key in pmap:
+                            bm.markets.append(pmap[dt_key])
                 events.append(ev)
 
             # Fetch real orderbook liquidity at current prices for h2h markets.
@@ -229,9 +260,11 @@ class KalshiSource(DataSource):
             except asyncio.TimeoutError:
                 logger.info("Kalshi: orderbook liquidity timed out (5s) for %s, returning without liquidity", sport_key)
 
+            # Count period markets for logging
+            period_count = sum(len(m) for m in [game_1h_map, spread_1h_map, total_1h_map, game_q1_map, spread_q1_map, total_q1_map])
             logger.info(
-                "Kalshi: %d events for %s (spreads: %d, totals: %d)",
-                len(events), sport_key, len(spread_map), len(total_map),
+                "Kalshi: %d events for %s (spreads: %d, totals: %d, period_markets: %d)",
+                len(events), sport_key, len(spread_map), len(total_map), period_count,
             )
             # Store in per-sport cache before returning
             self._sport_cache[sport_key] = (events, _time.time())
@@ -694,8 +727,73 @@ class KalshiSource(DataSource):
     # Spread / Total market builders
     # ------------------------------------------------------------------
 
+    def _build_moneyline_map(
+        self, events_data: list, team_map: Dict[str, str], market_key: str = "h2h",
+    ) -> Dict[str, Market]:
+        """Build date_teams_key → moneyline Market from period game series.
+
+        Used for 1H/Q1 moneyline markets (KXNBA1HWINNER, KXNBA1QWINNER).
+        Each event has two binary markets (home/away), same structure as game series.
+        """
+        result = {}  # type: Dict[str, Market]
+        for event in events_data:
+            event_ticker = event.get("event_ticker", "")
+            dt_key = self._extract_date_teams_key(event_ticker)
+            if not dt_key:
+                continue
+
+            markets_data = event.get("markets", [])
+            if len(markets_data) < 2:
+                continue
+
+            # Extract team abbreviations and prices from active markets
+            market_by_abbr = {}  # type: Dict[str, dict]
+            for mkt in markets_data:
+                if mkt.get("status") != "active":
+                    continue
+                ticker = mkt.get("ticker", "")
+                abbr = ticker.rsplit("-", 1)[-1] if "-" in ticker else ""
+                if abbr and (not team_map or abbr in team_map):
+                    market_by_abbr[abbr] = mkt
+
+            if len(market_by_abbr) < 2:
+                continue
+
+            abbrs = list(market_by_abbr.keys())
+            # Use same side-detection as game events
+            title = event.get("title", "")
+            away_abbr, home_abbr = self._determine_sides(event_ticker, abbrs, title, team_map)
+
+            home_name = team_map.get(home_abbr, home_abbr) if team_map else home_abbr
+            away_name = team_map.get(away_abbr, away_abbr) if team_map else away_abbr
+            home_name = resolve_team_name(home_name)
+            away_name = resolve_team_name(away_name)
+
+            home_mkt = market_by_abbr.get(home_abbr)
+            away_mkt = market_by_abbr.get(away_abbr)
+            if not home_mkt or not away_mkt:
+                continue
+
+            home_price = home_mkt.get("yes_ask")
+            away_price = away_mkt.get("yes_ask")
+            if not home_price or not away_price:
+                continue
+            if home_price <= 0 or home_price >= 100 or away_price <= 0 or away_price >= 100:
+                continue
+
+            result[dt_key] = Market(
+                key=market_key,
+                outcomes=[
+                    Outcome(name=home_name, price=cents_to_american(home_price)),
+                    Outcome(name=away_name, price=cents_to_american(away_price)),
+                ],
+            )
+
+        return result
+
     def _build_spread_map(
-        self, spread_events: list, team_map: Dict[str, str]
+        self, spread_events: list, team_map: Dict[str, str],
+        market_key: str = "spreads",
     ) -> Dict[str, Market]:
         """Build date_teams_key → spread Market from spread series events.
 
@@ -731,7 +829,7 @@ class KalshiSource(DataSource):
             if not best:
                 continue
 
-            spread_market = self._parse_spread_from_market(best, dt_key, team_map)
+            spread_market = self._parse_spread_from_market(best, dt_key, team_map, market_key)
             if spread_market:
                 result[dt_key] = spread_market
 
@@ -742,6 +840,7 @@ class KalshiSource(DataSource):
         market: dict,
         dt_key: str,
         team_map: Dict[str, str],
+        market_key: str = "spreads",
     ) -> Optional[Market]:
         """Parse a single Kalshi spread market into a spreads Market."""
         ticker = market.get("ticker", "")
@@ -794,14 +893,14 @@ class KalshiSource(DataSource):
         other_odds = cents_to_american(no_price)
 
         return Market(
-            key="spreads",
+            key=market_key,
             outcomes=[
                 Outcome(name=fav_name, price=fav_odds, point=-point),
                 Outcome(name=other_name, price=other_odds, point=point),
             ],
         )
 
-    def _build_total_map(self, total_events: list) -> Dict[str, Market]:
+    def _build_total_map(self, total_events: list, market_key: str = "totals") -> Dict[str, Market]:
         """Build date_teams_key → total Market from total series events.
 
         Each Kalshi total event contains markets at different point thresholds
@@ -834,13 +933,13 @@ class KalshiSource(DataSource):
             if not best:
                 continue
 
-            total_market = self._parse_total_from_market(best)
+            total_market = self._parse_total_from_market(best, market_key)
             if total_market:
                 result[dt_key] = total_market
 
         return result
 
-    def _parse_total_from_market(self, market: dict) -> Optional[Market]:
+    def _parse_total_from_market(self, market: dict, market_key: str = "totals") -> Optional[Market]:
         """Parse a single Kalshi total market into a totals Market."""
         ticker = market.get("ticker", "")
         yes_ask = market.get("yes_ask")
@@ -873,7 +972,7 @@ class KalshiSource(DataSource):
         under_odds = cents_to_american(no_price)
 
         return Market(
-            key="totals",
+            key=market_key,
             outcomes=[
                 Outcome(name="Over", price=over_odds, point=point),
                 Outcome(name="Under", price=under_odds, point=point),

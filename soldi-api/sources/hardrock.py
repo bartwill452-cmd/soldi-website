@@ -26,8 +26,12 @@ logger = logging.getLogger(__name__)
 
 GRAPHQL_URL = "https://api.hardrocksportsbook.com/java-graphql/graphql"
 
-# Channel = state-specific locale for the sportsbook
-CHANNEL = "OHIO_ONLINE"
+# Channel = state-specific locale for the sportsbook.
+# Florida has the broadest offering (1,488 events, 22 sports).
+# Note: Cloudflare blocks requests from cloud provider IPs (Render, AWS, etc.)
+# so this scraper only works from residential IPs / local dev.
+CHANNEL = "FLORIDA_ONLINE"
+SEGMENT = "fl"
 
 # ─── Competition IDs per sport ─────────────────────────────────
 # These are discovered from the event_tree query at startup.
@@ -477,7 +481,7 @@ class HardRockBetSource(DataSource):
                     "query": _EVENT_TREE_QUERY,
                     "variables": {
                         "channel": CHANNEL,
-                        "segment": "oh",
+                        "segment": SEGMENT,
                         "region": "us",
                         "language": "enus",
                         "nonTradingFilters": ["DISPLAYED"],
@@ -594,7 +598,7 @@ class HardRockBetSource(DataSource):
 
         variables = {
             "channel": CHANNEL,
-            "segment": "oh",
+            "segment": SEGMENT,
             "region": "us",
             "language": "enus",
             "filters": [
@@ -1047,7 +1051,7 @@ class HardRockBetSource(DataSource):
                     "query": _PLAYER_PROPS_QUERY,
                     "variables": {
                         "channel": CHANNEL,
-                        "segment": "oh",
+                        "segment": SEGMENT,
                         "region": "us",
                         "language": "enus",
                         "filters": [

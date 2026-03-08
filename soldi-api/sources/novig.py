@@ -14,7 +14,7 @@ match at that line).
 
 API Base: https://api.novig.us/v1/graphql
 Order Book: https://api.novig.us/nbx/v1/markets/book/batch
-Markets: MONEY (h2h), SPREAD, TOTAL, MONEY_1H, SPREAD_1H, TOTAL_1H
+Markets: MONEY (h2h), SPREAD, TOTAL, MONEY_1H, SPREAD_1H, TOTAL_1H, MONEY_Q1, SPREAD_Q1, TOTAL_Q1, MONEY_P1, SPREAD_P1, TOTAL_P1
 """
 
 import asyncio
@@ -245,7 +245,7 @@ class NovigSource(DataSource):
         money_market_ids = []  # type: List[str]
         for ev in raw_events:
             for mkt in ev.get("markets", []):
-                if mkt.get("type") in ("MONEY", "MONEY_1H"):
+                if mkt.get("type") in ("MONEY", "MONEY_1H", "MONEY_Q1", "MONEY_P1"):
                     money_market_ids.append(mkt["id"])
 
         # Fetch order book liquidity for all moneyline markets in one batch

@@ -33,12 +33,12 @@ from sources.sport_mapping import (
 
 logger = logging.getLogger(__name__)
 
-BASE_URL = "https://api-ss-staging.betprophet.co"
+BASE_URL = "https://cash.api.prophetx.co"
 TOURNAMENTS_URL = BASE_URL + "/trade/public/api/v1/tournaments"
 MARKETS_URL = BASE_URL + "/partner/v2/public/get_multiple_markets"
 
-# Fallback: original production URL (currently blocked by CloudFront WAF)
-_PROD_URL = "https://cash.api.prophetx.co"
+# Fallback: staging URL (less data — 9 tournaments vs 18 on production)
+_STAGING_URL = "https://api-ss-staging.betprophet.co"
 
 # Cache TTL — longer to avoid spamming if API is blocked
 _CACHE_TTL = 60  # seconds

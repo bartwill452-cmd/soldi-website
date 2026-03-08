@@ -207,8 +207,8 @@ class BetRiversSource(DataSource):
             return None
 
         # Resolve Kambi abbreviated names (e.g. "OKC Thunder" → "Oklahoma City Thunder")
-        home = resolve_team_name(home)
-        away = resolve_team_name(away)
+        home = resolve_team_name(home, sport_key=sport_key)
+        away = resolve_team_name(away, sport_key=sport_key)
 
         commence_time = event_info.get("start", "")
 
