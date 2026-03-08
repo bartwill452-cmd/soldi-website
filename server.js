@@ -4887,8 +4887,16 @@ async function refreshGuidesCache() {
   saveGuidesCache();
 }
 
-// Load disk cache immediately (serves guides from saved file, no external fetch)
+// Load disk cache immediately
 loadGuidesCache();
+
+// If cache is empty (first deploy / no cache file), fetch from Google Docs once
+if (guidesCache.size === 0) {
+  setTimeout(() => {
+    console.log('[Guides] Cache empty — fetching from Google Docs...');
+    refreshGuidesCache();
+  }, 10000);
+}
 
 // GET /api/guides/:slug — returns guide content (JWT auth required)
 app.get('/api/guides/:slug', requireAuth, (req, res) => {
