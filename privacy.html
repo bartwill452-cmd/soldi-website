@@ -7,7 +7,7 @@
   <script>
     (function() {
       var t = localStorage.getItem('soldi_theme');
-      if (!t) t = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+      if (!t) t = 'dark';
       if (t === 'light') document.documentElement.setAttribute('data-theme', 'light');
     })();
   </script>
