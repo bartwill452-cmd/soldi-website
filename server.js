@@ -425,14 +425,27 @@ app.post('/api/send-verification', async (req, res) => {
     if (!WHOP_API_KEY || WHOP_API_KEY === 'YOUR_API_KEY_HERE') {
       return res.status(500).json({ error: 'Server not configured. API key missing.' });
     }
+    const membershipCheckStart = Date.now();
+    const OVERALL_TIMEOUT_MS = 15000; // 15s max for entire membership check
     try {
       let page = 1;
       let found = false;
       const maxPages = 20;
       while (!found && page <= maxPages) {
+        // Check overall timeout
+        if (Date.now() - membershipCheckStart > OVERALL_TIMEOUT_MS) {
+          console.error(`[2FA] Membership check overall timeout after ${page - 1} pages`);
+          return res.status(504).json({ error: 'Membership verification took too long. Please try again.' });
+        }
         const url = `https://api.whop.com/api/v1/memberships?company_id=${WHOP_COMPANY_ID}&page=${page}&per=50`;
-        const response = await fetchWithTimeout(url, { headers: { Authorization: `Bearer ${WHOP_API_KEY}` } }, 10000);
-        if (!response.ok) return res.status(502).json({ error: 'Failed to verify membership' });
+        console.log(`[2FA] Checking Whop page ${page} for ${emailLower}...`);
+        const response = await fetchWithTimeout(url, { headers: { Authorization: `Bearer ${WHOP_API_KEY}` } }, 8000);
+        console.log(`[2FA] Whop page ${page} responded: ${response.status} (${Date.now() - membershipCheckStart}ms elapsed)`);
+        if (!response.ok) {
+          const errText = await response.text().catch(() => '');
+          console.error(`[2FA] Whop API error on page ${page}: ${response.status} ${errText}`);
+          return res.status(502).json({ error: 'Failed to verify membership' });
+        }
         const data = await response.json();
         const memberships = data.data || [];
         if (memberships.length === 0) break;
@@ -455,6 +468,7 @@ app.post('/api/send-verification', async (req, res) => {
         if (!data.page_info || !data.page_info.has_next_page) break;
         page++;
       }
+      console.log(`[2FA] Membership check done: found=${found}, pages=${page}, time=${Date.now() - membershipCheckStart}ms`);
       if (!found) {
         return res.status(404).json({
           error: 'no_membership',
@@ -862,7 +876,25 @@ app.get('/api/validate-key', (req, res) => {
 // GET /api/health - Service health check
 // ============================================
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', uptime: process.uptime(), timestamp: new Date().toISOString(), version: '2.0.0' });
+  res.json({ status: 'ok', uptime: process.uptime(), timestamp: new Date().toISOString(), version: '2.1.0' });
+});
+
+// Diagnostic: test Whop API connectivity (no sensitive data exposed)
+app.get('/api/debug/whop-test', async (req, res) => {
+  const hasKey = !!WHOP_API_KEY && WHOP_API_KEY !== 'YOUR_API_KEY_HERE';
+  const hasCompany = !!WHOP_COMPANY_ID;
+  const hasMail = !!mailTransporter;
+  if (!hasKey) return res.json({ whopKey: false, error: 'No API key' });
+  try {
+    const start = Date.now();
+    const url = `https://api.whop.com/api/v1/memberships?company_id=${WHOP_COMPANY_ID}&page=1&per=1`;
+    const response = await fetchWithTimeout(url, { headers: { Authorization: `Bearer ${WHOP_API_KEY}` } }, 8000);
+    const elapsed = Date.now() - start;
+    const data = await response.json();
+    res.json({ whopKey: true, companyId: hasCompany, mailConfigured: hasMail, whopStatus: response.status, whopResponseTime: `${elapsed}ms`, memberCount: data.data?.length || 0, hasNextPage: data.page_info?.has_next_page || false });
+  } catch (err) {
+    res.json({ whopKey: true, companyId: hasCompany, mailConfigured: hasMail, error: err.name === 'AbortError' ? 'Whop API timed out (8s)' : err.message });
+  }
 });
 
 // ============================================
