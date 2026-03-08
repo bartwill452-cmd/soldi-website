@@ -7,23 +7,25 @@ const path = require('path');
 const cheerio = require('cheerio');
 const bcrypt = require('bcryptjs');
 
-// Email services (Resend HTTP API preferred, Gmail SMTP fallback for local dev)
+// Email services — priority: Brevo (HTTP) > Resend (HTTP) > Gmail SMTP (local only)
 const nodemailer = require('nodemailer');
 const GMAIL_USER = process.env.GMAIL_USER || 'soldihq@gmail.com';
 const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD || '';
 const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
+const BREVO_API_KEY = process.env.BREVO_API_KEY || '';
+const SENDER_EMAIL = process.env.SENDER_EMAIL || GMAIL_USER;
 
-// Resend (HTTP-based — works on all hosting including Render)
+// Resend (HTTP-based)
 let resend = null;
 try {
   const { Resend } = require('resend');
   if (RESEND_API_KEY) {
     resend = new Resend(RESEND_API_KEY);
-    console.log('[Mail] Resend HTTP email service initialized (primary)');
+    console.log('[Mail] Resend initialized');
   }
 } catch (e) {}
 
-// Gmail SMTP (fallback — works locally but blocked on Render/most PaaS)
+// Gmail SMTP (fallback — works locally but blocked on Render)
 let mailTransporter = null;
 if (GMAIL_APP_PASSWORD) {
   mailTransporter = nodemailer.createTransport({
@@ -33,34 +35,56 @@ if (GMAIL_APP_PASSWORD) {
     greetingTimeout: 8000,
     socketTimeout: 8000
   });
-  console.log(`[Mail] Gmail SMTP initialized for ${GMAIL_USER} (fallback)`);
+  console.log(`[Mail] Gmail SMTP initialized (fallback)`);
 }
 
-if (!resend && !mailTransporter) {
+if (BREVO_API_KEY) console.log('[Mail] Brevo HTTP email service initialized (primary)');
+if (!BREVO_API_KEY && !resend && !mailTransporter) {
   console.log('[Mail] WARNING: No email service configured — email sending disabled');
 }
 
-// Unified email sender: tries Resend first (HTTP), falls back to Gmail SMTP
+// Unified email sender: tries Brevo (HTTP) > Resend (HTTP) > Gmail SMTP
 async function sendEmail({ to, subject, html }) {
-  // Try Resend (HTTP-based, preferred)
+  // 1. Brevo / Sendinblue (HTTP — works everywhere, sends to any email)
+  if (BREVO_API_KEY) {
+    try {
+      const brevoRes = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: { 'accept': 'application/json', 'content-type': 'application/json', 'api-key': BREVO_API_KEY },
+        body: JSON.stringify({
+          sender: { name: 'Soldi', email: SENDER_EMAIL },
+          to: [{ email: to }],
+          subject,
+          htmlContent: html
+        })
+      });
+      if (!brevoRes.ok) {
+        const errBody = await brevoRes.text().catch(() => '');
+        throw new Error(`Brevo ${brevoRes.status}: ${errBody}`);
+      }
+      console.log(`[Mail] Sent to ${to} via Brevo`);
+      return { success: true, provider: 'brevo' };
+    } catch (err) {
+      console.error(`[Mail] Brevo failed for ${to}:`, err.message || err);
+    }
+  }
+
+  // 2. Resend (HTTP — sandbox limited to account owner email)
   if (resend) {
     try {
       const result = await resend.emails.send({
         from: 'Soldi <onboarding@resend.dev>',
-        to,
-        subject,
-        html
+        to, subject, html
       });
       if (result.error) throw new Error(result.error.message || JSON.stringify(result.error));
       console.log(`[Mail] Sent to ${to} via Resend`);
       return { success: true, provider: 'resend' };
     } catch (err) {
       console.error(`[Mail] Resend failed for ${to}:`, err.message || err);
-      // Fall through to Gmail SMTP
     }
   }
 
-  // Try Gmail SMTP (fallback)
+  // 3. Gmail SMTP (works locally but blocked on most PaaS)
   if (mailTransporter) {
     try {
       const sendPromise = mailTransporter.sendMail({ from: `Soldi <${GMAIL_USER}>`, to, subject, html });
@@ -907,6 +931,7 @@ app.get('/api/health', (req, res) => {
 app.get('/api/debug/whop-test', async (req, res) => {
   const hasKey = !!WHOP_API_KEY && WHOP_API_KEY !== 'YOUR_API_KEY_HERE';
   const hasCompany = !!WHOP_COMPANY_ID;
+  const hasBrevo = !!BREVO_API_KEY;
   const hasResend = !!resend;
   const hasMail = !!mailTransporter;
   if (!hasKey) return res.json({ whopKey: false, error: 'No API key' });
@@ -925,7 +950,7 @@ app.get('/api/debug/whop-test', async (req, res) => {
         smtpOk = true;
       } catch (e) { smtpErr = e.message; }
     }
-    res.json({ whopKey: true, companyId: hasCompany, resendConfigured: hasResend, gmailSmtp: hasMail, smtpOk, smtpErr, whopStatus: response.status, whopResponseTime: `${elapsed}ms`, memberCount: data.data?.length || 0, hasNextPage: data.page_info?.has_next_page || false });
+    res.json({ whopKey: true, companyId: hasCompany, brevo: hasBrevo, resend: hasResend, gmailSmtp: hasMail, smtpOk, smtpErr, whopStatus: response.status, whopResponseTime: `${elapsed}ms`, memberCount: data.data?.length || 0, hasNextPage: data.page_info?.has_next_page || false });
   } catch (err) {
     res.json({ whopKey: true, companyId: hasCompany, mailConfigured: hasMail, error: err.name === 'AbortError' ? 'Whop API timed out (8s)' : err.message });
   }
