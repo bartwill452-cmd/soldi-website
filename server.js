@@ -16,7 +16,10 @@ const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD || '';
 if (GMAIL_APP_PASSWORD) {
   mailTransporter = nodemailer.createTransport({
     service: 'gmail',
-    auth: { user: GMAIL_USER, pass: GMAIL_APP_PASSWORD }
+    auth: { user: GMAIL_USER, pass: GMAIL_APP_PASSWORD },
+    connectionTimeout: 10000,  // 10s to establish connection
+    greetingTimeout: 10000,    // 10s for SMTP greeting
+    socketTimeout: 10000       // 10s for socket inactivity
   });
   console.log(`[Mail] Gmail SMTP initialized for ${GMAIL_USER}`);
 } else {
@@ -489,15 +492,18 @@ app.post('/api/send-verification', async (req, res) => {
   // Send code via email (Gmail SMTP preferred, Resend fallback)
   if (mailTransporter) {
     try {
-      await mailTransporter.sendMail({
+      console.log(`[2FA] Sending code to ${email} via Gmail SMTP...`);
+      const sendPromise = mailTransporter.sendMail({
         from: `Soldi <${GMAIL_USER}>`,
         to: email,
         subject: `${code} — Your Soldi verification code`,
         html: buildVerificationCodeEmailHtml(code)
       });
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Email send timed out after 15s')), 15000));
+      await Promise.race([sendPromise, timeoutPromise]);
       console.log(`[2FA] Verification code sent to ${email} via Gmail`);
     } catch (emailErr) {
-      console.error('[2FA] Gmail send error:', emailErr);
+      console.error('[2FA] Gmail send error:', emailErr.message || emailErr);
       verificationCodes.delete(emailLower);
       return res.status(500).json({ error: 'Failed to send verification email. Please try again.' });
     }
@@ -891,7 +897,16 @@ app.get('/api/debug/whop-test', async (req, res) => {
     const response = await fetchWithTimeout(url, { headers: { Authorization: `Bearer ${WHOP_API_KEY}` } }, 8000);
     const elapsed = Date.now() - start;
     const data = await response.json();
-    res.json({ whopKey: true, companyId: hasCompany, mailConfigured: hasMail, whopStatus: response.status, whopResponseTime: `${elapsed}ms`, memberCount: data.data?.length || 0, hasNextPage: data.page_info?.has_next_page || false });
+    // Quick SMTP connection test
+    let smtpOk = false;
+    let smtpErr = null;
+    if (hasMail) {
+      try {
+        await Promise.race([mailTransporter.verify(), new Promise((_, rej) => setTimeout(() => rej(new Error('SMTP verify timeout')), 8000))]);
+        smtpOk = true;
+      } catch (e) { smtpErr = e.message; }
+    }
+    res.json({ whopKey: true, companyId: hasCompany, mailConfigured: hasMail, smtpOk, smtpErr, whopStatus: response.status, whopResponseTime: `${elapsed}ms`, memberCount: data.data?.length || 0, hasNextPage: data.page_info?.has_next_page || false });
   } catch (err) {
     res.json({ whopKey: true, companyId: hasCompany, mailConfigured: hasMail, error: err.name === 'AbortError' ? 'Whop API timed out (8s)' : err.message });
   }
