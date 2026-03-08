@@ -4781,6 +4781,173 @@ app.get('/api/owner/conversions', requireOwnerMember, async (req, res) => {
 });
 
 // ============================================
+// GOOGLE DOCS GUIDES (scrape + cache)
+// ============================================
+const GUIDE_DOCS = {
+  'selling-ai-websites':  { docId: '1zYT_2ImQRI5mdiBjDSK5qFUfn2-Tar00_nknNBQ6w80', title: 'Selling AI Websites' },
+  'soldi-ecom-info':      { docId: '1uJXa69v_zzLfbWfHlAizTRMPRyN8BXKLNARxLcLhNnQ', title: 'Soldi Ecom Info' },
+  'affiliate-offers':     { docId: '1hrVBCpFRdZfLo91WrO0trR5-oU918ZSFks0neJD-RR0', title: 'Best Affiliate/Signup Offers Banks' },
+  'soldi-betting-guides': { docId: '1XqEsr_moPXv8EH1p-nWot7its9g0LaSchMFogDwtdd8', title: 'Soldi Betting Guides' },
+};
+
+const GUIDES_CACHE_FILE = path.join(DATA_DIR, 'google-docs-cache.json');
+const guidesCache = new Map();
+
+function loadGuidesCache() {
+  try {
+    if (!fs.existsSync(GUIDES_CACHE_FILE)) return;
+    const data = JSON.parse(fs.readFileSync(GUIDES_CACHE_FILE, 'utf8'));
+    for (const [slug, entry] of Object.entries(data)) {
+      guidesCache.set(slug, entry);
+    }
+    console.log(`[Guides] Loaded ${guidesCache.size} guides from disk cache`);
+  } catch (err) {
+    console.error('[Guides] Failed to load disk cache:', err.message);
+  }
+}
+
+function saveGuidesCache() {
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    const obj = {};
+    for (const [slug, entry] of guidesCache) {
+      obj[slug] = entry;
+    }
+    fs.writeFileSync(GUIDES_CACHE_FILE, JSON.stringify(obj, null, 2));
+    console.log(`[Guides] Saved ${guidesCache.size} guides to disk`);
+  } catch (err) {
+    console.error('[Guides] Failed to save disk cache:', err.message);
+  }
+}
+
+async function fetchGoogleDoc(docId) {
+  const url = `https://docs.google.com/document/d/${docId}/export?format=html`;
+  const response = await fetchWithTimeout(url, {}, 15000);
+  if (!response.ok) throw new Error(`Google Docs fetch failed: ${response.status}`);
+  const rawHtml = await response.text();
+  const $ = cheerio.load(rawHtml);
+
+  // Strip Google Docs cruft
+  $('style, script, meta, link').remove();
+
+  // Extract sub-guide links (links to other Google Docs)
+  const subGuides = [];
+  $('a').each(function () {
+    const href = $(this).attr('href') || '';
+    const text = $(this).text().trim();
+    const docMatch = href.match(/docs\.google\.com\/document\/d\/([a-zA-Z0-9_-]+)/);
+    if (docMatch && text) {
+      const subDocId = docMatch[1];
+      const subSlug = text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').substring(0, 60);
+      subGuides.push({ title: text, slug: subSlug, docId: subDocId });
+    }
+  });
+
+  // Clean inline styles but keep structure
+  $('*').removeAttr('style').removeAttr('class').removeAttr('id');
+
+  const bodyHtml = $('body').html() || $.html();
+  return { html: bodyHtml, subGuides };
+}
+
+async function refreshGuidesCache() {
+  console.log('[Guides] Refreshing all guides from Google Docs...');
+  for (const [slug, config] of Object.entries(GUIDE_DOCS)) {
+    try {
+      const { html, subGuides } = await fetchGoogleDoc(config.docId);
+      guidesCache.set(slug, {
+        title: config.title,
+        html,
+        subGuides: subGuides.length > 0 ? subGuides : undefined,
+        fetchedAt: new Date().toISOString(),
+      });
+      console.log(`[Guides] Cached: ${slug} (${subGuides.length} sub-guides)`);
+
+      // Also cache each linked sub-guide doc
+      for (const sub of subGuides) {
+        try {
+          const subData = await fetchGoogleDoc(sub.docId);
+          guidesCache.set(sub.slug, {
+            title: sub.title,
+            html: subData.html,
+            subGuides: subData.subGuides.length > 0 ? subData.subGuides : undefined,
+            fetchedAt: new Date().toISOString(),
+          });
+          console.log(`[Guides]   Sub-guide cached: ${sub.slug}`);
+        } catch (subErr) {
+          console.error(`[Guides]   Sub-guide failed: ${sub.slug}:`, subErr.message);
+        }
+        await new Promise(r => setTimeout(r, 2000)); // rate-limit delay
+      }
+    } catch (err) {
+      console.error(`[Guides] Failed to fetch ${slug}:`, err.message);
+    }
+    await new Promise(r => setTimeout(r, 3000));
+  }
+  saveGuidesCache();
+}
+
+// Load disk cache immediately (serves guides from saved file, no external fetch)
+loadGuidesCache();
+
+// GET /api/guides/:slug — returns guide content (JWT auth required)
+app.get('/api/guides/:slug', requireAuth, (req, res) => {
+  const slug = req.params.slug;
+  const cached = guidesCache.get(slug);
+  if (!cached) {
+    return res.status(404).json({ error: 'Guide not found' });
+  }
+  res.json({
+    title: cached.title,
+    html: cached.html,
+    subGuides: cached.subGuides || [],
+    fetchedAt: cached.fetchedAt,
+  });
+});
+
+// POST /api/report — Bug/Suggestion report (sends email to soldihq@gmail.com)
+app.post('/api/report', requireAuth, async (req, res) => {
+  try {
+    const { category, message } = req.body;
+    if (!category || !message) {
+      return res.status(400).json({ error: 'Category and message are required' });
+    }
+    if (message.length > 5000) {
+      return res.status(400).json({ error: 'Message too long (max 5000 chars)' });
+    }
+
+    const userEmail = req.user.email || 'Unknown';
+    const timestamp = new Date().toISOString();
+    const categoryLabel = category === 'bug' ? 'Bug Report' : 'Suggestion';
+
+    const emailHtml = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px;">
+        <h2 style="color: ${category === 'bug' ? '#ef4444' : '#22c55e'};">${categoryLabel}</h2>
+        <p><strong>From:</strong> ${userEmail}</p>
+        <p><strong>Category:</strong> ${categoryLabel}</p>
+        <p><strong>Time:</strong> ${timestamp}</p>
+        <hr style="border: 1px solid #eee;">
+        <div style="background: #f9f9f9; padding: 16px; border-radius: 8px; margin-top: 12px;">
+          <p style="white-space: pre-wrap;">${message.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>
+        </div>
+      </div>
+    `;
+
+    await sendEmail({
+      to: 'soldihq@gmail.com',
+      subject: `[Soldi ${categoryLabel}] from ${userEmail}`,
+      html: emailHtml,
+    });
+
+    console.log(`[Report] ${categoryLabel} from ${userEmail}`);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[Report] Error:', err.message);
+    res.status(500).json({ error: 'Failed to send report' });
+  }
+});
+
+// ============================================
 // KEEP-ALIVE SELF-PING (prevents Render free tier spin-down)
 // ============================================
 function keepAlive() {

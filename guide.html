@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Guide - Soldi</title>
+  <script>
+    (function() {
+      var t = localStorage.getItem('soldi_theme');
+      if (!t) t = 'dark';
+      if (t === 'light') document.documentElement.setAttribute('data-theme', 'light');
+    })();
+  </script>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon.png">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <script src="/soldi-analytics.js"></script>
+  <style>
+    .guide-page { padding: 120px 0 80px; min-height: 100vh; }
+    .guide-loading { text-align: center; padding: 80px 0; color: var(--text-muted); font-size: 15px; }
+    .guide-loading .spin {
+      animation: spin 1s linear infinite;
+      margin: 0 auto 16px;
+      display: block;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .guide-error {
+      text-align: center;
+      padding: 80px 0;
+      max-width: 400px;
+      margin: 0 auto;
+    }
+    .guide-error h2 { font-size: 24px; font-weight: 800; color: var(--text-heading); margin-bottom: 8px; }
+    .guide-error p { font-size: 14px; color: var(--text-muted); margin-bottom: 24px; }
+
+    .guide-content { max-width: 800px; margin: 0 auto; }
+    .guide-back {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--accent-green);
+      font-size: 14px;
+      font-weight: 600;
+      text-decoration: none;
+      margin-bottom: 24px;
+      transition: opacity 0.2s;
+    }
+    .guide-back:hover { opacity: 0.8; }
+
+    .guide-title {
+      font-size: 32px;
+      font-weight: 800;
+      color: var(--text-heading);
+      margin-bottom: 8px;
+      line-height: 1.2;
+    }
+    .guide-meta {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 32px;
+    }
+
+    /* Sub-guide list */
+    .guide-sub-list { list-style: none; padding: 0; margin: 0 0 32px; }
+    .guide-sub-item {
+      padding: 16px 20px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      margin-bottom: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      text-decoration: none;
+      color: inherit;
+    }
+    .guide-sub-item:hover {
+      background: var(--bg-card-hover);
+      border-color: rgba(245, 158, 11, 0.3);
+    }
+    .guide-sub-item .sub-title {
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--text-tertiary);
+    }
+    .guide-sub-item .sub-num {
+      font-size: 13px;
+      font-weight: 700;
+      color: #f59e0b;
+      margin-right: 12px;
+      min-width: 32px;
+    }
+    .guide-sub-item .sub-arrow { color: #f59e0b; font-size: 18px; }
+
+    /* Rendered guide HTML content */
+    .guide-body h1, .guide-body h2, .guide-body h3, .guide-body h4 {
+      color: var(--text-heading);
+      margin-top: 28px;
+      margin-bottom: 12px;
+      line-height: 1.3;
+    }
+    .guide-body h1 { font-size: 28px; font-weight: 800; }
+    .guide-body h2 { font-size: 22px; font-weight: 700; }
+    .guide-body h3 { font-size: 18px; font-weight: 600; }
+    .guide-body p {
+      font-size: 15px;
+      line-height: 1.8;
+      color: var(--text-secondary);
+      margin-bottom: 16px;
+    }
+    .guide-body ul, .guide-body ol {
+      margin-bottom: 16px;
+      padding-left: 24px;
+    }
+    .guide-body li {
+      font-size: 15px;
+      line-height: 1.7;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+    }
+    .guide-body a {
+      color: #f59e0b;
+      text-decoration: underline;
+    }
+    .guide-body a:hover { opacity: 0.8; }
+    .guide-body img {
+      max-width: 100%;
+      border-radius: 8px;
+      margin: 16px 0;
+    }
+    .guide-body table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+    }
+    .guide-body th, .guide-body td {
+      padding: 10px 14px;
+      border: 1px solid var(--border-color);
+      font-size: 14px;
+      color: var(--text-secondary);
+    }
+    .guide-body th {
+      background: var(--bg-card);
+      font-weight: 600;
+      color: var(--text-heading);
+    }
+    .guide-body hr {
+      border: none;
+      border-top: 1px solid var(--border-color);
+      margin: 24px 0;
+    }
+    .guide-body blockquote {
+      border-left: 3px solid #f59e0b;
+      padding: 12px 16px;
+      margin: 16px 0;
+      background: var(--bg-card);
+      border-radius: 0 8px 8px 0;
+    }
+
+    @media (max-width: 640px) {
+      .guide-title { font-size: 24px; }
+      .guide-body h1 { font-size: 22px; }
+      .guide-body h2 { font-size: 18px; }
+      .guide-body h3 { font-size: 16px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- NAV -->
+  <nav class="nav">
+    <div class="nav-inner">
+      <a href="/#dashboard" class="logo" style="text-decoration:none;">
+        <div class="logo-icon">S</div>
+        <span class="logo-text">Soldi</span>
+      </a>
+      <div class="nav-links">
+        <a href="/#dashboard">Dashboard</a>
+        <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
+          <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+          <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <section class="guide-page">
+    <div class="container">
+      <!-- Loading state -->
+      <div id="guideLoading" class="guide-loading">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="spin"><circle cx="12" cy="12" r="10" stroke-dasharray="31.4" stroke-dashoffset="10"/></svg>
+        Loading guide...
+      </div>
+
+      <!-- Error / Auth gate -->
+      <div id="guideError" class="guide-error" style="display:none;">
+        <h2>Access Denied</h2>
+        <p>You must be a logged-in paid member to view guides.</p>
+        <a href="/" class="btn btn-primary">Go to Soldi</a>
+      </div>
+
+      <!-- Guide content -->
+      <div id="guideContent" class="guide-content" style="display:none;">
+        <a href="/#dashboard" class="guide-back">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+          Back to Dashboard
+        </a>
+        <h1 class="guide-title" id="guideTitle"></h1>
+        <div class="guide-meta" id="guideMeta"></div>
+        <div id="guideSubList"></div>
+        <div id="guideBody" class="guide-body"></div>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    // Theme toggle
+    (function() {
+      const toggle = document.getElementById('themeToggle');
+      if (toggle) {
+        toggle.addEventListener('click', function() {
+          const current = document.documentElement.getAttribute('data-theme');
+          if (current === 'light') {
+            document.documentElement.removeAttribute('data-theme');
+            localStorage.setItem('soldi_theme', 'dark');
+          } else {
+            document.documentElement.setAttribute('data-theme', 'light');
+            localStorage.setItem('soldi_theme', 'light');
+          }
+        });
+      }
+    })();
+
+    function escapeHtml(text) {
+      var div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    (async function() {
+      const params = new URLSearchParams(window.location.search);
+      const guideId = params.get('id');
+
+      if (!guideId) {
+        document.getElementById('guideLoading').style.display = 'none';
+        document.getElementById('guideError').style.display = 'block';
+        return;
+      }
+
+      const token = localStorage.getItem('soldi_token');
+      if (!token) {
+        document.getElementById('guideLoading').style.display = 'none';
+        document.getElementById('guideError').style.display = 'block';
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/guides/' + encodeURIComponent(guideId), {
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+
+        if (!res.ok) {
+          throw new Error('Failed to load guide');
+        }
+
+        const data = await res.json();
+
+        document.getElementById('guideLoading').style.display = 'none';
+        document.getElementById('guideContent').style.display = 'block';
+
+        document.title = data.title + ' - Soldi';
+        document.getElementById('guideTitle').textContent = data.title;
+
+        if (data.fetchedAt) {
+          var d = new Date(data.fetchedAt);
+          document.getElementById('guideMeta').textContent = 'Last updated: ' + d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        }
+
+        // Render sub-guides list if present
+        if (data.subGuides && data.subGuides.length > 0) {
+          var listHtml = '<ul class="guide-sub-list">';
+          data.subGuides.forEach(function(sub, i) {
+            listHtml += '<a href="/guide.html?id=' + encodeURIComponent(sub.slug) + '" class="guide-sub-item">';
+            listHtml += '<div style="display:flex;align-items:center;">';
+            listHtml += '<span class="sub-num">' + (i + 1) + '.</span>';
+            listHtml += '<span class="sub-title">' + escapeHtml(sub.title) + '</span>';
+            listHtml += '</div>';
+            listHtml += '<span class="sub-arrow">&#8594;</span>';
+            listHtml += '</a>';
+          });
+          listHtml += '</ul>';
+          document.getElementById('guideSubList').innerHTML = listHtml;
+        }
+
+        // Render main guide HTML content
+        if (data.html) {
+          document.getElementById('guideBody').innerHTML = data.html;
+        }
+
+      } catch (err) {
+        console.error('Guide load error:', err);
+        document.getElementById('guideLoading').style.display = 'none';
+        document.getElementById('guideError').querySelector('h2').textContent = 'Guide Not Found';
+        document.getElementById('guideError').querySelector('p').textContent = 'This guide could not be loaded. It may still be syncing — please try again in a few minutes.';
+        document.getElementById('guideError').style.display = 'block';
+      }
+    })();
+  </script>
+
+</body>
+</html>

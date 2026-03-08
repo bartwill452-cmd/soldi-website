@@ -1414,3 +1414,30 @@ button { cursor: pointer; font-family: inherit; }
   background: #dc2626;
   transform: translateY(-1px);
 }
+
+/* ===== WRITTEN GUIDES CARDS ===== */
+.dash-section-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+.dash-section-header h3 {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-heading);
+  margin: 0;
+}
+.dash-card-guide {
+  border-color: rgba(245, 158, 11, 0.15);
+  background: rgba(245, 158, 11, 0.03);
+}
+.dash-card-guide:hover {
+  border-color: rgba(245, 158, 11, 0.3);
+}
+.dash-card-guide .dash-link {
+  color: #f59e0b;
+}
+.dash-card-guide .dash-link:hover {
+  border-color: rgba(245, 158, 11, 0.3);
+}
