@@ -186,6 +186,25 @@ async def lifespan(app: FastAPI):
         hardrock = HardRockBetSource()
         sources.append(hardrock)
 
+    # --- HTTP-only wrappers for scrapers that CAN run without Playwright ---
+    # These are initialized in HTTP-only mode (no Chromium browser) when
+    # the Playwright version is disabled.  They use direct API calls instead.
+
+    if not is_enabled("caesars"):
+        # Caesars Playwright is disabled; try HTTP-only API mode instead
+        if "caesars_http" not in disabled:
+            logger.info("Initializing Caesars scraper (HTTP-only mode)")
+            caesars_http = CaesarsSource(http_only=True)
+            sources.append(caesars_http)
+            caesars_http.start_prefetch()
+
+    if not is_enabled("buckeye"):
+        # Buckeye Playwright is disabled; try direct httpx auth instead
+        if "buckeye_http" not in disabled:
+            logger.info("Initializing Buckeye scraper (HTTP-only mode)")
+            buckeye_http = BuckeyeSource(http_only=True)
+            sources.append(buckeye_http)
+
     # --- Playwright-based scrapers (require Chromium, ~150-300MB RAM each) ---
 
     betonline = None

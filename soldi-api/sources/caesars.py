@@ -100,9 +100,10 @@ def _decimal_to_american(decimal_odds: float) -> Optional[int]:
 
 
 class CaesarsSource(DataSource):
-    """Fetches odds from Caesars via Playwright passive capture."""
+    """Fetches odds from Caesars via direct HTTP API or Playwright passive capture."""
 
-    def __init__(self):
+    def __init__(self, http_only: bool = False):
+        self._http_only = http_only
         self._browser = None  # type: Any
         self._context = None  # type: Any
         self._page = None  # type: Any
@@ -156,8 +157,8 @@ class CaesarsSource(DataSource):
                                 self._direct_api_works = True
                                 logger.info("Caesars: Direct API works, skipping Playwright")
 
-                    # Fallback to Playwright capture
-                    if not events:
+                    # Fallback to Playwright capture (skipped in http_only mode)
+                    if not events and not self._http_only:
                         if self._direct_api_works is None or self._direct_api_works is True:
                             self._direct_api_works = False
                             self._direct_api_failed_at = time.time()

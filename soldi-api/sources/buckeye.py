@@ -208,9 +208,13 @@ class BuckeyeSource(DataSource):
     Uses Playwright to obtain Cloudflare clearance cookies, then
     authenticates via the DGS API to get a JWT token. Subsequent
     API calls use httpx with those cookies and the JWT.
+
+    In http_only mode, skips Playwright entirely and tries direct
+    httpx authentication (works if Cloudflare doesn't block the IP).
     """
 
-    def __init__(self, username: str = "xl37", password: str = "test"):
+    def __init__(self, username: str = "xl37", password: str = "test", http_only: bool = False):
+        self._http_only = http_only
         self._username = username.upper()
         self._password = password.upper()
         self._jwt_code = None  # type: Optional[str]
@@ -326,6 +330,67 @@ class BuckeyeSource(DataSource):
             logger.warning("Buckeye: Cloudflare bypass failed: %s", e)
             return False
 
+    async def _authenticate_direct(self) -> bool:
+        """Authenticate via httpx without Playwright/Cloudflare cookies.
+
+        Works when the API isn't behind aggressive Cloudflare protection
+        (e.g. from US-based cloud IPs). Used in http_only mode.
+        """
+        try:
+            client = httpx.AsyncClient(
+                timeout=20.0,
+                headers={
+                    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                                  "AppleWebKit/537.36 (KHTML, like Gecko) "
+                                  "Chrome/120.0.0.0 Safari/537.36",
+                    "Accept": "application/json",
+                    "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+                    "X-Requested-With": "XMLHttpRequest",
+                    "Origin": SITE_URL,
+                    "Referer": SITE_URL + "/",
+                },
+            )
+            resp = await client.post(
+                API_BASE + "/System/authenticateCustomer",
+                data={
+                    "customerID": self._username,
+                    "password": self._password,
+                    "state": "true",
+                    "response_type": "code",
+                    "client_id": self._username,
+                    "domain": "demotest.me",
+                    "redirect_uri": "demotest.me",
+                    "operation": "authenticateCustomer",
+                    "RRO": "1",
+                },
+                headers={"Authorization": "Bearer "},
+            )
+
+            if resp.status_code == 403:
+                logger.warning("Buckeye: Direct auth blocked by Cloudflare (403)")
+                await client.aclose()
+                return False
+
+            resp.raise_for_status()
+            data = resp.json()
+            self._jwt_code = data.get("code", "")
+            account_info = data.get("accountInfo", {})
+            self._customer_id = (account_info.get("customerID") or "").strip()
+            self._jwt_expires = time.time() + 1200
+            self._cf_cookies_expires = time.time() + 3600  # no CF cookies needed
+
+            if self._client:
+                await self._client.aclose()
+            self._client = client
+            self._client.headers["Authorization"] = "Bearer %s" % self._jwt_code
+            self._init_done = True
+            logger.info("Buckeye: Direct HTTP auth succeeded as %s", self._customer_id)
+            return True
+
+        except Exception as e:
+            logger.warning("Buckeye: Direct HTTP auth failed: %s", e)
+            return False
+
     async def _ensure_auth(self) -> bool:
         """Ensure we have valid cookies and JWT.
 
@@ -338,10 +403,14 @@ class BuckeyeSource(DataSource):
 
             # Need new CF cookies (or first time)
             if not self._init_done or now >= self._cf_cookies_expires:
+                if self._http_only:
+                    return await self._authenticate_direct()
                 return await self._get_cloudflare_cookies()
 
             # Need new JWT (CF cookies still valid)
             if not self._jwt_code or now >= self._jwt_expires:
+                if self._http_only:
+                    return await self._authenticate_direct()
                 return await self._refresh_jwt()
 
             return True
