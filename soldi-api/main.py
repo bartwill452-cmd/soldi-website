@@ -205,6 +205,14 @@ async def lifespan(app: FastAPI):
             buckeye_http = BuckeyeSource(http_only=True)
             sources.append(buckeye_http)
 
+    if not is_enabled("betonline"):
+        # BetOnline Playwright is disabled; try direct HTTP API instead
+        if "betonline_http" not in disabled:
+            logger.info("Initializing BetOnline scraper (HTTP-only mode)")
+            betonline_http = BetOnlineSource(http_only=True)
+            sources.append(betonline_http)
+            betonline_http.start_prefetch()
+
     # --- Playwright-based scrapers (require Chromium, ~150-300MB RAM each) ---
 
     betonline = None

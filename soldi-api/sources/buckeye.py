@@ -363,7 +363,6 @@ class BuckeyeSource(DataSource):
                     "operation": "authenticateCustomer",
                     "RRO": "1",
                 },
-                headers={"Authorization": "Bearer "},
             )
 
             if resp.status_code == 403:

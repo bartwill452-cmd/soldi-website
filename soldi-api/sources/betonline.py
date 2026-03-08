@@ -19,6 +19,8 @@ import time
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 
+import httpx
+
 from models import Bookmaker, Market, OddsEvent, Outcome, PlayerProp
 from sources.base import DataSource
 from sources.sport_mapping import canonical_event_id, get_sport_title, resolve_team_name
@@ -94,9 +96,13 @@ class BetOnlineSource(DataSource):
     Uses Playwright only to establish a browser session (CF cookies).
     All data fetching is done via page.evaluate(fetch(...)), which avoids
     the page navigation issues that caused 0 events in multi-browser contexts.
+
+    In http_only mode, skips Playwright entirely and tries direct httpx
+    POST requests to the BetOnline offering API.
     """
 
-    def __init__(self):
+    def __init__(self, http_only: bool = False):
+        self._http_only = http_only
         self._browser = None  # type: ignore
         self._context = None  # type: ignore
         self._page = None  # type: ignore
@@ -109,10 +115,132 @@ class BetOnlineSource(DataSource):
         self._prefetch_task = None  # type: ignore
         # Track consecutive zero-event cycles for browser health detection
         self._consecutive_zero_cycles: int = 0
+        # HTTP client for http_only mode
+        self._http_client: Optional[httpx.AsyncClient] = None
 
     def start_prefetch(self) -> None:
         """Start background prefetch of all supported sports (call after event loop is running)."""
-        self._prefetch_task = asyncio.ensure_future(self._prefetch_all())
+        if self._http_only:
+            self._prefetch_task = asyncio.ensure_future(self._prefetch_all_http())
+        else:
+            self._prefetch_task = asyncio.ensure_future(self._prefetch_all())
+
+    # ------------------------------------------------------------------
+    # HTTP-only mode: direct httpx calls (no Playwright)
+    # ------------------------------------------------------------------
+
+    async def _ensure_http_client(self) -> None:
+        """Create httpx client for direct API calls."""
+        if self._http_client is not None:
+            return
+        self._http_client = httpx.AsyncClient(
+            timeout=20.0,
+            headers={
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                              "AppleWebKit/537.36 (KHTML, like Gecko) "
+                              "Chrome/131.0.0.0 Safari/537.36",
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+                "gsetting": "bolsassite",
+                "utc-offset": "300",
+                "Origin": SITE_URL,
+                "Referer": SITE_URL + "/sportsbook/basketball/nba",
+            },
+        )
+
+    async def _api_call_http(
+        self, sport: str, league: str, period: Optional[int] = None
+    ) -> Optional[dict]:
+        """Make a direct HTTP POST to the BetOnline offering API."""
+        await self._ensure_http_client()
+        try:
+            body = {"Sport": sport, "League": league, "ScheduleText": None, "filterTime": 0}
+            if period is not None:
+                body["Period"] = period
+
+            resp = await self._http_client.post(API_URL, json=body)
+            if resp.status_code == 403:
+                logger.warning("BetOnline HTTP: 403 Cloudflare block for %s/%s", sport, league)
+                return None
+            if resp.status_code != 200:
+                logger.info("BetOnline HTTP: %d for %s/%s", resp.status_code, sport, league)
+                return None
+
+            data = resp.json()
+            if not isinstance(data, dict):
+                return None
+            return data
+        except Exception as e:
+            logger.warning("BetOnline HTTP: API call error for %s/%s: %s", sport, league, e)
+            return None
+
+    async def _fetch_sport_http(self, sport_key: str, sport: str, league: str) -> List[OddsEvent]:
+        """Fetch odds for one sport via direct HTTP."""
+        full_game_data = await self._api_call_http(sport, league)
+        if full_game_data is None:
+            return []
+
+        events = self._parse_offering(full_game_data, sport_key)
+
+        # Fetch period markets for applicable sports
+        if sport_key in _PERIOD_SPORTS and events:
+            if sport_key.startswith("basketball") or sport_key.startswith("americanfootball"):
+                h1_data = await self._api_call_http(sport, league, period=1)
+                if h1_data:
+                    h1_events = self._parse_offering(h1_data, sport_key, period_suffix="_h1")
+                    self._merge_period_markets(events, h1_events)
+
+                q1_data = await self._api_call_http(sport, league, period=3)
+                if q1_data:
+                    q1_events = self._parse_offering(q1_data, sport_key, period_suffix="_q1")
+                    self._merge_period_markets(events, q1_events)
+
+            if sport_key == "icehockey_nhl":
+                p1_data = await self._api_call_http(sport, league, period=1)
+                if p1_data:
+                    p1_events = self._parse_offering(p1_data, sport_key, period_suffix="_p1")
+                    self._merge_period_markets(events, p1_events)
+
+            if sport_key == "baseball_mlb":
+                i1_data = await self._api_call_http(sport, league, period=1)
+                if i1_data:
+                    i1_events = self._parse_offering(i1_data, sport_key, period_suffix="_i1")
+                    self._merge_period_markets(events, i1_events)
+                f5_data = await self._api_call_http(sport, league, period=3)
+                if f5_data:
+                    f5_events = self._parse_offering(f5_data, sport_key, period_suffix="_f5")
+                    self._merge_period_markets(events, f5_events)
+
+        return events
+
+    async def _prefetch_all_http(self) -> None:
+        """Background HTTP-only prefetch loop."""
+        await asyncio.sleep(5)
+        logger.info("BetOnline: Starting HTTP-only background prefetch")
+        cycle = 0
+        while True:
+            cycle += 1
+            cycle_total = 0
+            for sport_key, (sport, league) in BETONLINE_API_PARAMS.items():
+                try:
+                    events = await self._fetch_sport_http(sport_key, sport, league)
+                    if events:
+                        self._cache[sport_key] = (events, time.time())
+                        cycle_total += len(events)
+                    logger.info("BetOnline HTTP prefetch: %d events for %s", len(events), sport_key)
+                except Exception as e:
+                    logger.warning("BetOnline HTTP prefetch failed for %s: %s", sport_key, e)
+                await asyncio.sleep(0.5)
+
+            logger.info(
+                "BetOnline HTTP: Prefetch cycle #%d complete (%d total events)", cycle, cycle_total,
+            )
+
+            # If 403 blocked, slow down retries
+            if cycle_total == 0:
+                await asyncio.sleep(120)
+            else:
+                await asyncio.sleep(15)
 
     async def _prefetch_all(self) -> None:
         """Background task: continuously warm up cache for all supported sports."""

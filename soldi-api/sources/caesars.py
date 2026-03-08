@@ -62,7 +62,10 @@ _CZR_SPORT_URLS = {
 _CZR_ALT_STATES = ["az", "co", "il", "in", "oh", "pa", "va"]
 
 # ── Direct API config ────────────────────────────────────────────────
-_API_BASE = "https://api.americanwagering.com/regions/us/locations/nj/brands/czr/sb/v3"
+# Try multiple state locations — some may work from cloud IPs while others geo-block
+_API_BASE_TEMPLATE = "https://api.americanwagering.com/regions/us/locations/{state}/brands/czr/sb/v3"
+_API_STATES = ["nj", "az", "co", "oh", "va", "il", "in", "pa"]
+_API_BASE = _API_BASE_TEMPLATE.format(state="nj")  # default
 
 # Sport slugs for direct API calls (if available)
 _CZR_SPORT_SLUGS = {
@@ -252,26 +255,52 @@ class CaesarsSource(DataSource):
     # ── Direct API Fetching ───────────────────────────────────────────
 
     async def _fetch_direct_api(self, sport_key: str) -> List[OddsEvent]:
-        """Try to fetch events directly from api.americanwagering.com."""
+        """Try to fetch events directly from api.americanwagering.com.
+
+        Tries multiple US state API endpoints since some may work from cloud
+        IPs while others are geo-restricted.  Once a working state is found,
+        it's cached for future calls.
+        """
         slug = _CZR_SPORT_SLUGS.get(sport_key)
         if not slug:
             return []
 
-        try:
-            # Try the events listing endpoint
-            url = f"{_API_BASE}/{slug}/events"
-            response = await self._http_client.get(url)
-            if response.status_code != 200:
-                return []
+        # If we already know which state works, try it first
+        states_to_try = list(_API_STATES)
+        if hasattr(self, "_working_state") and self._working_state:
+            states_to_try = [self._working_state] + [
+                s for s in _API_STATES if s != self._working_state
+            ]
 
-            data = response.json()
-            if not isinstance(data, (list, dict)):
-                return []
+        for state in states_to_try:
+            try:
+                api_base = _API_BASE_TEMPLATE.format(state=state)
+                url = f"{api_base}/{slug}/events"
+                response = await self._http_client.get(url)
+                if response.status_code != 200:
+                    continue  # Try next state
 
-            return self._parse_api_response(data, sport_key)
-        except Exception as e:
-            logger.debug("Caesars direct API failed: %s", e)
-            return []
+                data = response.json()
+                if not isinstance(data, (list, dict)):
+                    continue
+
+                events = self._parse_api_response(data, sport_key)
+                if events:
+                    if not hasattr(self, "_working_state") or self._working_state != state:
+                        self._working_state = state
+                        logger.info(
+                            "Caesars: State '%s' API works! %d events for %s",
+                            state, len(events), sport_key,
+                        )
+                    return events
+            except Exception:
+                continue
+
+        # All states failed
+        if not hasattr(self, "_logged_all_states_failed"):
+            self._logged_all_states_failed = True
+            logger.warning("Caesars: All %d state APIs failed (geo-restricted)", len(_API_STATES))
+        return []
 
     # ── Playwright Fetching ───────────────────────────────────────────
 
