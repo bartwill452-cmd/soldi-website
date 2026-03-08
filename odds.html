@@ -729,38 +729,34 @@ function renderMarketTabs() {
 
 // ── Main Line Detection ──
 // For spreads/totals, books can return alternate lines (e.g. +1.5, +3.5, +5.5).
-// We determine the "consensus main line" across all books and show only that.
-let _consensusPointCache = {}; // cacheKey → point
+// We determine the "consensus main line" per event across all books and show only that.
 
-function computeConsensusPoint(events, marketKey, side) {
+function computeConsensusPointForEvent(event, marketKey, side) {
   // side: 'home'|'away' for spreads, 'over'|'under' for totals
-  const cacheKey = marketKey + '|' + side;
-  if (_consensusPointCache[cacheKey] !== undefined) return _consensusPointCache[cacheKey];
-
+  // Counts point values across all bookmakers for THIS event only
   const pointCounts = {}; // point → count
-  for (const event of events) {
-    for (const bm of event.bookmakers) {
-      const market = bm.markets?.[marketKey];
-      if (!market || !market.outcomes) continue;
-      let matchName;
-      if (side === 'home') matchName = event.homeTeam;
-      else if (side === 'away') matchName = event.awayTeam;
-      else if (side === 'over') matchName = 'Over';
-      else matchName = 'Under';
-      // Find ALL outcomes matching this name (may include alternates)
-      const matches = market.outcomes.filter(o => o.name === matchName && o.point != null);
-      if (matches.length === 1) {
-        const p = matches[0].point;
-        pointCounts[p] = (pointCounts[p] || 0) + 1;
-      }
+  let matchName;
+  if (side === 'home') matchName = event.homeTeam;
+  else if (side === 'away') matchName = event.awayTeam;
+  else if (side === 'over') matchName = 'Over';
+  else matchName = 'Under';
+
+  for (const bm of event.bookmakers) {
+    const market = bm.markets?.[marketKey];
+    if (!market || !market.outcomes) continue;
+    // Find ALL outcomes matching this name (may include alternates)
+    const matches = market.outcomes.filter(o => o.name === matchName && o.point != null);
+    if (matches.length === 1) {
+      // Book only has one line → it's their main line, counts toward consensus
+      const p = matches[0].point;
+      pointCounts[p] = (pointCounts[p] || 0) + 1;
     }
   }
-  // Most common point is the main line
+  // Most common point across books for THIS event is the main line
   let bestPoint = null, bestCount = 0;
   for (const [p, c] of Object.entries(pointCounts)) {
     if (c > bestCount) { bestCount = c; bestPoint = parseFloat(p); }
   }
-  _consensusPointCache[cacheKey] = bestPoint;
   return bestPoint;
 }
 
@@ -784,28 +780,28 @@ function getMarketDataForBook(bm, marketKey, event) {
       draw: draw || null
     };
   }
-  // Spread-type markets — pick outcome closest to consensus main line
+  // Spread-type markets — pick outcome closest to consensus main line for THIS event
   if (marketKey.startsWith('spreads')) {
-    const home = _pickMainLineOutcome(market.outcomes, event.homeTeam, marketKey, 'home');
-    const away = _pickMainLineOutcome(market.outcomes, event.awayTeam, marketKey, 'away');
+    const home = _pickMainLineOutcome(market.outcomes, event.homeTeam, marketKey, 'home', event);
+    const away = _pickMainLineOutcome(market.outcomes, event.awayTeam, marketKey, 'away', event);
     return { type: 'spread', home: home || null, away: away || null };
   }
-  // Total-type markets — pick outcome closest to consensus main line
+  // Total-type markets — pick outcome closest to consensus main line for THIS event
   if (marketKey.startsWith('total') || marketKey.startsWith('team_total')) {
-    const over = _pickMainLineOutcome(market.outcomes, 'Over', marketKey, 'over');
-    const under = _pickMainLineOutcome(market.outcomes, 'Under', marketKey, 'under');
+    const over = _pickMainLineOutcome(market.outcomes, 'Over', marketKey, 'over', event);
+    const under = _pickMainLineOutcome(market.outcomes, 'Under', marketKey, 'under', event);
     return { type: 'total', over: over || null, under: under || null };
   }
   return null;
 }
 
-// Pick the outcome matching `name` that is closest to the consensus point
-function _pickMainLineOutcome(outcomes, name, marketKey, side) {
+// Pick the outcome matching `name` that is closest to the consensus point for this event
+function _pickMainLineOutcome(outcomes, name, marketKey, side, event) {
   const matches = outcomes.filter(o => o.name === name);
   if (matches.length === 0) return null;
   if (matches.length === 1) return matches[0];
-  // Multiple alternates — pick closest to consensus
-  const consensus = computeConsensusPoint(oddsData, marketKey, side);
+  // Multiple alternates — pick closest to per-event consensus
+  const consensus = computeConsensusPointForEvent(event, marketKey, side);
   if (consensus == null) return matches[0]; // fallback to first
   let best = matches[0], bestDist = Infinity;
   for (const m of matches) {
@@ -985,7 +981,7 @@ function getRowLabel(side, event, marketKey) {
 }
 
 function renderOddsScreen() {
-  _consensusPointCache = {}; // clear consensus cache for fresh data
+  // Per-event consensus is now computed on-the-fly (no global cache needed)
   const container = document.getElementById('oddsContent');
   const searchTerm = (document.getElementById('teamSearch')?.value || '').toLowerCase();
 
