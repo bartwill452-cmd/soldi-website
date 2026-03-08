@@ -103,11 +103,16 @@ def _is_prop_or_summary_event(event: OddsEvent) -> bool:
     an aggregated summary row (e.g. 'Away Teams (5 Games) @ Home Teams (5 Games)').
     """
     combined = event.home_team + " " + event.away_team
+    lower = combined.lower()
     # Prop-market events have suffixes like "(Corners)", "(Bookings)"
-    if "(corners)" in combined.lower() or "(bookings)" in combined.lower():
+    if "(corners)" in lower or "(bookings)" in lower:
         return True
     # Aggregated summary rows from some scrapers
-    if "away teams" in combined.lower() and "home teams" in combined.lower():
+    # e.g. "Away Teams (5 Games) @ Home Teams (5 Games)"
+    # e.g. "Away Goals (11 Games) @ Home Goals (11 Games)"
+    if re.search(r"\(\d+\s*games?\)", lower):
+        return True
+    if "away teams" in lower and "home teams" in lower:
         return True
     return False
 
@@ -116,6 +121,35 @@ def _is_futures_event(event: OddsEvent) -> bool:
     """Return True if the event looks like a futures/championship market."""
     combined = (event.home_team + " " + event.away_team).lower()
     return any(kw in combined for kw in _FUTURES_KEYWORDS)
+
+
+# Known college / non-pro team keywords that sometimes leak into pro feeds
+# (e.g. BetRivers lists college hockey under NHL, DraftKings mixes feeds)
+_COLLEGE_TEAM_KEYWORDS = frozenset([
+    "boston college", "boston university", "notre dame", "michigan state",
+    "michigan", "minnesota duluth", "denver pioneers", "north dakota",
+    "wisconsin", "cornell", "harvard", "yale", "providence", "umass",
+    "quinnipiac", "northeastern", "ohio state", "penn state", "clarkson",
+    "minnesota state", "st. cloud state", "western michigan", "bemidji",
+])
+
+# Sports where college teams should NOT appear
+_PRO_ONLY_SPORTS = frozenset([
+    "icehockey_nhl", "basketball_nba", "baseball_mlb",
+])
+
+
+def _is_college_in_pro_feed(event: OddsEvent) -> bool:
+    """Return True if a college team is appearing in a professional sport feed."""
+    # Determine sport from sport_key or event ID prefix
+    sport = getattr(event, 'sport_key', '') or ''
+    if not sport:
+        eid = event.id or ""
+        sport = eid.split(":")[0] if ":" in eid else ""
+    if sport not in _PRO_ONLY_SPORTS:
+        return False
+    combined = (event.home_team + " " + event.away_team).lower()
+    return any(kw in combined for kw in _COLLEGE_TEAM_KEYWORDS)
 
 
 def _is_stale_event(event: OddsEvent, max_age_hours: int = 12) -> bool:
@@ -132,6 +166,32 @@ def _is_stale_event(event: OddsEvent, max_age_hours: int = 12) -> bool:
                 dt = dt.replace(tzinfo=timezone.utc)
         cutoff = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
         return dt < cutoff
+    except Exception:
+        return False
+
+
+def _is_live_event(event: OddsEvent) -> bool:
+    """Return True if the event has likely started (commence_time is in the past).
+
+    We consider an event "live" if its start time is more than 5 minutes in the
+    past.  The 5-minute grace period prevents filtering out games that are about
+    to start but haven't actually begun yet (clock skew, delayed tips, etc.).
+    """
+    try:
+        ct = event.commence_time
+        if not ct:
+            return False
+        ct = _truncate_fractional_seconds(ct)
+        if ct.endswith("Z"):
+            dt = datetime.fromisoformat(ct.replace("Z", "+00:00"))
+        elif "+" in ct[10:] or ct.count("-") > 2:
+            dt = datetime.fromisoformat(ct)
+        else:
+            dt = datetime.fromisoformat(ct)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+        # 5-minute grace period
+        return dt < datetime.now(timezone.utc) - timedelta(minutes=5)
     except Exception:
         return False
 
@@ -628,17 +688,17 @@ class CompositeSource(DataSource):
                     source.get_odds(
                         sport_key, regions, markets, bookmakers, odds_format
                     ),
-                    timeout=12.0,
+                    timeout=45.0,
                 )
                 return result
             except asyncio.TimeoutError:
-                logger.warning(f"Source {name} timed out for {sport_key} (12s)")
+                logger.warning(f"Source {name} timed out for {sport_key} (45s)")
                 return None
             except Exception as e:
                 logger.warning(f"Source {name} failed for {sport_key}: {type(e).__name__}: {e}")
                 return None
 
-        # Fetch all sources in parallel (each with 12s timeout)
+        # Fetch all sources in parallel (each with 45s timeout)
         results = await asyncio.gather(
             *[_fetch_source(s) for s in self._sources],
             return_exceptions=False,
@@ -680,16 +740,28 @@ class CompositeSource(DataSource):
         # Fuzzy merge: consolidate events with similar team names on same date
         all_events = _fuzzy_merge_by_team_name(all_events)
 
-        # Filter out completed events (status="post"), futures, stale, women's games,
-        # prop-market events (Corners/Bookings), and aggregated summary rows
-        result = [
-            ev for ev in all_events.values()
-            if not (ev.score_data and ev.score_data.status == "post")
-            and not _is_futures_event(ev)
-            and not _is_stale_event(ev)
-            and not _is_womens_event(ev)
-            and not _is_prop_or_summary_event(ev)
-        ]
+        # Filter out completed events (status="post"), live/in-play events (status="in"),
+        # futures, stale, women's games, prop-market events, and summary rows.
+        # We only want pre-game odds.
+        result = []
+        for ev in all_events.values():
+            if ev.score_data and ev.score_data.status == "post":
+                continue
+            if ev.score_data and ev.score_data.status == "in":
+                continue
+            if _is_live_event(ev):
+                continue
+            if _is_futures_event(ev):
+                continue
+            if _is_stale_event(ev):
+                continue
+            if _is_womens_event(ev):
+                continue
+            if _is_prop_or_summary_event(ev):
+                continue
+            if _is_college_in_pro_feed(ev):
+                continue
+            result.append(ev)
 
         # Normalize display names through alias resolution
         _normalize_display_names(result)

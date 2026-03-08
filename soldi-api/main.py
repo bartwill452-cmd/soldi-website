@@ -15,11 +15,10 @@ from cache import TTLCache
 from config import Settings
 from sources import (
     Bet105Source,
-    BetMGMSource,
     BetOnlineSource,
     BetRiversSource,
+    BetUSSource,
     BookmakerSource,
-    BovadaSource,
     BuckeyeSource,
     CaesarsSource,
     CompositeSource,
@@ -30,10 +29,7 @@ from sources import (
     KalshiSource,
     NovigSource,
     PinnacleSource,
-    PolymarketSource,
     ProphetXSource,
-    TheOddsAPISource,
-    XBetSource,
 )
 from sources.sport_mapping import resolve_team_name, canonical_event_id
 
@@ -59,38 +55,26 @@ _ACTIVE_SPORTS: List[str] = [
     "basketball_ncaab",
     "icehockey_nhl",
     "baseball_mlb",
-    "americanfootball_nfl",
-    "americanfootball_ncaaf",
-    "soccer_epl",
-    "soccer_spain_la_liga",
-    "soccer_germany_bundesliga",
-    "soccer_italy_serie_a",
-    "soccer_france_ligue_one",
-    "soccer_usa_mls",
-    "soccer_uefa_champs_league",
-    "tennis_atp",
-    "tennis_wta",
     "mma_mixed_martial_arts",
-    "boxing_boxing",
 ]
 
 # Pause (seconds) AFTER each refresh cycle completes before starting the next.
-# Kept short (5s) so odds update within ~10-15s.  Individual per-source caches
-# (ProphetX 10s, Novig 10s) handle their own rate-limiting internally.
-_REFRESH_PAUSE = 5
+# Set to 0 for continuous refresh — new cycle starts immediately after previous
+# one finishes.  Individual per-source caches handle their own rate-limiting.
+_REFRESH_PAUSE = 0
 
 
 
 async def _background_refresh_loop() -> None:
     """Continuously refresh odds for ALL active sports in parallel.
 
-    All 17 sports run concurrently.  Each sport has a 15s timeout.
+    All sports run concurrently.  Each sport has a 15s timeout.
     Playwright sources serve from prefetch cache (~0ms).
     HTTP sources hit APIs directly (~0.2-9s depending on source).
-    With 5s pause between cycles, the cache updates every ~15-20s.
+    With 0s pause, a new cycle starts immediately — updates every ~5-10s.
     """
-    # Short initial delay — Playwright sources need a few seconds to warm up
-    await asyncio.sleep(5)
+    # Short initial delay — Playwright sources need a moment to warm up
+    await asyncio.sleep(2)
     logger.info(
         "Background refresh loop started — %d sports, ALL concurrent",
         len(_ACTIVE_SPORTS),
@@ -103,11 +87,11 @@ async def _background_refresh_loop() -> None:
         async def _refresh_with_timeout(sport_key: str) -> bool:
             try:
                 await asyncio.wait_for(
-                    _refresh_one_sport(sport_key), timeout=15.0,
+                    _refresh_one_sport(sport_key), timeout=60.0,
                 )
                 return True
             except asyncio.TimeoutError:
-                logger.warning("Refresh %s timed out (15s)", sport_key)
+                logger.warning("Refresh %s timed out (60s)", sport_key)
                 return False
             except Exception as exc:
                 logger.warning("Refresh %s error: %s", sport_key, exc)
@@ -181,10 +165,6 @@ async def lifespan(app: FastAPI):
         logger.info("Initializing Pinnacle scraper")
         sources.append(PinnacleSource())
 
-    if is_enabled("bovada"):
-        logger.info("Initializing Bovada scraper")
-        sources.append(BovadaSource())
-
     if is_enabled("betrivers"):
         logger.info("Initializing BetRivers (Kambi) scraper")
         sources.append(BetRiversSource())
@@ -192,10 +172,6 @@ async def lifespan(app: FastAPI):
     if is_enabled("kalshi"):
         logger.info("Initializing Kalshi prediction market")
         sources.append(KalshiSource())
-
-    if is_enabled("polymarket"):
-        logger.info("Initializing Polymarket prediction market")
-        sources.append(PolymarketSource())
 
     if is_enabled("prophetx"):
         logger.info("Initializing ProphetX exchange scraper")
@@ -224,23 +200,11 @@ async def lifespan(app: FastAPI):
         bet105 = Bet105Source()
         sources.append(bet105)
 
-    xbet = None
-    if is_enabled("xbet"):
-        logger.info("Initializing XBet scraper")
-        xbet = XBetSource()
-        sources.append(xbet)
-
     dk = None
     if is_enabled("draftkings"):
         logger.info("Initializing DraftKings scraper (Playwright)")
         dk = DraftKingsSource()
         sources.append(dk)
-
-    betmgm = None
-    if is_enabled("betmgm"):
-        logger.info("Initializing BetMGM scraper (Playwright)")
-        betmgm = BetMGMSource()
-        sources.append(betmgm)
 
     caesars = None
     if is_enabled("caesars"):
@@ -253,6 +217,12 @@ async def lifespan(app: FastAPI):
         logger.info("Initializing Buckeye scraper")
         buckeye = BuckeyeSource()
         sources.append(buckeye)
+
+    betus = None
+    if is_enabled("betus"):
+        logger.info("Initializing BetUS scraper (Playwright)")
+        betus = BetUSSource()
+        sources.append(betus)
 
     # Bookmaker.eu (requires login credentials + Playwright)
     bookmaker = None
@@ -268,15 +238,6 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("Bookmaker.eu: No credentials configured, skipping")
 
-    # Paid fallback (optional, for remaining sportsbooks)
-    if settings.odds_api_key:
-        logger.info("Initializing The Odds API source")
-        odds_api = TheOddsAPISource(
-            api_key=settings.odds_api_key,
-            base_url=settings.odds_api_base_url,
-        )
-        sources.append(odds_api)
-
     data_source = CompositeSource(sources)
     source_count = len(sources)
     logger.info(f"SoldiAPI started with {source_count} data source(s)")
@@ -284,18 +245,16 @@ async def lifespan(app: FastAPI):
     # Start Playwright background prefetch tasks (only for enabled sources)
     if betonline is not None:
         betonline.start_prefetch()
-    if xbet is not None:
-        xbet.start_prefetch()
     if bet105 is not None:
         bet105.start_prefetch()
     if dk is not None:
         dk.start_prefetch()
-    if betmgm is not None:
-        betmgm.start_prefetch()
     if caesars is not None:
         caesars.start_prefetch()
     if bookmaker is not None:
         bookmaker.start_prefetch()
+    if betus is not None:
+        betus.start_prefetch()
 
     # Initialize line history database
     line_history.init_db(settings.line_history_db)
@@ -317,7 +276,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="SoldiAPI",
-    version="1.0.0",
+    version="2.0.0",
     description="Odds aggregation API for SoldiOdds",
     lifespan=lifespan,
 )
@@ -365,7 +324,7 @@ async def get_odds(
         )
         return response
 
-    # Cache miss — return empty instead of blocking on a full 18-source fetch.
+    # Cache miss — return empty instead of blocking on a full source fetch.
     # The background refresh loop will populate the cache shortly.
     logger.info(f"Cache miss for {sport_key} — returning empty (warming up)")
     return JSONResponse(content=[])
@@ -426,7 +385,7 @@ app.include_router(router)
 async def health():
     return {
         "status": "ok",
-        "version": "1.0.0",
+        "version": "2.0.0",
         "sources": source_count if data_source else 0,
         "cache": cache.stats(),
     }

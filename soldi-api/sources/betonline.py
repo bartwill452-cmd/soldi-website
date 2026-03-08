@@ -36,7 +36,7 @@ BETONLINE_API_PARAMS: Dict[str, Tuple[str, str]] = {
     "baseball_mlb": ("baseball", "mlb"),
     "basketball_ncaab": ("basketball", "ncaa"),
     "americanfootball_ncaaf": ("football", "ncaa"),
-    "mma_mixed_martial_arts": ("martial-arts", "ufc"),
+    "mma_mixed_martial_arts": ("martial-arts", "mma"),
     "boxing_boxing": ("boxing", "boxing"),
     "soccer_epl": ("soccer", "epl"),
     "soccer_spain_la_liga": ("soccer", "la-liga"),
@@ -80,11 +80,11 @@ _FUTURES_KEYWORDS = frozenset([
 # Cache TTL: avoid fetching the same sport too often (seconds)
 _CACHE_TTL = 45  # seconds — prefetch loop keeps cache warm every ~15s
 
-# Sports that support period markets (1st half / 1st quarter)
+# Sports that support period markets (1st half / 1st quarter / 1st period / innings)
 _PERIOD_SPORTS = frozenset([
     "basketball_nba", "basketball_ncaab",
     "americanfootball_nfl", "americanfootball_ncaaf",
-    "baseball_mlb",
+    "baseball_mlb", "icehockey_nhl",
 ])
 
 
@@ -258,17 +258,27 @@ class BetOnlineSource(DataSource):
         # Fetch full-game lines
         full_game_data = await self._api_call(sport, league)
         if full_game_data is None:
+            logger.info("BetOnline: API returned None for %s/%s", sport, league)
             return []
+
+        # Log how many game offerings were returned for debugging
+        game_offering = full_game_data.get("GameOffering")
+        if game_offering is None:
+            logger.info("BetOnline: %s/%s returned null GameOffering (no events)", sport, league)
+        else:
+            game_descs = game_offering.get("GamesDescription", []) if isinstance(game_offering, dict) else []
+            logger.info("BetOnline: %s/%s returned %d game descriptions", sport, league, len(game_descs or []))
 
         events = self._parse_offering(full_game_data, sport_key)
 
         # Fetch period markets for applicable sports
         if sport_key in _PERIOD_SPORTS and events:
-            # 1st Half (Period=1)
-            h1_data = await self._api_call(sport, league, period=1)
-            if h1_data:
-                h1_events = self._parse_offering(h1_data, sport_key, period_suffix="_h1")
-                self._merge_period_markets(events, h1_events)
+            # 1st Half (Period=1) — basketball, football, hockey
+            if sport_key.startswith("basketball") or sport_key.startswith("americanfootball"):
+                h1_data = await self._api_call(sport, league, period=1)
+                if h1_data:
+                    h1_events = self._parse_offering(h1_data, sport_key, period_suffix="_h1")
+                    self._merge_period_markets(events, h1_events)
 
             # 1st Quarter (Period=3) — only basketball/football
             if sport_key.startswith("basketball") or sport_key.startswith("americanfootball"):
@@ -276,6 +286,31 @@ class BetOnlineSource(DataSource):
                 if q1_data:
                     q1_events = self._parse_offering(q1_data, sport_key, period_suffix="_q1")
                     self._merge_period_markets(events, q1_events)
+
+            # 1st Period (Period=1) — hockey
+            if sport_key == "icehockey_nhl":
+                p1_data = await self._api_call(sport, league, period=1)
+                if p1_data:
+                    p1_events = self._parse_offering(p1_data, sport_key, period_suffix="_p1")
+                    self._merge_period_markets(events, p1_events)
+
+            # MLB innings/sub-periods
+            if sport_key == "baseball_mlb":
+                # 1st Inning (Period=1)
+                i1_data = await self._api_call(sport, league, period=1)
+                if i1_data:
+                    i1_events = self._parse_offering(i1_data, sport_key, period_suffix="_i1")
+                    self._merge_period_markets(events, i1_events)
+                # First 5 Innings (Period=3)
+                f5_data = await self._api_call(sport, league, period=3)
+                if f5_data:
+                    f5_events = self._parse_offering(f5_data, sport_key, period_suffix="_f5")
+                    self._merge_period_markets(events, f5_events)
+                # First 7 Innings (Period=5)
+                f7_data = await self._api_call(sport, league, period=5)
+                if f7_data:
+                    f7_events = self._parse_offering(f7_data, sport_key, period_suffix="_f7")
+                    self._merge_period_markets(events, f7_events)
 
         return events
 
@@ -440,6 +475,18 @@ class BetOnlineSource(DataSource):
                     total_market = Market(key="totals" + period_suffix, outcomes=total_market.outcomes)
                 bol_markets.append(total_market)
 
+            # Team totals — per-side TotalLine inside AwayLine/HomeLine
+            away_tt = away_line.get("TotalLine", {})
+            home_tt = home_line.get("TotalLine", {})
+            away_tt_market = self._parse_team_total(away_tt)
+            if away_tt_market:
+                away_tt_market = Market(key="team_total_away" + period_suffix, outcomes=away_tt_market.outcomes)
+                bol_markets.append(away_tt_market)
+            home_tt_market = self._parse_team_total(home_tt)
+            if home_tt_market:
+                home_tt_market = Market(key="team_total_home" + period_suffix, outcomes=home_tt_market.outcomes)
+                bol_markets.append(home_tt_market)
+
             if not bol_markets:
                 continue
 
@@ -585,6 +632,28 @@ class BetOnlineSource(DataSource):
 
         return Market(
             key="totals",
+            outcomes=[
+                Outcome(name="Over", price=int(over_odds), point=float(point)),
+                Outcome(name="Under", price=int(under_odds), point=float(point)),
+            ],
+        )
+
+    def _parse_team_total(self, team_total: dict) -> Optional[Market]:
+        """Extract team total (over/under) from per-side TotalLine."""
+        total = team_total.get("TotalLine", {})
+        if not total:
+            total = team_total  # Fallback if nested differently
+        point = total.get("Point")
+        over_odds = total.get("Over", {}).get("Line")
+        under_odds = total.get("Under", {}).get("Line")
+
+        if not point or not over_odds or not under_odds:
+            return None
+        if point == 0:
+            return None
+
+        return Market(
+            key="team_total",  # key overridden by caller
             outcomes=[
                 Outcome(name="Over", price=int(over_odds), point=float(point)),
                 Outcome(name="Under", price=int(under_odds), point=float(point)),

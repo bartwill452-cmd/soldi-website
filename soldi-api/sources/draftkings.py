@@ -55,7 +55,22 @@ _DK_SPORT_URLS = {
     "tennis_wta": "https://sportsbook.draftkings.com/leagues/tennis/wta",
 }
 
-# Player prop category pages to scrape (appended as ?category= on league page)
+# Sport-specific player prop categories (avoid wasting navigations on invalid categories)
+_SPORT_PROP_CATS = {
+    "basketball_nba": ["player-points", "player-rebounds", "player-assists",
+                       "player-threes", "player-combos", "player-defense"],
+    "basketball_ncaab": ["player-points", "player-rebounds", "player-assists",
+                         "player-threes", "player-combos"],
+    "icehockey_nhl": ["player-goals", "player-shots", "player-assists",
+                      "player-points", "player-combos"],
+    "baseball_mlb": ["player-strikeouts", "player-hits", "player-home-runs",
+                     "player-bases", "player-outs", "player-combos"],
+    "americanfootball_nfl": ["player-passing", "player-rushing", "player-receiving",
+                            "player-touchdowns", "player-combos"],
+    "americanfootball_ncaaf": ["player-passing", "player-rushing", "player-receiving"],
+}
+
+# Fallback for sports not in _SPORT_PROP_CATS
 _PLAYER_PROP_CATS = [
     "player-points",
     "player-rebounds",
@@ -65,7 +80,38 @@ _PLAYER_PROP_CATS = [
     "player-defense",
 ]
 
-# Half / quarter category pages to scrape for period-specific markets
+# Sport-specific period categories
+# NOTE: DraftKings restructured their URL categories. Old slugs like "1st-half"
+# now redirect to base page. Current structure uses parent categories with
+# subcategory params, e.g. ?category=halves or ?category=halves&subcategory=1st-half
+_SPORT_PERIOD_CATS = {
+    "basketball_nba": [
+        "halves", "halves&subcategory=1st-half", "halves&subcategory=2nd-half",
+        "quarters", "quarters&subcategory=1st-quarter", "quarters&subcategory=2nd-quarter",
+        "quarters&subcategory=3rd-quarter", "quarters&subcategory=4th-quarter",
+    ],
+    "basketball_ncaab": [
+        "halves", "halves&subcategory=1st-half", "halves&subcategory=2nd-half",
+    ],
+    "icehockey_nhl": [
+        "periods", "periods&subcategory=1st-period",
+        "periods&subcategory=2nd-period", "periods&subcategory=3rd-period",
+    ],
+    "baseball_mlb": [
+        "innings", "innings&subcategory=1st-inning",
+        "innings&subcategory=first-5-innings", "innings&subcategory=first-7-innings",
+    ],
+    "americanfootball_nfl": [
+        "halves", "halves&subcategory=1st-half", "halves&subcategory=2nd-half",
+        "quarters", "quarters&subcategory=1st-quarter", "quarters&subcategory=2nd-quarter",
+        "quarters&subcategory=3rd-quarter", "quarters&subcategory=4th-quarter",
+    ],
+    "americanfootball_ncaaf": [
+        "halves", "halves&subcategory=1st-half", "halves&subcategory=2nd-half",
+    ],
+}
+
+# Fallback for period categories
 _PERIOD_CATS = [
     "1st-half",
     "2nd-half",
@@ -149,12 +195,14 @@ class DraftKingsSource(DataSource):
         # Prioritize simple sports (MMA/boxing = main page only) first,
         # then heavier sports with sub-pages (props, periods)
         all_sports = [
-            "mma_mixed_martial_arts",
-            "boxing_boxing",
-            "icehockey_nhl",
-            "baseball_mlb",
+            # Prioritize active sports first (these are in _ACTIVE_SPORTS)
             "basketball_nba",
             "basketball_ncaab",
+            "icehockey_nhl",
+            "baseball_mlb",
+            "mma_mixed_martial_arts",
+            # Then other sports
+            "boxing_boxing",
             "americanfootball_nfl",
             "americanfootball_ncaaf",
             "soccer_epl",
@@ -258,30 +306,43 @@ class DraftKingsSource(DataSource):
         """Fetch game lines + player props + team totals for a sport."""
         # 1. Main game lines (Moneyline, Spread, Total)
         events = await self._navigate_and_capture(base_url, sport_key)
+        logger.info("DraftKings: base capture for %s: %d events", sport_key, len(events))
 
         # 2. Team totals via subcategory page (skip for combat sports — no team totals)
+        # NOTE: NHL uses "team-totals" category; other sports use "team-props"
         if sport_key not in ("mma_mixed_martial_arts", "boxing_boxing"):
-            team_url = base_url + "?category=team-props"
-            team_events = await self._navigate_and_capture(
-                team_url, sport_key, is_team_props=True
-            )
-            events = self._merge_events(events, team_events)
+            team_cats = ["team-props", "team-totals"] if sport_key == "icehockey_nhl" else ["team-props"]
+            for team_cat in team_cats:
+                team_url = base_url + "?category=" + team_cat
+                team_events = await self._navigate_and_capture(
+                    team_url, sport_key, is_team_props=True
+                )
+                logger.info("DraftKings: %s for %s: %d events", team_cat, sport_key, len(team_events))
+                events = self._merge_events(events, team_events)
 
-        # 3. Half / quarter period pages (for supported sports)
+        # 3. MMA sub-categories for total rounds, fight distance
+        if sport_key in ("mma_mixed_martial_arts", "boxing_boxing"):
+            for mma_cat in ["fight-totals", "fight-props", "method-of-victory"]:
+                mma_url = base_url + "?category=" + mma_cat
+                mma_events = await self._navigate_and_capture(mma_url, sport_key)
+                logger.info("DraftKings: %s for %s: %d events", mma_cat, sport_key, len(mma_events))
+                events = self._merge_events(events, mma_events)
+
+        # 4. Half / quarter / period pages (sport-specific categories)
         if sport_key in _SPORTS_WITH_PERIODS:
-            for period_cat in _PERIOD_CATS:
-                # Skip quarter pages for halves-only sports (NCAAB, etc.)
-                if sport_key in _HALVES_ONLY_SPORTS and "quarter" in period_cat:
-                    continue
+            period_cats = _SPORT_PERIOD_CATS.get(sport_key, _PERIOD_CATS)
+            for period_cat in period_cats:
                 period_url = base_url + "?category=" + period_cat
                 period_events = await self._navigate_and_capture(
                     period_url, sport_key
                 )
+                logger.info("DraftKings: %s for %s: %d events", period_cat, sport_key, len(period_events))
                 events = self._merge_events(events, period_events)
 
-        # 4. Player props (for supported sports)
+        # 4. Player props (sport-specific categories)
         if sport_key in _SPORTS_WITH_PLAYER_PROPS:
-            for prop_cat in _PLAYER_PROP_CATS:
+            prop_cats = _SPORT_PROP_CATS.get(sport_key, _PLAYER_PROP_CATS)
+            for prop_cat in prop_cats:
                 prop_url = base_url + "?category=" + prop_cat
                 prop_events = await self._navigate_and_capture(
                     prop_url, sport_key,
@@ -641,8 +702,12 @@ class DraftKingsSource(DataSource):
             suffix = "_p2"
         elif "3rd period" in lower:
             suffix = "_p3"
-        elif "first 5" in lower or "1st 5" in lower:
+        elif "1st inning" in lower or "first inning" in lower:
+            suffix = "_i1"
+        elif "first 5" in lower or "1st 5" in lower or "first five" in lower:
             suffix = "_f5"
+        elif "first 7" in lower or "1st 7" in lower or "first seven" in lower:
+            suffix = "_f7"
 
         if "moneyline" in lower or "money line" in lower:
             return "h2h" + suffix
@@ -653,7 +718,7 @@ class DraftKingsSource(DataSource):
         elif "fight winner" in lower or "bout winner" in lower:
             return "h2h"
         elif "fight total" in lower or "total rounds" in lower:
-            return "totals"
+            return "total_rounds"
         elif "go the distance" in lower or "goes the distance" in lower:
             return "fight_to_go_distance"
 
@@ -865,8 +930,12 @@ class DraftKingsSource(DataSource):
             suffix = "_p2"
         elif "3rd period" in lower:
             suffix = "_p3"
-        elif "first 5" in lower or "1st 5" in lower:
+        elif "1st inning" in lower or "first inning" in lower:
+            suffix = "_i1"
+        elif "first 5" in lower or "1st 5" in lower or "first five" in lower:
             suffix = "_f5"
+        elif "first 7" in lower or "1st 7" in lower or "first seven" in lower:
+            suffix = "_f7"
 
         # Determine which team from the market name
         home_lower = home_team.lower()

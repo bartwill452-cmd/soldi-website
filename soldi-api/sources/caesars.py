@@ -593,14 +593,18 @@ class CaesarsSource(DataSource):
             suffix = "_q3"
         elif "4th quarter" in lower or "4th qtr" in lower:
             suffix = "_q4"
+        elif "1st inning" in lower or "first inning" in lower:
+            suffix = "_i1"
         elif "1st period" in lower:
             suffix = "_p1"
         elif "2nd period" in lower:
             suffix = "_p2"
         elif "3rd period" in lower:
             suffix = "_p3"
-        elif "first 5" in lower or "1st 5" in lower:
+        elif "first 5" in lower or "1st 5" in lower or "first five" in lower:
             suffix = "_f5"
+        elif "first 7" in lower or "1st 7" in lower or "first seven" in lower:
+            suffix = "_f7"
         elif "1st set" in lower:
             suffix = "_s1"
         elif "2nd set" in lower:
@@ -618,7 +622,7 @@ class CaesarsSource(DataSource):
         elif "go the distance" in lower or "goes the distance" in lower:
             return "fight_to_go_distance"
         elif "total rounds" in lower:
-            return "totals"
+            return "total_rounds"
         elif "spread" in lower or "handicap" in lower:
             # Skip alternate/alt lines
             if "alternate" in lower or "alt " in lower:
@@ -669,6 +673,18 @@ class CaesarsSource(DataSource):
             suffix = "_q3"
         elif "4th quarter" in lower or "4th qtr" in lower:
             suffix = "_q4"
+        elif "1st inning" in lower or "first inning" in lower:
+            suffix = "_i1"
+        elif "1st period" in lower:
+            suffix = "_p1"
+        elif "2nd period" in lower:
+            suffix = "_p2"
+        elif "3rd period" in lower:
+            suffix = "_p3"
+        elif "first 5" in lower or "1st 5" in lower:
+            suffix = "_f5"
+        elif "first 7" in lower or "1st 7" in lower:
+            suffix = "_f7"
 
         # Check for team name in market name
         home_lower = home_team.lower()
@@ -705,7 +721,7 @@ class CaesarsSource(DataSource):
                 return "No"
             return name
 
-        if market_key.startswith("totals"):
+        if market_key.startswith("totals") or market_key.startswith("team_total") or market_key == "total_rounds":
             if "over" in lower:
                 return "Over"
             elif "under" in lower:

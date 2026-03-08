@@ -57,10 +57,6 @@ FANDUEL_SPORT_SLUGS = {
 class FanDuelSource(DataSource):
     """Fetches odds directly from FanDuel's sportsbook API."""
 
-    # Limit concurrent FanDuel API requests to avoid rate-limiting
-    # when all 17 sports fetch simultaneously
-    _api_sem = asyncio.Semaphore(4)
-
     def __init__(self):
         self._client = httpx.AsyncClient(
             timeout=15.0,
@@ -71,6 +67,24 @@ class FanDuelSource(DataSource):
         )
         # Cache: sport_key → (raw_data, event_id_to_canonical_id, event_id_to_url)
         self._last_data: Dict[str, tuple] = {}
+        # Lazy semaphore — created on first use in the current event loop
+        self._sem_obj: Optional[asyncio.Semaphore] = None
+        self._sem_loop: Optional[asyncio.AbstractEventLoop] = None
+
+    @property
+    def _api_sem(self) -> asyncio.Semaphore:
+        """Lazily create or re-create the API semaphore for the current event loop.
+
+        asyncio.Semaphore is bound to the event loop that was running when it
+        was created.  If the loop changes (e.g. uvicorn restarts or the
+        background refresh task runs in a different loop context), we must
+        create a fresh semaphore to avoid 'Future attached to a different loop'.
+        """
+        loop = asyncio.get_running_loop()
+        if self._sem_obj is None or self._sem_loop is not loop:
+            self._sem_obj = asyncio.Semaphore(8)
+            self._sem_loop = loop
+        return self._sem_obj
 
     async def get_odds(
         self,
@@ -118,14 +132,13 @@ class FanDuelSource(DataSource):
             logger.info(f"FanDuel: {len(events)} events for {sport_key}")
 
             # Enrichment steps (period markets, team totals) make many per-event
-            # API calls and can be slow.  Wrap in a 6s timeout so base markets
-            # (h2h, spreads, totals) always return even if enrichment is slow.
+            # API calls.  Allow generous timeout so all sub-markets are captured.
             try:
                 await asyncio.wait_for(
-                    self._enrich_all(events, id_map, sport_key), timeout=6.0,
+                    self._enrich_all(events, id_map, sport_key), timeout=30.0,
                 )
             except asyncio.TimeoutError:
-                logger.info(f"FanDuel: enrichment timed out (6s) for {sport_key}, returning base markets")
+                logger.info(f"FanDuel: enrichment timed out (30s) for {sport_key}, returning base markets")
 
             return events, {"x-requests-remaining": "unlimited"}
 
@@ -144,7 +157,16 @@ class FanDuelSource(DataSource):
 
     # ---- Period market enrichment (1H, Q1, etc.) from event detail pages ----
 
-    # FanDuel event-page tabs that contain period markets we want
+    # FanDuel event-page tabs that contain period markets we want (sport-specific)
+    _SPORT_PERIOD_TABS = {
+        "basketball_nba": ["half", "1st-quarter", "2nd-quarter", "3rd-quarter", "4th-quarter"],
+        "basketball_ncaab": ["half"],
+        "icehockey_nhl": ["1st-period", "2nd-period", "3rd-period"],
+        "baseball_mlb": ["1st-inning", "first-5-innings", "first-7-innings"],
+        "americanfootball_nfl": ["half", "1st-quarter", "2nd-quarter", "3rd-quarter", "4th-quarter"],
+        "americanfootball_ncaaf": ["half", "1st-quarter"],
+    }
+    # Fallback for sports not listed
     _PERIOD_TABS = ["half", "1st-quarter", "2nd-quarter", "3rd-quarter", "4th-quarter"]
 
     async def _enrich_period_markets(
@@ -167,6 +189,8 @@ class FanDuelSource(DataSource):
         for ev in events:
             event_by_cid[ev.id] = ev
 
+        period_tabs = self._SPORT_PERIOD_TABS.get(sport_key, self._PERIOD_TABS)
+        logger.info(f"FanDuel: starting period enrichment for {sport_key} ({len(events)} events, tabs={period_tabs}, {len(cid_to_fd_id)} mapped)")
         sem = asyncio.Semaphore(8)
 
         async def fetch_period_for_event(ev: OddsEvent) -> None:
@@ -174,7 +198,7 @@ class FanDuelSource(DataSource):
             if not fd_id:
                 return
             async with sem:
-                for tab in self._PERIOD_TABS:
+                for tab in period_tabs:
                     try:
                         period_markets = await self._fetch_event_tab(fd_id, tab)
                         if period_markets:
@@ -190,11 +214,16 @@ class FanDuelSource(DataSource):
                                     if mkt.key not in existing_keys:
                                         fd_bm.markets.append(mkt)
                                         existing_keys.add(mkt.key)
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.warning(f"FanDuel: period tab={tab} event={fd_id} error: {type(exc).__name__}: {exc}")
 
         tasks = [fetch_period_for_event(ev) for ev in events]
-        await asyncio.gather(*tasks, return_exceptions=True)
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Log any exceptions that occurred during enrichment
+        for i, r in enumerate(results):
+            if isinstance(r, Exception):
+                logger.warning(f"FanDuel: period enrichment error for {sport_key} event {i}: {r}")
 
         # Count how many period markets were added
         period_count = sum(
@@ -205,6 +234,21 @@ class FanDuelSource(DataSource):
         )
         if period_count:
             logger.info(f"FanDuel: enriched {period_count} period markets for {sport_key}")
+
+    # Mapping from FanDuel tab slug → market key period suffix
+    _TAB_TO_SUFFIX = {
+        "half": "_h1",
+        "1st-quarter": "_q1",
+        "2nd-quarter": "_q2",
+        "3rd-quarter": "_q3",
+        "4th-quarter": "_q4",
+        "1st-period": "_p1",
+        "2nd-period": "_p2",
+        "3rd-period": "_p3",
+        "1st-inning": "_i1",
+        "first-5-innings": "_f5",
+        "first-7-innings": "_f7",
+    }
 
     async def _fetch_event_tab(self, fd_event_id: str, tab: str) -> List[Market]:
         """Fetch markets for a single FanDuel event detail tab (e.g. 'half', '1st-quarter')."""
@@ -223,12 +267,19 @@ class FanDuelSource(DataSource):
                 "https://sbapi.ky.sportsbook.fanduel.com/api/event-page", params=params
             )
         if resp.status_code != 200:
+            logger.info(f"FanDuel: tab={tab} event={fd_event_id} returned HTTP {resp.status_code}")
             return []
 
         data = resp.json()
         raw_markets = data.get("attachments", {}).get("markets", {})
         if not raw_markets:
+            logger.info(f"FanDuel: tab={tab} event={fd_event_id} returned no markets")
             return []
+
+        # Determine the period suffix for this tab (used as fallback when
+        # FanDuel returns generic market types like MONEY_LINE instead of
+        # period-specific ones like 1ST_HALF_WINNER)
+        tab_suffix = self._TAB_TO_SUFFIX.get(tab, "")
 
         result = []
         seen_keys = set()  # type: set
@@ -254,7 +305,15 @@ class FanDuelSource(DataSource):
 
             market_key = classify_market_type(market_type)
             if market_key is None:
+                logger.debug(f"FanDuel: tab={tab} unclassified market_type: {market_type}")
                 continue
+
+            # If the classified key is a base key (no period suffix) but we're
+            # on a period tab, append the tab's period suffix.
+            # This handles NBA/NFL where FanDuel returns generic types like
+            # MONEY_LINE instead of 1ST_HALF_WINNER on period tabs.
+            if market_key in ("h2h", "spreads", "totals") and tab_suffix:
+                market_key = market_key + tab_suffix
 
             # Only keep period markets (skip full-game, props, etc.)
             if "_" not in market_key or market_key.startswith("player_"):

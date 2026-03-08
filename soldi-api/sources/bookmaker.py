@@ -557,11 +557,22 @@ class BookmakerSource(DataSource):
             if tot:
                 markets_list.append(tot)
 
+            # Team totals — home and away
+            home_tt = self._parse_team_total(primary_line, "home")
+            if home_tt:
+                markets_list.append(Market(key="team_total_home", outcomes=home_tt))
+            away_tt = self._parse_team_total(primary_line, "away")
+            if away_tt:
+                markets_list.append(Market(key="team_total_away", outcomes=away_tt))
+
             # Parse period/half lines from alt_lines
-            # Bookmaker uses index values: 1=1H, 2=2H, 3=Q1, 4=Q2, 5=Q3, 6=Q4
+            # Bookmaker uses index values: 1=1H, 2=2H, 3=Q1, 4=Q2, 5=Q3, 6=Q4,
+            # 7=P1, 8=P2, 9=P3, 10=F5, 11=I1, 12=F7
             _PERIOD_INDEX_MAP = {
                 "1": "_h1", "2": "_h2",
                 "3": "_q1", "4": "_q2", "5": "_q3", "6": "_q4",
+                "7": "_p1", "8": "_p2", "9": "_p3",
+                "10": "_f5", "11": "_i1", "12": "_f7",
             }
             for alt_line in alt_lines:
                 idx = str(alt_line.get("index", ""))
@@ -583,6 +594,14 @@ class BookmakerSource(DataSource):
                 if alt_tot:
                     alt_tot.key = "totals" + suffix
                     markets_list.append(alt_tot)
+
+                # Period team totals
+                alt_home_tt = self._parse_team_total(alt_line, "home")
+                if alt_home_tt:
+                    markets_list.append(Market(key="team_total_home" + suffix, outcomes=alt_home_tt))
+                alt_away_tt = self._parse_team_total(alt_line, "away")
+                if alt_away_tt:
+                    markets_list.append(Market(key="team_total_away" + suffix, outcomes=alt_away_tt))
 
             if not markets_list:
                 return None
@@ -700,6 +719,31 @@ class BookmakerSource(DataSource):
             Outcome(name="Under", price=under_odds, point=total),
         ]
         return Market(key="totals", outcomes=outcomes)
+
+    def _parse_team_total(self, line: dict, side: str) -> Optional[List[Outcome]]:
+        """Parse home or away team total from a Bookmaker line dict.
+
+        Bookmaker uses hovt/hunoddst for home team total over/under,
+        and vovt/vunoddst for away (visitor) team total.
+        """
+        if side == "home":
+            total = self._safe_float(line.get("hovt"))
+            over_odds = self._safe_int(line.get("hovoddst"))
+            under_odds = self._safe_int(line.get("hunoddst"))
+        else:
+            total = self._safe_float(line.get("vovt"))
+            over_odds = self._safe_int(line.get("vovoddst"))
+            under_odds = self._safe_int(line.get("vunoddst"))
+
+        if total is None or over_odds is None or under_odds is None:
+            return None
+        if over_odds == 0 and under_odds == 0:
+            return None
+
+        return [
+            Outcome(name="Over", price=over_odds, point=total),
+            Outcome(name="Under", price=under_odds, point=total),
+        ]
 
     # ── Time parsing ────────────────────────────────────────────────────────
 

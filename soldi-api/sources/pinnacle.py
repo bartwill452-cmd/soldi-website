@@ -64,6 +64,21 @@ class PinnacleSource(DataSource):
                 # Single league — standard fetch
                 matchups = await self._fetch_matchups(league_id)
                 markets_data = await self._fetch_markets(league_id)
+                # Fetch special markets for MMA (total rounds, fight distance)
+                # and other sports (may have additional markets)
+                if "mma" in sport_key or "boxing" in sport_key:
+                    special = await self._fetch_special_markets(league_id)
+                    if special:
+                        logger.info("Pinnacle: %d special markets for %s (league %d)",
+                                    len(special), sport_key, league_id)
+                        for s in special[:5]:
+                            logger.info("  Special: matchupId=%s name=%r keys=%s",
+                                        s.get("matchupId"), s.get("name", "?"),
+                                        [k for k in s.keys() if k not in ("contestantLines", "participants")])
+                        markets_data = markets_data + special
+                    else:
+                        logger.info("Pinnacle: 0 special markets for %s (league %d)",
+                                    sport_key, league_id)
                 events = self._parse(matchups, markets_data, sport_key)
             else:
                 # Dynamic multi-league sport (e.g. tennis)
@@ -87,6 +102,16 @@ class PinnacleSource(DataSource):
         response = await self._client.get(url)
         response.raise_for_status()
         return response.json()
+
+    async def _fetch_special_markets(self, league_id: int) -> list:
+        """Fetch special/prop markets (total rounds, fight distance, etc.)."""
+        url = f"{BASE_URL}/leagues/{league_id}/markets/special"
+        try:
+            response = await self._client.get(url)
+            response.raise_for_status()
+            return response.json()
+        except Exception:
+            return []
 
     async def _fetch_multi_league(
         self, sport_id: int, sport_key: str,
@@ -197,10 +222,20 @@ class PinnacleSource(DataSource):
 
         # Group markets by matchupId
         # Markets have: matchupId, type ("moneyline"/"spread"/"total"/"team_total"), period, prices[]
+        # Special markets have: matchupId, name, contestantLines (from /markets/special)
         markets_by_matchup = {}  # type: Dict[int, List[dict]]
         for mkt in markets_data:
             mid = mkt.get("matchupId")
             if mid is None:
+                continue
+            # Handle special markets (different format from /markets/special)
+            if "contestantLines" in mkt or ("name" in mkt and "type" not in mkt):
+                # Special market — attach directly without period filtering
+                mkt["_period_suffix"] = ""
+                mkt["_is_special"] = True
+                if mid not in markets_by_matchup:
+                    markets_by_matchup[mid] = []
+                markets_by_matchup[mid].append(mkt)
                 continue
             # Skip alternate lines
             if mkt.get("isAlternate", False):
@@ -287,6 +322,23 @@ class PinnacleSource(DataSource):
                         pin_markets.append(Market(key=market_key, outcomes=parsed))
                         seen_keys.add(market_key)
 
+                # Handle special markets from /markets/special endpoint
+                if mkt.get("_is_special"):
+                    special_name = (mkt.get("name") or "").lower()
+                    contestant_lines = mkt.get("contestantLines", [])
+                    if not contestant_lines:
+                        continue
+                    if "total rounds" in special_name or "round" in special_name:
+                        parsed = self._parse_special_total(contestant_lines)
+                        if parsed and "total_rounds" not in seen_keys:
+                            pin_markets.append(Market(key="total_rounds", outcomes=parsed))
+                            seen_keys.add("total_rounds")
+                    elif "distance" in special_name or "go the distance" in special_name:
+                        parsed = self._parse_special_yes_no(contestant_lines)
+                        if parsed and "fight_to_go_distance" not in seen_keys:
+                            pin_markets.append(Market(key="fight_to_go_distance", outcomes=parsed))
+                            seen_keys.add("fight_to_go_distance")
+
             if not pin_markets:
                 continue
 
@@ -363,6 +415,35 @@ class PinnacleSource(DataSource):
                 continue
             name = "Over" if designation == "over" else "Under" if designation == "under" else designation
             result.append(Outcome(name=name, price=int(price), point=float(points)))
+        return result if len(result) >= 2 else []
+
+    def _parse_special_total(self, contestant_lines: list) -> List[Outcome]:
+        """Parse special market O/U (e.g., total rounds) from contestantLines."""
+        result = []
+        for cl in contestant_lines:
+            name = (cl.get("name") or "").strip()
+            price = cl.get("price")
+            handicap = cl.get("handicap")
+            if price is None:
+                continue
+            if "over" in name.lower():
+                result.append(Outcome(name="Over", price=int(price), point=float(handicap) if handicap else None))
+            elif "under" in name.lower():
+                result.append(Outcome(name="Under", price=int(price), point=float(handicap) if handicap else None))
+        return result if len(result) >= 2 else []
+
+    def _parse_special_yes_no(self, contestant_lines: list) -> List[Outcome]:
+        """Parse special market Yes/No (e.g., fight to go distance) from contestantLines."""
+        result = []
+        for cl in contestant_lines:
+            name = (cl.get("name") or "").strip()
+            price = cl.get("price")
+            if price is None:
+                continue
+            if "yes" in name.lower():
+                result.append(Outcome(name="Yes", price=int(price)))
+            elif "no" in name.lower():
+                result.append(Outcome(name="No", price=int(price)))
         return result if len(result) >= 2 else []
 
     async def close(self) -> None:

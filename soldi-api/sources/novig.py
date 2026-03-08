@@ -67,6 +67,20 @@ _MARKET_TYPE_MAP = {
     "MONEY_1H": "h2h_h1",
     "SPREAD_1H": "spreads_h1",
     "TOTAL_1H": "totals_h1",
+    "MONEY_Q1": "h2h_q1",
+    "SPREAD_Q1": "spreads_q1",
+    "TOTAL_Q1": "totals_q1",
+    "MONEY_P1": "h2h_p1",
+    "SPREAD_P1": "spreads_p1",
+    "TOTAL_P1": "totals_p1",
+    "TEAM_TOTAL_HOME": "team_total_home",
+    "TEAM_TOTAL_AWAY": "team_total_away",
+    "TEAM_TOTAL_HOME_1H": "team_total_home_h1",
+    "TEAM_TOTAL_AWAY_1H": "team_total_away_h1",
+    "TEAM_TOTAL_HOME_Q1": "team_total_home_q1",
+    "TEAM_TOTAL_AWAY_Q1": "team_total_away_q1",
+    "TOTAL_ROUNDS": "total_rounds",
+    "FIGHT_DISTANCE": "fight_to_go_distance",
 }  # type: Dict[str, str]
 
 # Market types we care about
@@ -372,8 +386,8 @@ class NovigSource(DataSource):
                 if not raw_markets:
                     continue
 
-                if novig_type in ("MONEY", "MONEY_1H"):
-                    # Moneyline: single market, just convert probs to American
+                # Moneyline-type markets
+                if novig_type.startswith("MONEY"):
                     mkt = raw_markets[0]
                     parsed = self._parse_moneyline(
                         mkt, our_key, home_name, away_name,
@@ -381,20 +395,35 @@ class NovigSource(DataSource):
                     )
                     if parsed:
                         parsed_markets.append(parsed)
-                elif novig_type in ("SPREAD", "SPREAD_1H"):
-                    # Pick consensus spread line
+                # Spread-type markets
+                elif novig_type.startswith("SPREAD"):
                     mkt = _pick_consensus_line(raw_markets)
                     if mkt:
                         parsed = self._parse_spread(mkt, our_key, home_name, away_name, home_team_raw, away_team_raw)
                         if parsed:
                             parsed_markets.append(parsed)
-                elif novig_type in ("TOTAL", "TOTAL_1H"):
-                    # Pick consensus total line
+                # Total-type markets (game totals, team totals, total rounds)
+                elif novig_type.startswith("TOTAL") or novig_type.startswith("TEAM_TOTAL"):
                     mkt = _pick_consensus_line(raw_markets)
                     if mkt:
                         parsed = self._parse_total(mkt, our_key)
                         if parsed:
                             parsed_markets.append(parsed)
+                # Fight distance (Yes/No)
+                elif novig_type == "FIGHT_DISTANCE":
+                    mkt = raw_markets[0]
+                    parsed = self._parse_moneyline(
+                        mkt, our_key, home_name, away_name,
+                        home_team_raw, away_team_raw, liquidity_map,
+                    )
+                    if parsed:
+                        # Rename outcomes to Yes/No
+                        for o in parsed.outcomes:
+                            if o.name == home_name:
+                                o.name = "Yes"
+                            elif o.name == away_name:
+                                o.name = "No"
+                        parsed_markets.append(parsed)
 
             if not parsed_markets:
                 continue

@@ -7,6 +7,7 @@ No authentication required.
 import asyncio
 import logging
 import re
+import time
 from typing import Dict, List, Optional, Tuple
 
 import httpx
@@ -26,6 +27,16 @@ logger = logging.getLogger(__name__)
 
 # Kambi API base (rsiuspa = Rush Street Interactive US PA)
 BASE_URL = "https://eu-offering-api.kambicdn.com/offering/v2018/rsiuspa"
+
+# Minimum seconds between Kambi API requests (across all sports).
+# Kambi CDN allows ~2-3 req/s sustained; 0.4s gives us 2.5 req/s with margin.
+_MIN_REQUEST_INTERVAL = 0.4
+
+# Maximum retries for 429 responses
+_MAX_RETRIES = 3
+
+# Base backoff seconds for 429 retries (doubles each attempt)
+_RETRY_BACKOFF_BASE = 3.0
 
 
 class BetRiversSource(DataSource):
@@ -68,6 +79,45 @@ class BetRiversSource(DataSource):
         )
         # Cache: canonical_event_id → (kambi_event_id, event_url)
         self._event_ids: Dict[str, Tuple[int, Optional[str]]] = {}
+        # Global request throttle: serialize all Kambi requests to avoid 429s
+        self._request_lock = asyncio.Lock()
+        self._last_request_time: float = 0.0
+
+    async def _throttled_get(self, url: str, params: dict) -> httpx.Response:
+        """Make a GET request with global rate-limiting and 429 retry logic.
+
+        Ensures at least _MIN_REQUEST_INTERVAL seconds between requests and
+        retries with exponential backoff on 429 responses.
+        """
+        for attempt in range(_MAX_RETRIES + 1):
+            async with self._request_lock:
+                # Enforce minimum interval between requests
+                now = time.monotonic()
+                elapsed = now - self._last_request_time
+                if elapsed < _MIN_REQUEST_INTERVAL:
+                    await asyncio.sleep(_MIN_REQUEST_INTERVAL - elapsed)
+                self._last_request_time = time.monotonic()
+
+            response = await self._client.get(url, params=params)
+
+            if response.status_code == 429:
+                if attempt < _MAX_RETRIES:
+                    backoff = _RETRY_BACKOFF_BASE * (2 ** attempt)
+                    logger.warning(
+                        "BetRivers 429 rate-limited on %s (attempt %d/%d), "
+                        "retrying in %.1fs",
+                        url.split("/")[-1], attempt + 1, _MAX_RETRIES, backoff,
+                    )
+                    await asyncio.sleep(backoff)
+                    continue
+                else:
+                    logger.warning(
+                        "BetRivers 429 rate-limited on %s — exhausted %d retries",
+                        url.split("/")[-1], _MAX_RETRIES,
+                    )
+            return response
+
+        return response  # Return last response (will be 429)
 
     async def get_odds(
         self,
@@ -85,10 +135,10 @@ class BetRiversSource(DataSource):
             return [], {"x-requests-remaining": "unlimited"}
 
         try:
-            # Step 1: Get event list
+            # Step 1: Get event list from listView
             list_url = f"{BASE_URL}/listView/{sport_path}.json"
             params = {"lang": "en_US", "market": "US"}
-            response = await self._client.get(list_url, params=params)
+            response = await self._throttled_get(list_url, params)
             response.raise_for_status()
             data = response.json()
 
@@ -96,20 +146,14 @@ class BetRiversSource(DataSource):
             if not kambi_events:
                 return [], {"x-requests-remaining": "unlimited"}
 
-            # Step 2: Fetch full bet offers per event (with concurrency limit)
-            sem = asyncio.Semaphore(5)
-            async def fetch_event_offers(ev):
-                async with sem:
-                    return await self._fetch_event_offers(ev)
-
-            tasks = [fetch_event_offers(ev) for ev in kambi_events]
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-
+            # Step 2: Fetch full bet offers per event SEQUENTIALLY with throttling.
+            # The Kambi CDN rate-limits aggressively; concurrent requests cause
+            # 429s that cascade into total data loss. Sequential + throttled
+            # requests are slower but reliable.
             events = []
             sport_title = get_sport_title(sport_key)
-            for result in results:
-                if isinstance(result, Exception):
-                    continue
+            for ev in kambi_events:
+                result = await self._fetch_event_offers(ev)
                 if result is not None:
                     parsed = self._parse_event(result, sport_key, sport_title)
                     if parsed:
@@ -123,7 +167,7 @@ class BetRiversSource(DataSource):
             return [], {"x-requests-remaining": "unlimited"}
 
     async def _fetch_event_offers(self, kambi_event: dict) -> Optional[dict]:
-        """Fetch full bet offers for a single event."""
+        """Fetch full bet offers for a single event with throttling."""
         event_info = kambi_event.get("event", {})
         event_id = event_info.get("id")
         if not event_id:
@@ -132,7 +176,7 @@ class BetRiversSource(DataSource):
         url = f"{BASE_URL}/betoffer/event/{event_id}.json"
         params = {"lang": "en_US", "market": "US"}
         try:
-            response = await self._client.get(url, params=params)
+            response = await self._throttled_get(url, params)
             if response.status_code != 200:
                 return None
             data = response.json()
@@ -482,7 +526,7 @@ class BetRiversSource(DataSource):
         try:
             url = f"{BASE_URL}/betoffer/event/{kambi_id}.json"
             params = {"lang": "en_US", "market": "US"}
-            response = await self._client.get(url, params=params)
+            response = await self._throttled_get(url, params)
             if response.status_code != 200:
                 return []
             data = response.json()

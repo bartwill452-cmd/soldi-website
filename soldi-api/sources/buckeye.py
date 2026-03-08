@@ -72,16 +72,16 @@ BUCKEYE_SPORT_MAP = {
 # sport_key -> list of (period_name, market_key_suffix) for multi-period fetching.
 # "Game" period (suffix "") is always fetched first and is not listed here.
 BUCKEYE_PERIOD_MAP = {
-    # Basketball: halves
-    "basketball_nba": [("1st Half", "_h1"), ("2nd Half", "_h2")],
+    # Basketball: halves + quarters
+    "basketball_nba": [("1st Half", "_h1"), ("2nd Half", "_h2"), ("1st Quarter", "_q1")],
     "basketball_ncaab": [("1st Half", "_h1"), ("2nd Half", "_h2")],
     # Football: halves
     "americanfootball_nfl": [("1st Half", "_h1"), ("2nd Half", "_h2")],
     "americanfootball_ncaaf": [("1st Half", "_h1"), ("2nd Half", "_h2")],
     # Hockey: periods
     "icehockey_nhl": [("1st Period", "_p1"), ("2nd Period", "_p2"), ("3rd Period", "_p3")],
-    # Baseball: first 5 innings
-    "baseball_mlb": [("1st 5 Innings", "_f5")],
+    # Baseball: first 5 innings, first 7 innings, 1st inning
+    "baseball_mlb": [("1st 5 Innings", "_f5"), ("1st 7 Innings", "_f7"), ("1st Inning", "_i1")],
     # Soccer: halves
     "soccer_epl": [("1st Half", "_h1"), ("2nd Half", "_h2")],
     "soccer_spain_la_liga": [("1st Half", "_h1"), ("2nd Half", "_h2")],
@@ -792,6 +792,18 @@ class BuckeyeSource(DataSource):
                             key="totals%s" % period_suffix, outcomes=tot,
                         ))
 
+                # Team totals — DGS uses TtlPtsTeam1/TtlPtsTeam2 for per-team O/U
+                away_tt = self._parse_team_total(game, "Team1")
+                if away_tt:
+                    bk_markets.append(Market(
+                        key="team_total_away%s" % period_suffix, outcomes=away_tt,
+                    ))
+                home_tt = self._parse_team_total(game, "Team2")
+                if home_tt:
+                    bk_markets.append(Market(
+                        key="team_total_home%s" % period_suffix, outcomes=home_tt,
+                    ))
+
                 if not bk_markets:
                     continue
 
@@ -1026,6 +1038,36 @@ class BuckeyeSource(DataSource):
         return [
             Outcome(name="Over", price=over_juice, point=total_points),
             Outcome(name="Under", price=under_juice, point=total_points),
+        ]
+
+    def _parse_team_total(self, game: dict, team_prefix: str) -> List[Outcome]:
+        """Parse team total (over/under) for a specific team.
+
+        DGS uses TtlPtsTeam1/TtlPtsTeam2 for per-team totals, or
+        TeamTotal1/TeamTotal2 with TeamTotalAdj1_1/TeamTotalAdj1_2 juice.
+        """
+        # Try common DGS field patterns for team totals
+        total = self._safe_float(game.get(f"TtlPts{team_prefix}"))
+        if total is None:
+            total = self._safe_float(game.get(f"TeamTotal{team_prefix[-1]}"))
+        if total is None or total <= 0:
+            return []
+
+        # Try team-specific juice fields
+        suffix_num = team_prefix[-1]  # "1" or "2"
+        over_juice = self._safe_int(game.get(f"TtlPts{team_prefix}Adj1"))
+        under_juice = self._safe_int(game.get(f"TtlPts{team_prefix}Adj2"))
+        if over_juice is None:
+            over_juice = self._safe_int(game.get(f"TeamTotalAdj{suffix_num}_1"))
+        if under_juice is None:
+            under_juice = self._safe_int(game.get(f"TeamTotalAdj{suffix_num}_2"))
+
+        if over_juice is None or under_juice is None:
+            return []
+
+        return [
+            Outcome(name="Over", price=over_juice, point=total),
+            Outcome(name="Under", price=under_juice, point=total),
         ]
 
     # ------------------------------------------------------------------

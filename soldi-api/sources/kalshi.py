@@ -1,13 +1,15 @@
 """
 Kalshi prediction market scraper.
 Uses Kalshi's trade API to fetch sports event odds.
-Supports optional API key authentication for higher rate limits.
+Supports RSA-PKCS1v15 signed authentication for higher rate limits.
 """
 
 import asyncio
+import base64
 import logging
 import os
 import re
+import time as _time_mod
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Tuple
 
@@ -100,17 +102,60 @@ class KalshiSource(DataSource):
             "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
             "Accept": "application/json",
         }
-        api_key = os.environ.get("KALSHI_API_KEY", "")
-        if api_key:
-            headers["Authorization"] = f"Bearer {api_key}"
-            logger.info("Kalshi: using authenticated API key")
+        self._rsa_key = None
+        self._api_key_id = os.environ.get("KALSHI_API_KEY", "")
+        rsa_pem = os.environ.get("KALSHI_RSA_PRIVATE_KEY", "")
+
+        if self._api_key_id and rsa_pem:
+            try:
+                from cryptography.hazmat.primitives.serialization import load_pem_private_key
+                # Handle escaped newlines from env vars
+                pem_bytes = rsa_pem.replace("\\n", "\n").encode("utf-8")
+                self._rsa_key = load_pem_private_key(pem_bytes, password=None)
+                logger.info("Kalshi: RSA authentication configured (key_id=%s...)", self._api_key_id[:8])
+            except Exception as e:
+                logger.warning("Kalshi: Failed to load RSA key: %s", e)
+                self._rsa_key = None
+        elif self._api_key_id:
+            # Fallback to simple bearer token
+            headers["Authorization"] = f"Bearer {self._api_key_id}"
+            logger.info("Kalshi: using bearer token auth")
+
         self._client = httpx.AsyncClient(timeout=25.0, headers=headers)
         # Mapping: event_ticker → {"home": mkt_ticker, "away": mkt_ticker}
         self._ticker_side_map = {}  # type: Dict[str, Dict[str, str]]
         # Per-sport cache: sport_key → (events, timestamp)
-        import time as _time
         self._sport_cache = {}  # type: Dict[str, Tuple[List[OddsEvent], float]]
         self._sport_cache_ttl = 30  # seconds — don't refetch every 5s cycle
+
+    def _sign_request(self, method: str, path: str) -> Dict[str, str]:
+        """Generate RSA-PKCS1v15 signed auth headers for Kalshi API.
+
+        Signature format: timestamp + newline + method + newline + path
+        """
+        if not self._rsa_key or not self._api_key_id:
+            return {}
+
+        try:
+            from cryptography.hazmat.primitives import hashes
+            from cryptography.hazmat.primitives.asymmetric import padding
+
+            timestamp_ms = str(int(_time_mod.time() * 1000))
+            message = f"{timestamp_ms}\n{method.upper()}\n{path}"
+            signature = self._rsa_key.sign(
+                message.encode("utf-8"),
+                padding.PKCS1v15(),
+                hashes.SHA256(),
+            )
+            sig_b64 = base64.b64encode(signature).decode("utf-8")
+            return {
+                "KALSHI-ACCESS-KEY": self._api_key_id,
+                "KALSHI-ACCESS-SIGNATURE": sig_b64,
+                "KALSHI-ACCESS-TIMESTAMP": timestamp_ms,
+            }
+        except Exception as e:
+            logger.debug("Kalshi: RSA signing failed: %s", e)
+            return {}
 
     async def get_odds(
         self,
@@ -202,6 +247,7 @@ class KalshiSource(DataSource):
             return [], meta
 
     async def _fetch_events(self, series_ticker: str) -> list:
+        path = "/trade-api/v2/events"
         url = f"{BASE_URL}/events"
         params = {
             "series_ticker": series_ticker,
@@ -209,13 +255,16 @@ class KalshiSource(DataSource):
             "status": "open",
             "limit": 200,
         }
+        auth_headers = self._sign_request("GET", path)
         async with self._api_sem:
             for attempt in range(3):
-                response = await self._client.get(url, params=params)
+                response = await self._client.get(url, params=params, headers=auth_headers)
                 if response.status_code == 429:
                     wait = 1.0 * (2 ** attempt)  # 1s, 2s, 4s
                     logger.debug("Kalshi 429 for %s, retrying in %.1fs", series_ticker, wait)
                     await asyncio.sleep(wait)
+                    # Re-sign with fresh timestamp on retry
+                    auth_headers = self._sign_request("GET", path)
                     continue
                 response.raise_for_status()
                 return response.json().get("events", [])

@@ -39,40 +39,6 @@ FANDUEL_EVENT_TYPE_IDS = {
     "tennis_wta": 2,
 }
 
-# ── ESPN sport/league paths ─────────────────────────────────────────────────
-# Used as {sport}/{league} in ESPN API URLs
-ESPN_SPORT_LEAGUES = {
-    "basketball_nba": ("basketball", "nba"),
-    "americanfootball_nfl": ("football", "nfl"),
-    "icehockey_nhl": ("hockey", "nhl"),
-    "baseball_mlb": ("baseball", "mlb"),
-    "basketball_ncaab": ("basketball", "mens-college-basketball"),
-    "americanfootball_ncaaf": ("football", "college-football"),
-    "soccer_epl": ("soccer", "eng.1"),
-    "soccer_spain_la_liga": ("soccer", "esp.1"),
-    "soccer_germany_bundesliga": ("soccer", "ger.1"),
-    "soccer_italy_serie_a": ("soccer", "ita.1"),
-    "soccer_france_ligue_one": ("soccer", "fra.1"),
-    "soccer_uefa_champs_league": ("soccer", "uefa.champions"),
-    "mma_mixed_martial_arts": ("mma", "ufc"),
-    "boxing_boxing": ("boxing", "boxing"),
-    "tennis_atp": ("tennis", "atp"),
-    "tennis_wta": ("tennis", "wta"),
-}
-
-# ── ESPN provider ID → sportsbook key mapping ───────────────────────────────
-ESPN_PROVIDER_TO_BOOK = {
-    38: "williamhill_us",   # Caesars
-    40: "betmgm",
-    41: "draftkings",
-    45: "fanduel",
-    58: "espnbet",          # ESPN BET
-    100: "draftkings",      # DraftKings (current ID)
-    # 200 = DraftKings Live Odds (skip, duplicate of 100)
-    1001: "bet365",
-    1003: "betmgm",         # alternate ID
-}
-
 # ── Pinnacle league IDs (Arcadia guest API) ──────────────────────────────────
 # Discovered via https://guest.api.arcadia.pinnacle.com/0.1/leagues/{id}/matchups
 PINNACLE_LEAGUE_IDS = {
@@ -97,28 +63,6 @@ PINNACLE_LEAGUE_IDS = {
 PINNACLE_SPORT_IDS = {
     "tennis_atp": 33,   # Tennis — filter for ATP/Challenger
     "tennis_wta": 33,   # Tennis — filter for WTA
-}
-
-# ── Bovada sport paths ────────────────────────────────────────────────────────
-# Used in bovada.lv/services/sports/event/coupon/events/A/description/{path}
-BOVADA_SPORT_PATHS = {
-    "basketball_nba": "basketball/nba",
-    "basketball_ncaab": "basketball/college-basketball",
-    "americanfootball_nfl": "football/nfl",
-    "americanfootball_ncaaf": "football/college-football",
-    "icehockey_nhl": "hockey/nhl",
-    "baseball_mlb": "baseball/mlb",
-    "soccer_epl": "soccer/europe/england/premier-league",
-    "soccer_spain_la_liga": "soccer/europe/spain/la-liga",
-    "soccer_germany_bundesliga": "soccer/europe/germany/1-bundesliga",
-    "soccer_italy_serie_a": "soccer/europe/italy/serie-a",
-    "soccer_france_ligue_one": "soccer/europe/france/ligue-1",
-    "soccer_usa_mls": "soccer/north-america/united-states/mls",
-    "soccer_uefa_champs_league": "soccer/international-club/uefa-champions-league",
-    "tennis_atp": "tennis",
-    "tennis_wta": "tennis",
-    "mma_mixed_martial_arts": "ufc-mma",
-    "boxing_boxing": "boxing",
 }
 
 # ── Kambi (BetRivers) sport paths ────────────────────────────────────────────
@@ -421,6 +365,7 @@ TEAM_ALIASES = {
     "tor maple leafs": "Toronto Maple Leafs",
     "van canucks": "Vancouver Canucks",
     "vgs golden knights": "Vegas Golden Knights",
+    "vgk golden knights": "Vegas Golden Knights",
     "wsh capitals": "Washington Capitals",
     "wpg jets": "Winnipeg Jets",
     "uta mammoth": "Utah Hockey Club",
@@ -620,7 +565,6 @@ TEAM_ALIASES = {
     "bowling green falcons": "Bowling Green",
     "kent state golden flashes": "Kent State",
     "kent state": "Kent State",
-    "boston": "Boston College",
     "boston college": "Boston College",
     "boston college eagles": "Boston College",
     "boston university": "Boston University",
@@ -1867,7 +1811,6 @@ SPORT_TEAM_ALIASES = {
         "sacramento kings": "Los Angeles Kings",
         "minnesota": "Minnesota Wild",
         "minnesota timberwolves": "Minnesota Wild",
-        "boston college": "Boston Bruins",
     },
     "basketball_nba": {
         "kings": "Sacramento Kings",
@@ -1877,6 +1820,7 @@ SPORT_TEAM_ALIASES = {
         "new orleans": "New Orleans Pelicans",
     },
     "basketball_ncaab": {
+        "boston": "Boston College",
         "detroit": "Detroit Mercy",
         "minnesota": "Minnesota Golden Gophers",
         "minnesota wild": "Minnesota Golden Gophers",

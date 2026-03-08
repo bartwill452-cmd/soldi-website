@@ -7,14 +7,8 @@ class Settings(BaseSettings):
     # SoldiAPI's own API key (clients must provide this to authenticate)
     soldi_api_key: str = "dev-key-change-me"
 
-    # The Odds API upstream key
-    odds_api_key: str = ""
-
-    # The Odds API base URL
-    odds_api_base_url: str = "https://api.the-odds-api.com/v4"
-
     # Cache TTL in seconds — must exceed the full background refresh cycle
-    # (~15 min across all 17 sports) so data stays cached between cycles.
+    # (~15 min across all sports) so data stays cached between cycles.
     cache_ttl_seconds: int = 1200
 
     # Server settings
@@ -27,11 +21,9 @@ class Settings(BaseSettings):
     # Debug mode (enables auto-reload)
     debug: bool = False
 
-    # Polymarket wallet private key (for CLOB API auth if needed)
-    polymarket_private_key: str = ""
-
-    # Kalshi API key (for authenticated requests / higher rate limits)
+    # Kalshi RSA private key (PEM format, for authenticated requests / higher rate limits)
     kalshi_api_key: str = ""
+    kalshi_rsa_private_key: str = ""
 
     # ProphetX affiliate API key
     prophetx_api_key: str = ""
@@ -44,7 +36,12 @@ class Settings(BaseSettings):
     bookmaker_username: str = ""
     bookmaker_password: str = ""
 
-    # Comma-separated list of scraper names to disable (e.g. "DraftKings,BetMGM,BetOnline")
+    # Buckeye login credentials
+    buckeye_username: str = "xl37"
+    buckeye_password: str = "test"
+    buckeye_url: str = "https://demotest.me/"
+
+    # Comma-separated list of scraper names to disable (e.g. "DraftKings,BetOnline")
     # Useful for resource-constrained deployments where Playwright scrapers are too heavy.
     disabled_scrapers: str = ""
 
