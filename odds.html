@@ -336,6 +336,20 @@
     .odds-val.clickable { cursor: pointer; }
     .odds-val.clickable:hover { background: rgba(59,130,246,0.15); border: 1px solid rgba(59,130,246,0.3); }
 
+    /* ── Book Filter Chips ── */
+    .book-filter-chip {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 5px 10px; border-radius: 8px; font-size: 11px; font-weight: 600;
+      cursor: pointer; border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.04); color: #71717a; transition: all 0.15s;
+      user-select: none;
+    }
+    .book-filter-chip.active {
+      background: rgba(34,197,94,0.12); border-color: rgba(34,197,94,0.3); color: #22c55e;
+    }
+    .book-filter-chip:hover { background: rgba(255,255,255,0.07); }
+    .book-filter-chip img { width: 18px; height: 18px; border-radius: 4px; object-fit: contain; }
+
     /* ── Responsive ── */
     @media (max-width: 768px) {
       .odds-page { padding: 72px 8px 24px; }
@@ -407,6 +421,16 @@
         <button onclick="refreshData()">↻ Refresh</button>
       </div>
 
+      <!-- Sportsbook Filter (shared across all tabs) -->
+      <div id="bookFilterBar" style="margin-bottom:16px;display:none;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <span style="font-size:12px;color:#71717a;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Sportsbooks</span>
+          <button onclick="toggleAllBooks(true)" style="font-size:10px;color:#22c55e;background:none;border:1px solid rgba(34,197,94,0.2);border-radius:6px;padding:2px 8px;cursor:pointer;font-weight:600;">All On</button>
+          <button onclick="toggleAllBooks(false)" style="font-size:10px;color:#71717a;background:none;border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:2px 8px;cursor:pointer;font-weight:600;">All Off</button>
+        </div>
+        <div id="bookFilterChips" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
+      </div>
+
       <!-- Tab: Odds Screen -->
       <div class="tab-content active" id="tabOdds">
         <div class="market-tabs" id="marketTabs">
@@ -459,6 +483,24 @@ let oddsData = [];
 let evData = [];
 let arbData = [];
 let refreshTimer = null;
+
+// ── Sportsbook Filter State ──
+// Which books are visible (all ON by default). Persisted to localStorage.
+let bookFilter = {};   // key → boolean (true = visible)
+function loadBookFilter() {
+  try {
+    const saved = localStorage.getItem('soldi_book_filter');
+    if (saved) bookFilter = JSON.parse(saved);
+  } catch {}
+}
+function saveBookFilter() {
+  localStorage.setItem('soldi_book_filter', JSON.stringify(bookFilter));
+}
+function isBookVisible(key) {
+  if (!(key in bookFilter)) return true; // default visible
+  return bookFilter[key];
+}
+loadBookFilter();
 
 // Sportsbook metadata with logo images
 const BOOK_META = {
@@ -595,6 +637,7 @@ async function loadSports() {
       sportCategories = data.categories;
       renderSportBar();
       renderMarketTabs();
+      renderBookFilter();
       refreshData();
       refreshTimer = setInterval(refreshData, 1000);
     }
@@ -613,6 +656,36 @@ function renderSportBar() {
     });
   });
   bar.innerHTML = html;
+}
+
+// ── Book Filter ──
+function renderBookFilter() {
+  const chips = document.getElementById('bookFilterChips');
+  const bar = document.getElementById('bookFilterBar');
+  if (!chips || !bar) return;
+  const allKeys = Object.keys(BOOK_META);
+  if (allKeys.length === 0) { bar.style.display = 'none'; return; }
+  bar.style.display = 'block';
+  chips.innerHTML = allKeys.map(key => {
+    const meta = BOOK_META[key];
+    const on = isBookVisible(key);
+    const logoHtml = meta.logo ? `<img src="${meta.logo}" alt="${meta.short}" onerror="this.style.display='none'">` : '';
+    return `<span class="book-filter-chip ${on ? 'active' : ''}" onclick="toggleBook('${key}', this)">${logoHtml}${meta.short}</span>`;
+  }).join('');
+}
+
+function toggleBook(key, el) {
+  bookFilter[key] = !isBookVisible(key);
+  saveBookFilter();
+  if (el) el.classList.toggle('active');
+  if (currentTab === 'odds') renderOddsScreen();
+}
+
+function toggleAllBooks(on) {
+  Object.keys(BOOK_META).forEach(k => { bookFilter[k] = on; });
+  saveBookFilter();
+  renderBookFilter();
+  if (currentTab === 'odds') renderOddsScreen();
 }
 
 function selectSport(sportKey, el) {
@@ -654,7 +727,45 @@ function renderMarketTabs() {
   ).join('');
 }
 
+// ── Main Line Detection ──
+// For spreads/totals, books can return alternate lines (e.g. +1.5, +3.5, +5.5).
+// We determine the "consensus main line" across all books and show only that.
+let _consensusPointCache = {}; // cacheKey → point
+
+function computeConsensusPoint(events, marketKey, side) {
+  // side: 'home'|'away' for spreads, 'over'|'under' for totals
+  const cacheKey = marketKey + '|' + side;
+  if (_consensusPointCache[cacheKey] !== undefined) return _consensusPointCache[cacheKey];
+
+  const pointCounts = {}; // point → count
+  for (const event of events) {
+    for (const bm of event.bookmakers) {
+      const market = bm.markets?.[marketKey];
+      if (!market || !market.outcomes) continue;
+      let matchName;
+      if (side === 'home') matchName = event.homeTeam;
+      else if (side === 'away') matchName = event.awayTeam;
+      else if (side === 'over') matchName = 'Over';
+      else matchName = 'Under';
+      // Find ALL outcomes matching this name (may include alternates)
+      const matches = market.outcomes.filter(o => o.name === matchName && o.point != null);
+      if (matches.length === 1) {
+        const p = matches[0].point;
+        pointCounts[p] = (pointCounts[p] || 0) + 1;
+      }
+    }
+  }
+  // Most common point is the main line
+  let bestPoint = null, bestCount = 0;
+  for (const [p, c] of Object.entries(pointCounts)) {
+    if (c > bestCount) { bestCount = c; bestPoint = parseFloat(p); }
+  }
+  _consensusPointCache[cacheKey] = bestPoint;
+  return bestPoint;
+}
+
 // Generic market data extractor for any market key
+// For spreads/totals with alternates, picks the main-line outcome
 function getMarketDataForBook(bm, marketKey, event) {
   const market = bm.markets?.[marketKey];
   if (!market || !market.outcomes || market.outcomes.length === 0) return null;
@@ -673,19 +784,37 @@ function getMarketDataForBook(bm, marketKey, event) {
       draw: draw || null
     };
   }
-  // Spread-type markets
+  // Spread-type markets — pick outcome closest to consensus main line
   if (marketKey.startsWith('spreads')) {
-    const home = market.outcomes.find(o => o.name === event.homeTeam);
-    const away = market.outcomes.find(o => o.name === event.awayTeam);
+    const home = _pickMainLineOutcome(market.outcomes, event.homeTeam, marketKey, 'home');
+    const away = _pickMainLineOutcome(market.outcomes, event.awayTeam, marketKey, 'away');
     return { type: 'spread', home: home || null, away: away || null };
   }
-  // Total-type markets (totals, total_rounds, team_total_*)
+  // Total-type markets — pick outcome closest to consensus main line
   if (marketKey.startsWith('total') || marketKey.startsWith('team_total')) {
-    const over = market.outcomes.find(o => o.name === 'Over');
-    const under = market.outcomes.find(o => o.name === 'Under');
+    const over = _pickMainLineOutcome(market.outcomes, 'Over', marketKey, 'over');
+    const under = _pickMainLineOutcome(market.outcomes, 'Under', marketKey, 'under');
     return { type: 'total', over: over || null, under: under || null };
   }
   return null;
+}
+
+// Pick the outcome matching `name` that is closest to the consensus point
+function _pickMainLineOutcome(outcomes, name, marketKey, side) {
+  const matches = outcomes.filter(o => o.name === name);
+  if (matches.length === 0) return null;
+  if (matches.length === 1) return matches[0];
+  // Multiple alternates — pick closest to consensus
+  const consensus = computeConsensusPoint(oddsData, marketKey, side);
+  if (consensus == null) return matches[0]; // fallback to first
+  let best = matches[0], bestDist = Infinity;
+  for (const m of matches) {
+    if (m.point != null) {
+      const dist = Math.abs(m.point - consensus);
+      if (dist < bestDist) { bestDist = dist; best = m; }
+    }
+  }
+  return best;
 }
 
 // ── Data Loading ──
@@ -704,7 +833,10 @@ async function loadOdds() {
     container.innerHTML = '<div class="loading-state"><div class="spinner"></div>Loading odds...</div>';
   }
   try {
-    const res = await fetch(buildUrl('/api/odds/events', { sport: currentSport }), { headers: getAuthHeaders() });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20000);
+    const res = await fetch(buildUrl('/api/odds/events', { sport: currentSport }), { headers: getAuthHeaders(), signal: controller.signal });
+    clearTimeout(timeout);
     const data = await res.json();
     if (data.success) {
       oddsData = data.events;
@@ -715,7 +847,7 @@ async function loadOdds() {
     }
   } catch (e) {
     if (!oddsData || oddsData.length === 0) {
-      container.innerHTML = '<div class="empty-state">Connection error</div>';
+      container.innerHTML = `<div class="empty-state">${e.name === 'AbortError' ? 'Request timed out — try again' : 'Connection error'}</div>`;
     }
   }
 }
@@ -726,19 +858,21 @@ async function loadEV() {
     container.innerHTML = '<div class="loading-state"><div class="spinner"></div>Calculating +EV bets...</div>';
   }
   try {
-    const res = await fetch(buildUrl('/api/odds/ev', { sport: currentSport }), { headers: getAuthHeaders() });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20000);
+    const res = await fetch(buildUrl('/api/odds/ev', { sport: currentSport }), { headers: getAuthHeaders(), signal: controller.signal });
+    clearTimeout(timeout);
     const data = await res.json();
     if (data.success) {
       evData = data.bets;
       renderStats('ev');
       renderEVBets();
-    } else if (!evData || evData.length === 0) {
+    } else {
       container.innerHTML = `<div class="empty-state">${data.error || 'Failed to calculate EV'}</div>`;
     }
   } catch (e) {
-    if (!evData || evData.length === 0) {
-      container.innerHTML = '<div class="empty-state">Connection error</div>';
-    }
+    console.error('loadEV error:', e);
+    container.innerHTML = `<div class="empty-state">${e.name === 'AbortError' ? 'Request timed out — try again' : 'Connection error'}</div>`;
   }
 }
 
@@ -748,7 +882,10 @@ async function loadArb() {
     container.innerHTML = '<div class="loading-state"><div class="spinner"></div>Scanning for arbitrage...</div>';
   }
   try {
-    const res = await fetch(buildUrl('/api/odds/arbitrage', { sport: currentSport }), { headers: getAuthHeaders() });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20000);
+    const res = await fetch(buildUrl('/api/odds/arbitrage', { sport: currentSport }), { headers: getAuthHeaders(), signal: controller.signal });
+    clearTimeout(timeout);
     const data = await res.json();
     if (data.success) {
       arbData = data.arbs;
@@ -758,7 +895,8 @@ async function loadArb() {
       container.innerHTML = `<div class="empty-state">${data.error || 'Failed to scan arbitrage'}</div>`;
     }
   } catch (e) {
-    container.innerHTML = '<div class="empty-state">Connection error</div>';
+    console.error('loadArb error:', e);
+    container.innerHTML = `<div class="empty-state">${e.name === 'AbortError' ? 'Request timed out — try again' : 'Connection error'}</div>`;
   }
 }
 
@@ -847,6 +985,7 @@ function getRowLabel(side, event, marketKey) {
 }
 
 function renderOddsScreen() {
+  _consensusPointCache = {}; // clear consensus cache for fresh data
   const container = document.getElementById('oddsContent');
   const searchTerm = (document.getElementById('teamSearch')?.value || '').toLowerCase();
 
@@ -865,11 +1004,11 @@ function renderOddsScreen() {
 
   const layout = getMarketLayout(currentMarket);
 
-  // Collect all unique sportsbooks that have data for the current market
+  // Collect all unique sportsbooks that have data for the current market (respecting filter)
   const bookKeysSet = new Set();
   events.forEach(event => {
     event.bookmakers.forEach(bm => {
-      if (getMarketDataForBook(bm, currentMarket, event)) bookKeysSet.add(bm.key);
+      if (isBookVisible(bm.key) && getMarketDataForBook(bm, currentMarket, event)) bookKeysSet.add(bm.key);
     });
   });
   const bookKeys = Array.from(bookKeysSet);
@@ -920,6 +1059,7 @@ function renderOddsScreen() {
     });
 
     event.bookmakers.forEach(bm => {
+      if (!isBookVisible(bm.key)) return; // respect filter
       const mktData = getMarketDataForBook(bm, currentMarket, event);
       if (!mktData) return;
       layout.rows.forEach(side => {
@@ -959,7 +1099,7 @@ function renderOddsScreen() {
       const label = getRowLabel(side, event, currentMarket);
       const best = rowStats[side].best;
       const allOdds = rowStats[side].all;
-      const avg = allOdds.length ? Math.round(allOdds.reduce((a, b) => a + b, 0) / allOdds.length) : null;
+      const avg = avgAmericanOdds(allOdds);
       html += buildGenericRow(label, best, avg, bookKeys, event, side, currentMarket);
     });
   });
@@ -1289,6 +1429,30 @@ function renderArbitrage() {
 }
 
 // ── Helpers ──
+
+// Properly average American odds by converting to implied probability,
+// averaging the probabilities, then converting back. This prevents
+// impossible or misleading averages like "+38" or "-42" for NBA games.
+function avgAmericanOdds(oddsArr) {
+  if (!oddsArr || oddsArr.length === 0) return null;
+  let totalProb = 0;
+  let count = 0;
+  for (const odds of oddsArr) {
+    if (odds == null || odds === 0) continue;
+    // Convert American odds to implied probability
+    let prob;
+    if (odds > 0) prob = 100 / (odds + 100);
+    else prob = Math.abs(odds) / (Math.abs(odds) + 100);
+    totalProb += prob;
+    count++;
+  }
+  if (count === 0) return null;
+  const avgProb = totalProb / count;
+  // Convert back to American odds
+  if (avgProb >= 0.5) return Math.round(-(avgProb / (1 - avgProb)) * 100);
+  return Math.round(((1 - avgProb) / avgProb) * 100);
+}
+
 function fmtOdds(odds) {
   if (!odds || odds === 0) return '-';
   return odds > 0 ? '+' + odds : '' + odds;
