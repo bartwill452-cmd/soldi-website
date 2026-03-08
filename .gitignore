@@ -1,6 +1,7 @@
 .env
 node_modules/
 data/
+!data/google-docs-cache.json
 _frames/
 soldi-*.png
 soldi-*.mp4
