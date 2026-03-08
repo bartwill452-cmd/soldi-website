@@ -35,6 +35,13 @@ try {
 
 const app = express();
 
+// Helper: fetch with timeout (prevents hanging on slow/dead APIs)
+function fetchWithTimeout(url, options = {}, timeoutMs = 10000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(timer));
+}
+
 // Raw body for Whop webhook signature verification (MUST be before express.json())
 app.use('/api/webhooks/whop', express.raw({ type: 'application/json' }));
 
@@ -424,7 +431,7 @@ app.post('/api/send-verification', async (req, res) => {
       const maxPages = 20;
       while (!found && page <= maxPages) {
         const url = `https://api.whop.com/api/v1/memberships?company_id=${WHOP_COMPANY_ID}&page=${page}&per=50`;
-        const response = await fetch(url, { headers: { Authorization: `Bearer ${WHOP_API_KEY}` } });
+        const response = await fetchWithTimeout(url, { headers: { Authorization: `Bearer ${WHOP_API_KEY}` } }, 10000);
         if (!response.ok) return res.status(502).json({ error: 'Failed to verify membership' });
         const data = await response.json();
         const memberships = data.data || [];
@@ -456,8 +463,8 @@ app.post('/api/send-verification', async (req, res) => {
         });
       }
     } catch (err) {
-      console.error('Membership check error:', err);
-      return res.status(500).json({ error: 'Internal server error' });
+      console.error('Membership check error:', err.name === 'AbortError' ? 'Whop API timed out' : err);
+      return res.status(500).json({ error: err.name === 'AbortError' ? 'Membership check timed out. Please try again.' : 'Internal server error' });
     }
   }
 
@@ -554,7 +561,7 @@ app.post('/api/verify-code', async (req, res) => {
     const maxPages = 20;
     while (!found && page <= maxPages) {
       const url = `https://api.whop.com/api/v1/memberships?company_id=${WHOP_COMPANY_ID}&page=${page}&per=50`;
-      const response = await fetch(url, { headers: { Authorization: `Bearer ${WHOP_API_KEY}` } });
+      const response = await fetchWithTimeout(url, { headers: { Authorization: `Bearer ${WHOP_API_KEY}` } }, 10000);
       if (!response.ok) return res.status(502).json({ error: 'Failed to verify membership' });
       const data = await response.json();
       const memberships = data.data || [];
@@ -674,9 +681,9 @@ app.post('/api/verify-membership', async (req, res) => {
 
     while (!found && page <= maxPages) {
       const url = `https://api.whop.com/api/v1/memberships?company_id=${WHOP_COMPANY_ID}&page=${page}&per=50`;
-      const response = await fetch(url, {
+      const response = await fetchWithTimeout(url, {
         headers: { Authorization: `Bearer ${WHOP_API_KEY}` }
-      });
+      }, 10000);
 
       if (!response.ok) {
         const errText = await response.text();
@@ -1344,9 +1351,9 @@ app.get('/api/membership/details', requireAuth, async (req, res) => {
   try {
     const membershipId = req.user.membershipId;
     const url = `https://api.whop.com/api/v1/memberships/${membershipId}?company_id=${WHOP_COMPANY_ID}`;
-    const response = await fetch(url, {
+    const response = await fetchWithTimeout(url, {
       headers: { Authorization: `Bearer ${WHOP_API_KEY}` }
-    });
+    }, 10000);
 
     if (!response.ok) {
       console.error('Whop membership details error:', response.status);
@@ -1386,13 +1393,13 @@ app.post('/api/membership/cancel', requireAuth, async (req, res) => {
   try {
     const membershipId = req.user.membershipId;
     const url = `https://api.whop.com/api/v1/memberships/${membershipId}/cancel?company_id=${WHOP_COMPANY_ID}`;
-    const response = await fetch(url, {
+    const response = await fetchWithTimeout(url, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${WHOP_API_KEY}`,
         'Content-Type': 'application/json'
       }
-    });
+    }, 10000);
 
     if (!response.ok) {
       const errText = await response.text();
@@ -4246,7 +4253,7 @@ async function fetchAllWhopMembers(forceRefresh) {
   while (page <= maxPages) {
     try {
       const url = `https://api.whop.com/api/v1/memberships?company_id=${WHOP_COMPANY_ID}&page=${page}&per=50`;
-      const response = await fetch(url, { headers: { Authorization: `Bearer ${WHOP_API_KEY}` } });
+      const response = await fetchWithTimeout(url, { headers: { Authorization: `Bearer ${WHOP_API_KEY}` } }, 10000);
       if (!response.ok) break;
       const data = await response.json();
       const memberships = data.data || [];
@@ -4309,7 +4316,7 @@ app.get('/api/owner/members', requireOwnerMember, async (req, res) => {
 app.post('/api/owner/members/:id/pause', requireOwnerMember, async (req, res) => {
   try {
     const url = `https://api.whop.com/api/v1/memberships/${req.params.id}/pause?company_id=${WHOP_COMPANY_ID}`;
-    const response = await fetch(url, { method: 'POST', headers: { Authorization: `Bearer ${WHOP_API_KEY}`, 'Content-Type': 'application/json' } });
+    const response = await fetchWithTimeout(url, { method: 'POST', headers: { Authorization: `Bearer ${WHOP_API_KEY}`, 'Content-Type': 'application/json' } }, 10000);
     if (!response.ok) {
       const errText = await response.text();
       console.error('Pause error:', response.status, errText);
@@ -4328,7 +4335,7 @@ app.post('/api/owner/members/:id/pause', requireOwnerMember, async (req, res) =>
 app.post('/api/owner/members/:id/cancel', requireOwnerMember, async (req, res) => {
   try {
     const url = `https://api.whop.com/api/v1/memberships/${req.params.id}/cancel?company_id=${WHOP_COMPANY_ID}`;
-    const response = await fetch(url, { method: 'POST', headers: { Authorization: `Bearer ${WHOP_API_KEY}`, 'Content-Type': 'application/json' } });
+    const response = await fetchWithTimeout(url, { method: 'POST', headers: { Authorization: `Bearer ${WHOP_API_KEY}`, 'Content-Type': 'application/json' } }, 10000);
     if (!response.ok) {
       const errText = await response.text();
       console.error('Cancel error:', response.status, errText);
@@ -4379,7 +4386,7 @@ app.get('/api/owner/revenue', requireOwnerMember, async (req, res) => {
       const maxPayPages = 10;
       while (payPage <= maxPayPages) {
         const payUrl = `https://api.whop.com/api/v1/payments?company_id=${WHOP_COMPANY_ID}&page=${payPage}&per=50`;
-        const payRes = await fetch(payUrl, { headers: { Authorization: `Bearer ${WHOP_API_KEY}` } });
+        const payRes = await fetchWithTimeout(payUrl, { headers: { Authorization: `Bearer ${WHOP_API_KEY}` } }, 10000);
         if (!payRes.ok) break;
         const payData = await payRes.json();
         const payments = payData.data || [];
@@ -4466,7 +4473,7 @@ app.get('/api/owner/overview', requireOwnerMember, async (req, res) => {
       let payPage = 1;
       while (payPage <= 10) {
         const payUrl = `https://api.whop.com/api/v1/payments?company_id=${WHOP_COMPANY_ID}&page=${payPage}&per=50`;
-        const payRes = await fetch(payUrl, { headers: { Authorization: `Bearer ${WHOP_API_KEY}` } });
+        const payRes = await fetchWithTimeout(payUrl, { headers: { Authorization: `Bearer ${WHOP_API_KEY}` } }, 10000);
         if (!payRes.ok) break;
         const payData = await payRes.json();
         const payments = payData.data || [];
