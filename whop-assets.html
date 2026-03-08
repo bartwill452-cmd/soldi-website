@@ -4,6 +4,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Soldi | Whop Dashboard Assets</title>
+  <script>
+    (function() {
+      var t = localStorage.getItem('soldi_theme');
+      if (!t) t = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+      if (t === 'light') document.documentElement.setAttribute('data-theme', 'light');
+    })();
+  </script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
   <script src="/soldi-analytics.js"></script>
   <style>
@@ -948,6 +955,23 @@ Questions? Drop them in #support or DM a mentor. We're here to help you win. ðŸ’
         setTimeout(() => { btn.textContent = 'Copy'; btn.style.color = ''; btn.style.background = ''; }, 2000);
       });
     }
+  </script>
+
+  <script>
+    (function() {
+      document.querySelectorAll('.theme-toggle').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          var current = document.documentElement.getAttribute('data-theme');
+          var next = current === 'light' ? 'dark' : 'light';
+          if (next === 'dark') {
+            document.documentElement.removeAttribute('data-theme');
+          } else {
+            document.documentElement.setAttribute('data-theme', 'light');
+          }
+          localStorage.setItem('soldi_theme', next);
+        });
+      });
+    })();
   </script>
 
 </body>
