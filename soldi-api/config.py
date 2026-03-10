@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     port: int = 3001
 
     # CORS
-    cors_origins: List[str] = ["http://localhost:3000", "https://soldi-website.onrender.com"]
+    cors_origins: List[str] = ["http://localhost:3000", "https://trysoldi.com", "https://trysoldi.fly.dev"]
 
     # Debug mode (enables auto-reload)
     debug: bool = False

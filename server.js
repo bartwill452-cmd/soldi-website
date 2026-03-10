@@ -1036,7 +1036,7 @@ function buildWelcomeEmailHtml(firstName, email) {
       <span style="background:#22c55e;color:#050507;width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;">1</span>
       <h3 style="color:#22c55e;margin:0;font-size:16px;">Verify on the Website</h3>
     </div>
-    <p style="color:#d4d4d8;font-size:14px;margin:0;padding-left:40px;">Visit <a href="https://soldi-website.onrender.com" style="color:#22c55e;text-decoration:none;font-weight:600;">soldi-website.onrender.com</a> and enter your email (<strong style="color:#fff;">${email}</strong>) to unlock your dashboard and AI tools.</p>
+    <p style="color:#d4d4d8;font-size:14px;margin:0;padding-left:40px;">Visit <a href="https://trysoldi.com" style="color:#22c55e;text-decoration:none;font-weight:600;">soldi-website.onrender.com</a> and enter your email (<strong style="color:#fff;">${email}</strong>) to unlock your dashboard and AI tools.</p>
   </div>
 
   <div style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:24px;margin-bottom:16px;">
@@ -1044,7 +1044,7 @@ function buildWelcomeEmailHtml(firstName, email) {
       <span style="background:#22c55e;color:#050507;width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;">2</span>
       <h3 style="color:#22c55e;margin:0;font-size:16px;">Explore Your AI Tools</h3>
     </div>
-    <p style="color:#d4d4d8;font-size:14px;margin:0;padding-left:40px;">Access the Business Finder, Receptionist Leads, AI Image Generator, Chatbot Builder, Odds Screen, TikTok Analytics, and more — all from your dashboard.</p>
+    <p style="color:#d4d4d8;font-size:14px;margin:0;padding-left:40px;">Access the Odds Screen, Chatbot Builder, TikTok Analytics, Betting Guides, and more — all from your dashboard.</p>
   </div>
 
   <div style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:24px;margin-bottom:16px;">
@@ -1075,7 +1075,7 @@ function buildWelcomeEmailHtml(firstName, email) {
   </div>
 
   <div style="text-align:center;margin-bottom:24px;">
-    <a href="https://soldi-website.onrender.com" style="display:inline-block;padding:14px 40px;background:linear-gradient(135deg,#22c55e,#10b981);color:#050507;font-weight:700;border-radius:10px;text-decoration:none;font-size:15px;">Go to Dashboard</a>
+    <a href="https://trysoldi.com" style="display:inline-block;padding:14px 40px;background:linear-gradient(135deg,#22c55e,#10b981);color:#050507;font-weight:700;border-radius:10px;text-decoration:none;font-size:15px;">Go to Dashboard</a>
   </div>
 
   <p style="text-align:center;color:#52525b;font-size:12px;margin:0;">&copy; 2026 Soldi. All rights reserved.</p>
