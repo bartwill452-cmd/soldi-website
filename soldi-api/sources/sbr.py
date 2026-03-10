@@ -10,7 +10,6 @@ multiple requests per sport and merge them together.
 """
 
 import asyncio
-import hashlib
 import json
 import logging
 import re
@@ -21,6 +20,7 @@ import httpx
 
 from models import Bookmaker, Market, OddsEvent, Outcome, PlayerProp
 from sources.base import DataSource
+from sources.sport_mapping import canonical_event_id
 
 logger = logging.getLogger(__name__)
 
@@ -211,10 +211,15 @@ class SBRSource(DataSource):
             if not bookmakers_list:
                 continue
 
-            # Generate a stable event ID
-            event_id = hashlib.md5(
-                f"sbr_{sport_key}_{gid}".encode()
-            ).hexdigest()[:16]
+            # Generate a canonical event ID so the composite can merge
+            # SBR events with events from other sources by matching on
+            # sport + teams + date (instead of an opaque md5 hash).
+            event_id = canonical_event_id(
+                sport_key,
+                edata["home_team"],
+                edata["away_team"],
+                edata["commence_time"],
+            )
 
             events.append(
                 OddsEvent(
