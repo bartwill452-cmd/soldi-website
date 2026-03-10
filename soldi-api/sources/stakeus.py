@@ -11,12 +11,12 @@ Odds are displayed as "StakeUS" in the frontend to match branding.
 Architecture:
   1. Launch headless Chrome with stealth to bypass Cloudflare
   2. Navigate to stake.com/sports to establish session cookies
-  3. Use page.evaluate(fetch('/_api/graphql', ...)) for GraphQL calls
-  4. Parse fixture data and convert decimal odds to American format
+  3. Resolve sport slugs to UUIDs via slugSport query
+  4. Fetch fixtures via sport(sportId) -> fixtureList() -> groups()
+  5. Parse fixture data and convert decimal odds to American format
 """
 
 import asyncio
-import json
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
@@ -53,6 +53,10 @@ LEAGUE_FILTERS: Dict[str, List[str]] = {
     "mma_mixed_martial_arts": ["ufc"],
 }
 
+# ── Market group names to request from Stake API ──────────────────────
+# Each group is requested separately via the groups() field on fixtures
+MARKET_GROUPS = ["winner", "totals", "handicap"]
+
 # ── Market group → canonical market key ───────────────────────────────
 MARKET_GROUP_MAP: Dict[str, str] = {
     "winner": "h2h",
@@ -66,6 +70,7 @@ MARKET_GROUP_MAP: Dict[str, str] = {
     "total points": "totals",
     "total goals": "totals",
     "total rounds": "totals_rounds",
+    "totals": "totals",
 }
 
 # ── Period name → market suffix ───────────────────────────────────────
@@ -84,35 +89,71 @@ PERIOD_SUFFIX_MAP: Dict[str, str] = {
     "first 7 innings": "_f7",
 }
 
-# GraphQL query to fetch fixtures with market data
-GQL_FIXTURES = """
-query SportFixtureList($sportSlug: String, $limit: Int, $offset: Int) {
-  sportFixtures(sportSlug: $sportSlug, type: upcoming, limit: $limit, offset: $offset) {
+# ── GraphQL: Resolve sport slug → UUID ────────────────────────────────
+GQL_SPORT_ID = """
+query SlugSport($slug: String!) {
+  slugSport(slug: $slug) {
     id
-    slug
-    status
-    data {
-      ... on SportFixtureDataMatch {
-        startTime
-        competitors { name extId abbreviation }
-      }
-    }
-    tournament {
-      name
+    name
+  }
+}
+"""
+
+# ── GraphQL: Fetch upcoming fixtures with market data ─────────────────
+# Uses the correct nested structure: sport -> fixtureList -> groups
+GQL_FIXTURES = """
+query SportFixtureList(
+  $sportId: String!,
+  $type: SportSearchEnum!,
+  $limit: Int!,
+  $offset: Int!,
+  $groups: [String!]!
+) {
+  sport(sportId: $sportId) {
+    name
+    fixtureList(type: $type, limit: $limit, offset: $offset) {
+      id
+      extId
+      status
       slug
-      category {
+      data {
+        ... on SportFixtureDataMatch {
+          startTime
+          competitors {
+            name
+            extId
+            abbreviation
+          }
+        }
+      }
+      tournament {
         name
         slug
-        sport { name slug }
+        category {
+          name
+          slug
+          sport {
+            name
+            slug
+          }
+        }
       }
-    }
-    fixtureMarkets: markets {
-      id
-      name
-      status
-      specifiers
-      group { name }
-      outcomes { id name active odds }
+      groups(groups: $groups, status: [active, suspended, deactivated]) {
+        name
+        markets {
+          id
+          name
+          status
+          extId
+          specifiers
+          outcomes {
+            id
+            active
+            name
+            odds
+          }
+        }
+      }
     }
   }
 }
@@ -136,6 +177,8 @@ class StakeUSSource(DataSource):
         self._cache: Dict[str, List[OddsEvent]] = {}
         self._prefetch_task = None
         self._consecutive_zero_cycles: int = 0
+        # Cache of sport slug → UUID (resolved once, reused)
+        self._sport_ids: Dict[str, str] = {}
 
     def start_prefetch(self) -> None:
         """Start background prefetch loop (call after event loop is running)."""
@@ -177,9 +220,22 @@ class StakeUSSource(DataSource):
                         await asyncio.sleep(30)
                         continue
 
+                    # Resolve sport UUIDs on first cycle
+                    if not self._sport_ids:
+                        await self._resolve_sport_ids()
+
                     for sport_key, sport_slug in STAKE_SPORT_SLUGS.items():
                         try:
-                            events = await self._fetch_sport(sport_key, sport_slug)
+                            sport_id = self._sport_ids.get(sport_slug)
+                            if not sport_id:
+                                if cycle <= 2:
+                                    logger.info(
+                                        "StakeUS: No UUID for %s (slug=%s), skipping",
+                                        sport_key, sport_slug,
+                                    )
+                                continue
+
+                            events = await self._fetch_sport(sport_key, sport_slug, sport_id)
                             if events:
                                 self._cache[sport_key] = events
                                 total_events += len(events)
@@ -202,6 +258,7 @@ class StakeUSSource(DataSource):
                     self._consecutive_zero_cycles,
                 )
                 await self._close_browser()
+                self._sport_ids.clear()  # Re-resolve UUIDs after restart
                 self._consecutive_zero_cycles = 0
                 await asyncio.sleep(10)
 
@@ -243,7 +300,7 @@ class StakeUSSource(DataSource):
 
             self._context = await self._browser.new_context(
                 user_agent=(
-                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                    "Mozilla/5.0 (X11; Linux x86_64) "
                     "AppleWebKit/537.36 (KHTML, like Gecko) "
                     "Chrome/131.0.0.0 Safari/537.36"
                 ),
@@ -273,14 +330,16 @@ class StakeUSSource(DataSource):
                 await self._page.goto(
                     f"{SITE_URL}/sports/basketball",
                     timeout=45000,
-                    wait_until="load",
+                    wait_until="domcontentloaded",
                 )
-                await asyncio.sleep(10)  # Wait for CF challenge to resolve
+                # Wait for CF challenge to resolve and page to load
+                await asyncio.sleep(8)
                 title = await self._page.title()
                 url = self._page.url
                 logger.info("StakeUS: Session established (title: %r, url: %s)", title, url)
             except Exception as e:
                 logger.warning("StakeUS: Session setup failed: %s", e)
+                # Page may still have valid CF cookies even if timeout occurred
 
         except Exception as e:
             logger.warning("StakeUS: Failed to launch browser: %s", e)
@@ -323,10 +382,10 @@ class StakeUSSource(DataSource):
             return None
 
         try:
-            js_code = """
-                async ([query, variables]) => {
+            result = await self._page.evaluate(
+                """async ([query, variables, url]) => {
                     try {
-                        const r = await fetch("%s%s", {
+                        const r = await fetch(url, {
                             method: "POST",
                             headers: {
                                 "Content-Type": "application/json",
@@ -334,33 +393,26 @@ class StakeUSSource(DataSource):
                                 "x-language": "en",
                             },
                             body: JSON.stringify({query, variables}),
+                            credentials: "include",
                         });
-                        if (!r.ok) return {error: r.status};
-                        return await r.json();
+                        if (!r.ok) return {__error: r.status, __statusText: r.statusText};
+                        const json = await r.json();
+                        return json;
                     } catch(e) {
-                        return {error: e.message};
+                        return {__error: e.message};
                     }
-                }
-            """ % (SITE_URL, GQL_PATH)
-
-            result = await self._page.evaluate(
-                js_code, [query, variables]
+                }""",
+                [query, variables, f"{SITE_URL}{GQL_PATH}"],
             )
 
-            if isinstance(result, dict) and "error" in result:
-                err = result["error"]
+            if isinstance(result, dict) and "__error" in result:
+                err = result["__error"]
                 if err == 403:
                     logger.warning("StakeUS: GraphQL 403 — CF block, restarting browser")
                     await self._close_browser()
                     return None
-                logger.warning("StakeUS: GraphQL error: %s", err)
+                logger.warning("StakeUS: GraphQL error: %s (status: %s)", err, result.get("__statusText", ""))
                 return None
-
-            # Log response shape for debugging
-            if isinstance(result, dict):
-                keys = list(result.keys())[:5]
-                data_keys = list((result.get("data") or {}).keys())[:5] if result.get("data") else []
-                logger.info("StakeUS: GQL response keys=%s, data keys=%s", keys, data_keys)
 
             return result
         except Exception as exc:
@@ -368,46 +420,93 @@ class StakeUSSource(DataSource):
             return None
 
     # ------------------------------------------------------------------
+    # Resolve sport slugs → UUIDs
+    # ------------------------------------------------------------------
+
+    async def _resolve_sport_ids(self) -> None:
+        """Resolve all sport slugs to UUIDs via the slugSport query."""
+        unique_slugs = set(STAKE_SPORT_SLUGS.values())
+        for slug in unique_slugs:
+            try:
+                data = await self._gql_call(GQL_SPORT_ID, {"slug": slug})
+                if not data:
+                    logger.warning("StakeUS: Failed to resolve sport slug %r", slug)
+                    continue
+
+                # Check for GQL errors
+                if data.get("errors"):
+                    logger.warning(
+                        "StakeUS: GQL errors resolving %r: %s",
+                        slug, data["errors"],
+                    )
+                    continue
+
+                sport_data = (data.get("data") or {}).get("slugSport")
+                if sport_data and sport_data.get("id"):
+                    self._sport_ids[slug] = sport_data["id"]
+                    logger.info(
+                        "StakeUS: Resolved %r → %s (name: %s)",
+                        slug, sport_data["id"], sport_data.get("name"),
+                    )
+                else:
+                    logger.warning("StakeUS: No sport found for slug %r", slug)
+
+                await asyncio.sleep(0.5)
+            except Exception as exc:
+                logger.warning("StakeUS: Error resolving %r: %s", slug, exc)
+
+        logger.info("StakeUS: Resolved %d/%d sport IDs", len(self._sport_ids), len(unique_slugs))
+
+    # ------------------------------------------------------------------
     # Fetch & parse for one sport
     # ------------------------------------------------------------------
 
     async def _fetch_sport(
-        self, sport_key: str, sport_slug: str
+        self, sport_key: str, sport_slug: str, sport_id: str
     ) -> List[OddsEvent]:
         """Fetch and parse fixtures for one sport."""
-        variables = {"sportSlug": sport_slug, "limit": 100, "offset": 0}
+        variables = {
+            "sportId": sport_id,
+            "type": "upcoming",
+            "limit": 100,
+            "offset": 0,
+            "groups": MARKET_GROUPS,
+        }
         data = await self._gql_call(GQL_FIXTURES, variables)
         if not data:
-            logger.info("StakeUS: No GQL data for %s (slug=%s)", sport_key, sport_slug)
+            logger.info("StakeUS: No GQL data for %s (id=%s)", sport_key, sport_id[:12])
             return []
 
-        fixtures = (data.get("data") or {}).get("sportFixtures") or []
+        # Check for GQL errors
+        errors = data.get("errors")
+        if errors:
+            logger.warning("StakeUS: GQL errors for %s: %s", sport_key, errors[:2])
+
+        sport_node = (data.get("data") or {}).get("sport")
+        if not sport_node:
+            logger.info("StakeUS: No sport node for %s", sport_key)
+            return []
+
+        fixtures = sport_node.get("fixtureList") or []
         logger.info(
-            "StakeUS: GQL returned %d raw fixtures for %s (slug=%s)",
+            "StakeUS: %d raw fixtures for %s (slug=%s)",
             len(fixtures), sport_key, sport_slug,
         )
 
-        # Check for serviceDisabled error
-        errors = data.get("errors")
-        if errors:
-            logger.warning("StakeUS: GQL errors for %s: %s", sport_key, errors)
-            for err in errors:
-                msg = (err.get("message") or "").lower()
-                if "disabled" in msg or "unavailable" in msg:
-                    logger.info("StakeUS: Service disabled for %s", sport_key)
-                    return []
+        if not fixtures:
+            return []
 
         # Log first fixture for debugging
-        if fixtures:
-            sample = fixtures[0]
-            t = sample.get("tournament") or {}
-            t_name = t.get("name", "?")
-            c_name = ((t.get("category") or {}).get("name") or "?")
-            status = sample.get("status", "?")
-            logger.info(
-                "StakeUS: Sample fixture — tournament=%r, category=%r, status=%r",
-                t_name, c_name, status,
-            )
+        sample = fixtures[0]
+        t = sample.get("tournament") or {}
+        t_name = t.get("name", "?")
+        c_name = ((t.get("category") or {}).get("name") or "?")
+        status = sample.get("status", "?")
+        n_groups = len(sample.get("groups") or [])
+        logger.info(
+            "StakeUS: Sample — tournament=%r, category=%r, status=%r, groups=%d",
+            t_name, c_name, status, n_groups,
+        )
 
         # Filter to relevant league
         league_keywords = LEAGUE_FILTERS.get(sport_key, [])
@@ -435,8 +534,8 @@ class StakeUSSource(DataSource):
 
         if skipped_leagues:
             logger.info(
-                "StakeUS: %s — filtered out leagues: %s",
-                sport_key, list(skipped_leagues)[:5],
+                "StakeUS: %s — filtered out %d leagues (e.g. %s)",
+                sport_key, len(skipped_leagues), list(skipped_leagues)[:3],
             )
 
         # Parse fixtures
@@ -467,6 +566,7 @@ class StakeUSSource(DataSource):
         if len(competitors) < 2:
             return None
 
+        # Stake uses [away, home] order (first competitor is away)
         away_raw = competitors[0].get("name", "Unknown")
         home_raw = competitors[1].get("name", "Unknown")
 
@@ -488,9 +588,9 @@ class StakeUSSource(DataSource):
         commence_date = commence_time[:10]
         event_id = canonical_event_id(sport_key, home_team, away_team, commence_date)
 
-        # Parse markets
-        raw_markets = fix.get("fixtureMarkets") or []
-        parsed_markets = self._parse_markets(raw_markets, home_team, away_team, sport_key)
+        # Parse markets from groups
+        groups = fix.get("groups") or []
+        parsed_markets = self._parse_groups(groups, home_team, away_team, sport_key)
 
         if not parsed_markets:
             return None
@@ -523,86 +623,102 @@ class StakeUSSource(DataSource):
             bookmakers=[bookmaker],
         )
 
-    def _parse_markets(
+    def _parse_groups(
         self,
-        raw_markets: List[Dict[str, Any]],
+        groups: List[Dict[str, Any]],
         home_team: str,
         away_team: str,
         sport_key: str,
     ) -> List[Market]:
-        """Parse Stake market data into Market models."""
+        """Parse Stake group/market data into Market models."""
         market_map: Dict[str, List[Outcome]] = {}
 
-        for mkt in raw_markets:
-            status = (mkt.get("status") or "").lower()
-            if status not in ("active", "open", ""):
-                continue
+        for group in groups:
+            group_name = (group.get("name") or "").lower().strip()
 
-            group_name = ((mkt.get("group") or {}).get("name") or "").lower().strip()
-            market_name = (mkt.get("name") or "").lower().strip()
-
-            # Determine base market key
-            base_key = MARKET_GROUP_MAP.get(group_name) or MARKET_GROUP_MAP.get(market_name)
-            if not base_key:
-                if any(k in market_name for k in ("winner", "moneyline", "money line")):
-                    base_key = "h2h"
-                elif any(k in market_name for k in ("handicap", "spread")):
-                    base_key = "spreads"
-                elif any(k in market_name for k in ("total", "over")):
-                    base_key = "totals"
-                else:
+            for mkt in (group.get("markets") or []):
+                status = (mkt.get("status") or "").lower()
+                if status not in ("active", "open", ""):
                     continue
 
-            # Detect period suffix
-            period_suffix = ""
-            for period_label, suffix in PERIOD_SUFFIX_MAP.items():
-                if period_label in market_name:
-                    period_suffix = suffix
-                    break
+                market_name = (mkt.get("name") or "").lower().strip()
 
-            market_key = base_key + period_suffix
-            specifiers = mkt.get("specifiers") or ""
+                # Determine base market key from group name first, then market name
+                base_key = MARKET_GROUP_MAP.get(group_name)
+                if not base_key:
+                    base_key = MARKET_GROUP_MAP.get(market_name)
+                if not base_key:
+                    if any(k in market_name for k in ("winner", "moneyline", "money line")):
+                        base_key = "h2h"
+                    elif any(k in market_name for k in ("handicap", "spread")):
+                        base_key = "spreads"
+                    elif any(k in market_name for k in ("total", "over")):
+                        base_key = "totals"
+                    else:
+                        continue
 
-            # Parse outcomes
-            parsed: List[Outcome] = []
-            for oc in (mkt.get("outcomes") or []):
-                if not oc.get("active", True):
-                    continue
+                # Detect period suffix from market name
+                period_suffix = ""
+                for period_label, suffix in PERIOD_SUFFIX_MAP.items():
+                    if period_label in market_name:
+                        period_suffix = suffix
+                        break
 
-                odds_decimal = oc.get("odds")
-                if not odds_decimal or odds_decimal <= 1.0:
-                    continue
+                market_key = base_key + period_suffix
+                specifiers = mkt.get("specifiers") or ""
 
-                american_odds = decimal_to_american(odds_decimal)
-                if -99 < american_odds < 99 and american_odds != 0:
-                    continue
+                # Parse outcomes
+                parsed: List[Outcome] = []
+                for oc in (mkt.get("outcomes") or []):
+                    if not oc.get("active", True):
+                        continue
 
-                outcome_name = oc.get("name", "Unknown")
-                point_val = None
+                    odds_decimal = oc.get("odds")
+                    if not odds_decimal:
+                        continue
 
-                if base_key == "spreads":
-                    point_val = self._extract_handicap(specifiers, outcome_name, home_team, away_team)
-                elif base_key == "totals":
-                    point_val = self._extract_total(specifiers)
+                    # Handle string odds
+                    if isinstance(odds_decimal, str):
+                        try:
+                            odds_decimal = float(odds_decimal)
+                        except ValueError:
+                            continue
 
-                # Resolve team names
-                resolved = resolve_team_name(outcome_name, sport_key)
-                if base_key == "h2h":
-                    if resolved.lower() == home_team.lower():
-                        resolved = home_team
-                    elif resolved.lower() == away_team.lower():
-                        resolved = away_team
-                elif base_key == "totals":
-                    name_lower = outcome_name.lower()
-                    if "over" in name_lower:
-                        resolved = "Over"
-                    elif "under" in name_lower:
-                        resolved = "Under"
+                    if odds_decimal <= 1.0:
+                        continue
 
-                parsed.append(Outcome(name=resolved, price=american_odds, point=point_val))
+                    american_odds = decimal_to_american(odds_decimal)
+                    if -99 < american_odds < 99 and american_odds != 0:
+                        continue
 
-            if parsed:
-                market_map.setdefault(market_key, []).extend(parsed)
+                    outcome_name = oc.get("name", "Unknown")
+                    point_val = None
+
+                    if base_key == "spreads":
+                        point_val = self._extract_handicap(
+                            specifiers, outcome_name, home_team, away_team
+                        )
+                    elif base_key == "totals":
+                        point_val = self._extract_total(specifiers)
+
+                    # Resolve team names
+                    resolved = resolve_team_name(outcome_name, sport_key)
+                    if base_key == "h2h":
+                        if resolved.lower() == home_team.lower():
+                            resolved = home_team
+                        elif resolved.lower() == away_team.lower():
+                            resolved = away_team
+                    elif base_key == "totals":
+                        name_lower = outcome_name.lower()
+                        if "over" in name_lower:
+                            resolved = "Over"
+                        elif "under" in name_lower:
+                            resolved = "Under"
+
+                    parsed.append(Outcome(name=resolved, price=american_odds, point=point_val))
+
+                if parsed:
+                    market_map.setdefault(market_key, []).extend(parsed)
 
         # Deduplicate and build Market objects
         result: List[Market] = []
@@ -624,11 +740,16 @@ class StakeUSSource(DataSource):
         return result
 
     @staticmethod
-    def _extract_handicap(specifiers: str, outcome_name: str, home_team: str, away_team: str) -> Optional[float]:
+    def _extract_handicap(
+        specifiers: str, outcome_name: str,
+        home_team: str, away_team: str,
+    ) -> Optional[float]:
+        """Extract handicap point value from specifiers string."""
         try:
             for part in specifiers.replace(";", ",").split(","):
                 part = part.strip()
-                if "hcp" in part.lower() or "handicap" in part.lower():
+                key_lower = part.split("=")[0].lower().strip()
+                if key_lower in ("hcp", "handicap"):
                     val = float(part.split("=")[-1])
                     resolved = resolve_team_name(outcome_name, "")
                     if resolved.lower() == away_team.lower():
@@ -640,6 +761,7 @@ class StakeUSSource(DataSource):
 
     @staticmethod
     def _extract_total(specifiers: str) -> Optional[float]:
+        """Extract total point value from specifiers string."""
         try:
             for part in specifiers.replace(";", ",").split(","):
                 part = part.strip()
