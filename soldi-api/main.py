@@ -427,6 +427,37 @@ async def health():
     }
 
 
+@app.get("/health/detailed")
+async def health_detailed():
+    """Detailed health check with per-sport scraper event counts."""
+    scraper_counts: Dict[str, Dict[str, int]] = {}
+    for sport_key in _ACTIVE_SPORTS:
+        bg_cache_key = f"{sport_key}:us:h2h::american"
+        cached = cache.get(bg_cache_key)
+        if cached is None:
+            scraper_counts[sport_key] = {}
+            continue
+
+        events_data, _ = cached
+        # Count events per bookmaker for this sport
+        bm_counts: Dict[str, int] = {}
+        for event in events_data:
+            for bm in event.get("bookmakers", []):
+                bm_key = bm.get("key", "unknown")
+                bm_counts[bm_key] = bm_counts.get(bm_key, 0) + 1
+        scraper_counts[sport_key] = bm_counts
+
+    return {
+        "status": "ok",
+        "version": "2.0.0",
+        "sources": source_count if data_source else 0,
+        "active_sports": _ACTIVE_SPORTS,
+        "disabled_scrapers": settings.disabled_scrapers or "",
+        "cache": cache.stats(),
+        "scrapers": scraper_counts,
+    }
+
+
 if __name__ == "__main__":
     import uvicorn
 

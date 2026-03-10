@@ -234,14 +234,15 @@ client.on('messageCreate', async (message) => {
     const fields = [];
 
     // 1. Website Server
+    let websiteUptime = '';
     try {
       const res = await fetch('http://localhost:3000/api/health', {
         signal: AbortSignal.timeout(10000),
       });
       if (res.ok) {
         const data = await res.json();
-        const uptime = data.uptime ? formatUptime(Math.floor(data.uptime)) : 'unknown';
-        fields.push({ name: '✅ Website Server', value: `Online — uptime: ${uptime}`, inline: false });
+        websiteUptime = data.uptime ? formatUptime(Math.floor(data.uptime)) : 'unknown';
+        fields.push({ name: '✅ Website Server', value: `Online — uptime: ${websiteUptime}`, inline: false });
       } else {
         fields.push({ name: '❌ Website Server', value: `Responded with status ${res.status}`, inline: false });
       }
@@ -249,20 +250,71 @@ client.on('messageCreate', async (message) => {
       fields.push({ name: '❌ Website Server', value: `Unreachable: ${err.message}`, inline: false });
     }
 
-    // 2. SoldiAPI (Odds Scraper)
+    // 2. SoldiAPI (Odds Scraper) — use detailed endpoint for per-scraper info
+    let scraperSummary = '';
     try {
       const soldiApiUrl = process.env.SOLDI_API_URL || 'http://localhost:3001';
-      const res = await fetch(`${soldiApiUrl}/health`, {
+      const res = await fetch(`${soldiApiUrl}/health/detailed`, {
         signal: AbortSignal.timeout(10000),
       });
       if (res.ok) {
         const data = await res.json();
-        fields.push({ name: '✅ SoldiAPI (Odds Scraper)', value: `Online — ${data.active_sports || 'N/A'} sports tracked`, inline: false });
+        const sportCount = (data.active_sports || []).length;
+        const totalSources = data.sources || 0;
+
+        // Build per-sport scraper summary
+        const scraperLines = [];
+        const sportNames = {
+          basketball_nba: 'NBA',
+          basketball_ncaab: 'NCAAB',
+          icehockey_nhl: 'NHL',
+          baseball_mlb: 'MLB',
+          mma_mixed_martial_arts: 'UFC',
+        };
+        const allBookKeys = new Set();
+        for (const [sport, counts] of Object.entries(data.scrapers || {})) {
+          const name = sportNames[sport] || sport;
+          const active = Object.entries(counts).filter(([, v]) => v > 0);
+          active.forEach(([k]) => allBookKeys.add(k));
+          const bookList = active.map(([k, v]) => `${k}:${v}`).join(' ');
+          scraperLines.push(`**${name}:** ${active.length > 0 ? bookList : '⏳ warming up'}`);
+        }
+
+        const disabled = data.disabled_scrapers || '';
+        const disabledList = disabled ? disabled.split(',').map(s => s.trim()).filter(Boolean) : [];
+
+        fields.push({
+          name: '✅ SoldiAPI (Odds Engine)',
+          value: `Online — ${totalSources} scrapers, ${sportCount} sports\n${scraperLines.join('\n')}`,
+          inline: false,
+        });
+
+        if (disabledList.length > 0) {
+          fields.push({
+            name: '⚙️ Disabled Scrapers',
+            value: disabledList.join(', '),
+            inline: false,
+          });
+        }
+
+        scraperSummary = `${allBookKeys.size} active books across ${sportCount} sports`;
       } else {
-        fields.push({ name: '❌ SoldiAPI (Odds Scraper)', value: `Responded with status ${res.status}`, inline: false });
+        fields.push({ name: '❌ SoldiAPI (Odds Engine)', value: `Responded with status ${res.status}`, inline: false });
       }
     } catch (err) {
-      fields.push({ name: '❌ SoldiAPI (Odds Scraper)', value: `Unreachable: ${err.message}`, inline: false });
+      // Fall back to basic health check
+      try {
+        const soldiApiUrl = process.env.SOLDI_API_URL || 'http://localhost:3001';
+        const res = await fetch(`${soldiApiUrl}/health`, { signal: AbortSignal.timeout(5000) });
+        if (res.ok) {
+          const data = await res.json();
+          fields.push({ name: '✅ SoldiAPI (Odds Engine)', value: `Online — ${data.sources || 0} sources`, inline: false });
+        } else {
+          fields.push({ name: '❌ SoldiAPI (Odds Engine)', value: `Status ${res.status}`, inline: false });
+        }
+      } catch {
+        fields.push({ name: '❌ SoldiAPI (Odds Engine)', value: `Unreachable: ${err.message}`, inline: false });
+      }
     }
 
     // 3. Discord Bot (self)
@@ -302,12 +354,12 @@ client.on('messageCreate', async (message) => {
       fields.push({ name: '❌ Twitter/X Bot', value: `Error reading state: ${err.message}`, inline: false });
     }
 
-    const allGood = fields.every(f => f.name.startsWith('✅'));
+    const allGood = fields.every(f => f.name.startsWith('✅') || f.name.startsWith('⚙️'));
 
     await sendEmbed(message.channel.id, {
       title: allGood ? '✅ All Systems Operational' : '⚠️ System Status',
       description: allGood
-        ? 'All Soldi services are running normally.'
+        ? `All Soldi services are running normally.${scraperSummary ? `\n${scraperSummary}` : ''}`
         : 'One or more services may need attention.',
       color: allGood ? COLORS.GREEN : COLORS.YELLOW,
       fields,
