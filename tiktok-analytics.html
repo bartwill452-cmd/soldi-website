@@ -388,46 +388,44 @@
 
     function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
 
-    // Auto-auth from localStorage (API key) or JWT token
+    // Auto-auth: try session key, then JWT token, then localStorage API key
     (async function autoAuth() {
       if (API_KEY) return;
 
-      // Try API key first
-      const savedKey = localStorage.getItem('soldi_api_key');
-      if (savedKey) {
+      function unlockApp(key) {
+        API_KEY = key;
+        sessionStorage.setItem('soldi_tiktok_analytics_key', key);
+        document.getElementById('ttGate').style.display = 'none';
+        document.getElementById('ttApp').style.display = 'block';
+        fetchTrending();
+      }
+
+      // 1. Check sessionStorage (already validated this session)
+      const sessionKey = sessionStorage.getItem('soldi_tiktok_analytics_key');
+      if (sessionKey) { unlockApp(sessionKey); return; }
+
+      // 2. Try JWT token (user is logged in)
+      const token = localStorage.getItem('soldi_token');
+      if (token) {
         try {
-          const res = await fetch('/api/validate-key?key=' + encodeURIComponent(savedKey));
+          const res = await fetch('/api/me', { headers: { 'Authorization': 'Bearer ' + token } });
           const data = await res.json();
-          if (data.success) {
-            API_KEY = savedKey;
-            sessionStorage.setItem('soldi_tiktok_analytics_key', savedKey);
-            document.getElementById('ttGate').style.display = 'none';
-            document.getElementById('ttApp').style.display = 'block';
-            fetchTrending();
+          if (res.ok && data.success) {
+            const key = data.apiKey || 'jwt_auth';
+            if (data.apiKey) localStorage.setItem('soldi_api_key', data.apiKey);
+            unlockApp(key);
             return;
           }
         } catch (e) {}
       }
 
-      // Fallback: Try JWT token
-      const savedToken = localStorage.getItem('soldi_token');
-      if (savedToken) {
+      // 3. Fallback: try saved API key from localStorage
+      const savedKey = localStorage.getItem('soldi_api_key');
+      if (savedKey) {
         try {
-          const res = await fetch('/api/me', {
-            headers: { 'Authorization': 'Bearer ' + savedToken }
-          });
+          const res = await fetch('/api/validate-key?key=' + encodeURIComponent(savedKey));
           const data = await res.json();
-          if (res.ok && data.success) {
-            // Use real API key if available, otherwise 'jwt_auth' placeholder
-            // (server accepts JWT Bearer token directly so the key param doesn't matter)
-            API_KEY = data.apiKey || 'jwt_auth';
-            if (data.apiKey) localStorage.setItem('soldi_api_key', data.apiKey);
-            sessionStorage.setItem('soldi_tiktok_analytics_key', API_KEY);
-            document.getElementById('ttGate').style.display = 'none';
-            document.getElementById('ttApp').style.display = 'block';
-            fetchTrending();
-            return;
-          }
+          if (data.success) { unlockApp(savedKey); return; }
         } catch (e) {}
       }
     })();
