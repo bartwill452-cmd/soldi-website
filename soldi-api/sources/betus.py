@@ -283,6 +283,27 @@ class BetUSSource(DataSource):
             logger.warning("BetUS: Navigation to %s failed: %s", url, e)
             return []
 
+        # Quick DOM check: how many game-tbl elements are on the page?
+        try:
+            dom_check = await self._page.evaluate("""
+                () => ({
+                    url: window.location.href,
+                    title: document.title,
+                    gameTbls: document.querySelectorAll('.game-tbl').length,
+                    gameBlocks: document.querySelectorAll('.game-block').length,
+                    bnLines: document.querySelectorAll('.bn-lines').length,
+                    bodyLen: document.body.innerHTML.length,
+                })
+            """)
+            logger.info(
+                "BetUS DOM check %s: url=%s gameTbls=%d gameBlocks=%d bnLines=%d bodyLen=%d",
+                sport_key, dom_check.get("url", "?"),
+                dom_check.get("gameTbls", 0), dom_check.get("gameBlocks", 0),
+                dom_check.get("bnLines", 0), dom_check.get("bodyLen", 0),
+            )
+        except Exception as e:
+            logger.warning("BetUS: DOM check failed for %s: %s", sport_key, e)
+
         try:
             raw_events = await self._page.evaluate(_JS_EXTRACT)
         except Exception as e:
@@ -290,7 +311,7 @@ class BetUSSource(DataSource):
             return []
 
         if not raw_events:
-            logger.info("BetUS: No events found for %s (0 game blocks matched)", sport_key)
+            logger.info("BetUS: No events found for %s (0 game-tbl matched)", sport_key)
             return []
 
         sport_title = get_sport_title(sport_key)
