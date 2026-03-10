@@ -1674,13 +1674,17 @@
       // Hide ALL "Apply Now" buttons (desktop + mobile)
       document.querySelectorAll('.nav-cta').forEach(el => el.style.display = 'none');
 
-      // Hide Features and Tools sections for logged-in paid members
+      // Hide all marketing sections for logged-in paid members
       document.getElementById('features').style.display = 'none';
       document.getElementById('tools').style.display = 'none';
-      // Hide nav/mobile/footer links to Features and Tools
-      document.querySelectorAll('.nav-links a[href="#features"], .nav-links a[href="#tools"]').forEach(el => el.style.display = 'none');
-      document.querySelectorAll('.mobile-nav a[href="#features"], .mobile-nav a[href="#tools"]').forEach(el => el.style.display = 'none');
-      document.querySelectorAll('.footer-links a[href="#features"], .footer-links a[href="#tools"]').forEach(el => el.style.display = 'none');
+      document.getElementById('success').style.display = 'none';
+      document.getElementById('apply').style.display = 'none';
+      document.querySelector('.hero').style.display = 'none';
+      document.querySelector('.how-it-works').style.display = 'none';
+      // Hide nav/mobile/footer links to marketing sections
+      document.querySelectorAll('.nav-links a[href="#features"], .nav-links a[href="#tools"], .nav-links a[href="#success"]').forEach(el => el.style.display = 'none');
+      document.querySelectorAll('.mobile-nav a[href="#features"], .mobile-nav a[href="#tools"], .mobile-nav a[href="#success"]').forEach(el => el.style.display = 'none');
+      document.querySelectorAll('.footer-links a[href="#features"], .footer-links a[href="#tools"], .footer-links a[href="#success"], .footer-links a[href="#apply"]').forEach(el => el.style.display = 'none');
 
       // Hide cancel button if already canceling/canceled
       if (user.status === 'canceled' || user.status === 'expired') {
@@ -1751,12 +1755,16 @@
       document.getElementById('mobileDashboardBtn').style.display = 'none';
       // Restore Apply Now buttons
       document.querySelectorAll('.nav-cta').forEach(el => el.style.display = '');
-      // Restore Features and Tools sections
+      // Restore all marketing sections
       document.getElementById('features').style.display = '';
       document.getElementById('tools').style.display = '';
-      document.querySelectorAll('.nav-links a[href="#features"], .nav-links a[href="#tools"]').forEach(el => el.style.display = '');
-      document.querySelectorAll('.mobile-nav a[href="#features"], .mobile-nav a[href="#tools"]').forEach(el => el.style.display = '');
-      document.querySelectorAll('.footer-links a[href="#features"], .footer-links a[href="#tools"]').forEach(el => el.style.display = '');
+      document.getElementById('success').style.display = '';
+      document.getElementById('apply').style.display = '';
+      document.querySelector('.hero').style.display = '';
+      document.querySelector('.how-it-works').style.display = '';
+      document.querySelectorAll('.nav-links a[href="#features"], .nav-links a[href="#tools"], .nav-links a[href="#success"]').forEach(el => el.style.display = '');
+      document.querySelectorAll('.mobile-nav a[href="#features"], .mobile-nav a[href="#tools"], .mobile-nav a[href="#success"]').forEach(el => el.style.display = '');
+      document.querySelectorAll('.footer-links a[href="#features"], .footer-links a[href="#tools"], .footer-links a[href="#success"], .footer-links a[href="#apply"]').forEach(el => el.style.display = '');
       // Reset welcome prefix
       document.getElementById('welcomePrefix').style.display = 'inline';
       trackEvent('member_logout', {});

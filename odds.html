@@ -73,8 +73,15 @@
     .tab-content { display: none; }
     .tab-content.active { display: block; }
 
-    /* ── Market Tabs ── */
-    .market-tabs { display: flex; gap: 4px; margin-bottom: 16px; flex-wrap: wrap; }
+    /* ── Period Group Tabs (Row 1) ── */
+    .period-tabs { display: flex; gap: 4px; margin-bottom: 8px; flex-wrap: wrap; }
+    .period-tab { padding: 7px 14px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; color: #a1a1aa; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+    .period-tab.active { background: rgba(59,130,246,0.12); border-color: rgba(59,130,246,0.3); color: #3b82f6; }
+    .period-tab:hover:not(.active) { background: rgba(255,255,255,0.07); color: #e4e4e7; }
+
+    /* ── Market Tabs (Row 2) ── */
+    .market-tabs { display: flex; gap: 4px; margin-bottom: 16px; flex-wrap: wrap; flex-direction: column; }
+    .market-tabs-row { display: flex; gap: 4px; flex-wrap: wrap; }
     .market-tab { padding: 6px 12px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; color: #a1a1aa; font-size: 11px; font-weight: 600; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
     .market-tab.active { background: rgba(34,197,94,0.12); border-color: rgba(34,197,94,0.3); color: #22c55e; }
     .market-tab:hover:not(.active) { background: rgba(255,255,255,0.07); color: #e4e4e7; }
@@ -349,6 +356,7 @@
     }
     .book-filter-chip:hover { background: rgba(255,255,255,0.07); }
     .book-filter-chip img { width: 18px; height: 18px; border-radius: 4px; object-fit: contain; }
+    .liquidity-label { font-size: 9px; color: #71717a; margin-top: 1px; text-align: center; }
 
     /* ── Responsive ── */
     @media (max-width: 768px) {
@@ -480,8 +488,8 @@ let currentSport = 'basketball_nba';
 let currentMarket = 'h2h';
 let sportCategories = [];
 let oddsData = [];
-let evData = [];
-let arbData = [];
+let evData = null;
+let arbData = null;
 let refreshTimer = null;
 
 // ── Sportsbook Filter State ──
@@ -518,81 +526,128 @@ const BOOK_META = {
   novig:         { short: 'NOV', name: 'Novig',         logo: '/images/books/novig.png' },
   bookmaker:     { short: 'BM',  name: 'Bookmaker',     logo: '/images/books/bookmaker.png' },
   buckeye:       { short: 'BKY', name: 'Buckeye',       logo: '/images/books/buckeye.png' },
+  stakeus:       { short: 'STK', name: 'StakeUS',       logo: '/images/books/stakeus.png' },
 };
 
-// Sport-specific market tab configuration
-const SPORT_MARKET_TABS = {
-  basketball_ncaab: [
-    { key: 'h2h', label: 'Moneyline' },
-    { key: 'spreads', label: 'Spread' },
-    { key: 'totals', label: 'Total' },
-    { key: 'h2h_h1', label: '1H ML' },
-    { key: 'spreads_h1', label: '1H Spread' },
-    { key: 'totals_h1', label: '1H Total' },
-    { key: 'team_total_home', label: 'Home TT' },
-    { key: 'team_total_away', label: 'Away TT' },
-  ],
-  basketball_nba: [
-    { key: 'h2h', label: 'Moneyline' },
-    { key: 'spreads', label: 'Spread' },
-    { key: 'totals', label: 'Total' },
-    { key: 'h2h_q1', label: 'Q1 ML' },
-    { key: 'spreads_q1', label: 'Q1 Spread' },
-    { key: 'totals_q1', label: 'Q1 Total' },
-    { key: 'team_total_home_q1', label: 'Q1 Home TT' },
-    { key: 'team_total_away_q1', label: 'Q1 Away TT' },
-    { key: 'h2h_h1', label: '1H ML' },
-    { key: 'spreads_h1', label: '1H Spread' },
-    { key: 'totals_h1', label: '1H Total' },
-    { key: 'team_total_home_h1', label: '1H Home TT' },
-    { key: 'team_total_away_h1', label: '1H Away TT' },
-  ],
-  icehockey_nhl: [
-    { key: 'h2h', label: 'Moneyline' },
-    { key: 'spreads', label: 'Puck Line' },
-    { key: 'totals', label: 'Total' },
-    { key: 'team_total_home', label: 'Home TT' },
-    { key: 'team_total_away', label: 'Away TT' },
-    { key: 'h2h_p1', label: 'P1 ML' },
-    { key: 'spreads_p1', label: 'P1 Spread' },
-    { key: 'totals_p1', label: 'P1 Total' },
-    { key: 'team_total_home_p1', label: 'P1 Home TT' },
-    { key: 'team_total_away_p1', label: 'P1 Away TT' },
-  ],
-  baseball_mlb: [
-    { key: 'h2h', label: 'Moneyline' },
-    { key: 'totals', label: 'Total' },
-    { key: 'spreads', label: 'Run Line' },
-    { key: 'team_total_home', label: 'Home TT' },
-    { key: 'team_total_away', label: 'Away TT' },
-    { key: 'totals_i1', label: '1st Inn O/U' },
-    { key: 'h2h_i1', label: '1st Inn ML' },
-    { key: 'h2h_3way_i1', label: '1st Inn 3-Way' },
-    { key: 'team_total_home_i1', label: '1st Inn Home TT' },
-    { key: 'team_total_away_i1', label: '1st Inn Away TT' },
-    { key: 'h2h_f5', label: 'F5 ML' },
-    { key: 'spreads_f5', label: 'F5 Spread' },
-    { key: 'totals_f5', label: 'F5 Total' },
-    { key: 'team_total_home_f5', label: 'F5 Home TT' },
-    { key: 'team_total_away_f5', label: 'F5 Away TT' },
-    { key: 'h2h_f7', label: 'F7 ML' },
-    { key: 'spreads_f7', label: 'F7 Spread' },
-    { key: 'totals_f7', label: 'F7 Total' },
-    { key: 'team_total_home_f7', label: 'F7 Home TT' },
-    { key: 'team_total_away_f7', label: 'F7 Away TT' },
-  ],
-  mma_mixed_martial_arts: [
-    { key: 'h2h', label: 'Moneyline' },
-    { key: 'total_rounds', label: 'O/U Rounds' },
-    { key: 'fight_to_go_distance', label: 'Go Distance' },
-  ],
+// ── Sport Market Configuration (2-level: Period Group → Markets) ──
+// Each sport has period groups (Full Game, 1st Half, etc.) and each group has markets.
+const SPORT_MARKET_CONFIG = {
+  basketball_ncaab: {
+    groups: [
+      { key: 'fg', label: 'Full Game', markets: [
+        { key: 'h2h', label: 'ML' },
+        { key: 'spreads', label: 'Spread' },
+        { key: 'totals', label: 'Total' },
+        { key: 'team_total_home', label: 'Home TT' },
+        { key: 'team_total_away', label: 'Away TT' },
+      ]},
+      { key: '1h', label: '1st Half', markets: [
+        { key: 'h2h_h1', label: 'ML' },
+        { key: 'spreads_h1', label: 'Spread' },
+        { key: 'totals_h1', label: 'Total' },
+      ]},
+    ]
+  },
+  basketball_nba: {
+    groups: [
+      { key: 'fg', label: 'Full Game', markets: [
+        { key: 'h2h', label: 'ML' },
+        { key: 'spreads', label: 'Spread' },
+        { key: 'totals', label: 'Total' },
+        { key: 'team_total_home', label: 'Home TT' },
+        { key: 'team_total_away', label: 'Away TT' },
+      ]},
+      { key: 'q1', label: '1st Quarter', markets: [
+        { key: 'h2h_q1', label: 'ML' },
+        { key: 'spreads_q1', label: 'Spread' },
+        { key: 'totals_q1', label: 'Total' },
+        { key: 'team_total_home_q1', label: 'Home TT' },
+        { key: 'team_total_away_q1', label: 'Away TT' },
+      ]},
+      { key: '1h', label: '1st Half', markets: [
+        { key: 'h2h_h1', label: 'ML' },
+        { key: 'spreads_h1', label: 'Spread' },
+        { key: 'totals_h1', label: 'Total' },
+        { key: 'team_total_home_h1', label: 'Home TT' },
+        { key: 'team_total_away_h1', label: 'Away TT' },
+      ]},
+    ]
+  },
+  icehockey_nhl: {
+    groups: [
+      { key: 'fg', label: 'Full Game', markets: [
+        { key: 'h2h', label: 'ML' },
+        { key: 'spreads', label: 'Puck Line' },
+        { key: 'totals', label: 'Total' },
+        { key: 'team_total_home', label: 'Home TT' },
+        { key: 'team_total_away', label: 'Away TT' },
+      ]},
+      { key: 'p1', label: '1st Period', markets: [
+        { key: 'h2h_p1', label: 'ML' },
+        { key: 'spreads_p1', label: 'Spread' },
+        { key: 'totals_p1', label: 'O/U' },
+        { key: 'team_total_home_p1', label: 'Home TT' },
+        { key: 'team_total_away_p1', label: 'Away TT' },
+      ]},
+    ]
+  },
+  baseball_mlb: {
+    groups: [
+      { key: 'fg', label: 'Full Game', markets: [
+        { key: 'h2h', label: 'ML' },
+        { key: 'totals', label: 'O/U' },
+        { key: 'spreads', label: 'Run Line' },
+        { key: 'team_total_home', label: 'Home TT' },
+        { key: 'team_total_away', label: 'Away TT' },
+      ]},
+      { key: 'i1', label: '1st Inning', markets: [
+        { key: 'totals_i1', label: 'O/U' },
+        { key: 'h2h_i1', label: 'ML' },
+        { key: 'h2h_3way_i1', label: '3-Way' },
+        { key: 'team_total_home_i1', label: 'Home TT' },
+        { key: 'team_total_away_i1', label: 'Away TT' },
+      ]},
+      { key: 'f5', label: 'First 5', markets: [
+        { key: 'h2h_f5', label: 'ML' },
+        { key: 'spreads_f5', label: 'Spread' },
+        { key: 'totals_f5', label: 'O/U' },
+        { key: 'team_total_home_f5', label: 'Home TT' },
+        { key: 'team_total_away_f5', label: 'Away TT' },
+      ]},
+      { key: 'f7', label: 'First 7', markets: [
+        { key: 'h2h_f7', label: 'ML' },
+        { key: 'spreads_f7', label: 'Spread' },
+        { key: 'totals_f7', label: 'O/U' },
+        { key: 'team_total_home_f7', label: 'Home TT' },
+        { key: 'team_total_away_f7', label: 'Away TT' },
+      ]},
+    ]
+  },
+  mma_mixed_martial_arts: {
+    groups: [
+      { key: 'fg', label: 'Full Game', markets: [
+        { key: 'h2h', label: 'ML' },
+        { key: 'total_rounds', label: 'O/U Rounds' },
+        { key: 'fight_to_go_distance', label: 'Go Distance' },
+      ]},
+    ]
+  },
 };
+
+// Flat fallback for legacy compatibility
+const SPORT_MARKET_TABS = {};
+for (const [sport, config] of Object.entries(SPORT_MARKET_CONFIG)) {
+  SPORT_MARKET_TABS[sport] = config.groups.flatMap(g => g.markets);
+}
 
 const DEFAULT_MARKET_TABS = [
-  { key: 'h2h', label: 'Moneyline' },
+  { key: 'h2h', label: 'ML' },
   { key: 'spreads', label: 'Spread' },
   { key: 'totals', label: 'Total' },
 ];
+
+// Current period group state
+let currentPeriodGroup = 'fg';
 
 function getAuthHeaders() {
   const token = localStorage.getItem('soldi_token');
@@ -690,8 +745,9 @@ function toggleAllBooks(on) {
 
 function selectSport(sportKey, el) {
   currentSport = sportKey;
+  currentPeriodGroup = 'fg'; // Reset to Full Game when switching sports
   // Clear data so loading spinner shows for new sport
-  oddsData = []; evData = []; arbData = [];
+  oddsData = []; evData = null; arbData = null;
   document.querySelectorAll('.sport-chip').forEach(c => c.classList.remove('active'));
   if (el) el.classList.add('active');
   renderMarketTabs();
@@ -716,15 +772,67 @@ function switchMarket(market, el) {
 }
 
 function renderMarketTabs() {
-  const tabs = SPORT_MARKET_TABS[currentSport] || DEFAULT_MARKET_TABS;
+  const config = SPORT_MARKET_CONFIG[currentSport];
   const container = document.getElementById('marketTabs');
-  // If current market not available for this sport, switch to first tab
-  if (!tabs.find(t => t.key === currentMarket)) {
-    currentMarket = tabs[0].key;
+
+  if (!config) {
+    // Fallback: simple flat tabs
+    const tabs = DEFAULT_MARKET_TABS;
+    if (!tabs.find(t => t.key === currentMarket)) currentMarket = tabs[0].key;
+    container.innerHTML = tabs.map(tab =>
+      `<div class="market-tab ${tab.key === currentMarket ? 'active' : ''}" onclick="switchMarket('${tab.key}', this)">${tab.label}</div>`
+    ).join('');
+    return;
   }
-  container.innerHTML = tabs.map(tab =>
-    `<div class="market-tab ${tab.key === currentMarket ? 'active' : ''}" onclick="switchMarket('${tab.key}', this)">${tab.label}</div>`
+
+  const groups = config.groups;
+
+  // Ensure current period group exists for this sport
+  if (!groups.find(g => g.key === currentPeriodGroup)) {
+    currentPeriodGroup = groups[0].key;
+  }
+
+  // Get markets for the active period group
+  const activeGroup = groups.find(g => g.key === currentPeriodGroup);
+  const markets = activeGroup ? activeGroup.markets : groups[0].markets;
+
+  // Ensure current market exists in this group
+  if (!markets.find(m => m.key === currentMarket)) {
+    currentMarket = markets[0].key;
+  }
+
+  // Row 1: Period group tabs (only show if >1 group)
+  let html = '';
+  if (groups.length > 1) {
+    html += '<div class="period-tabs">';
+    html += groups.map(g =>
+      `<div class="period-tab ${g.key === currentPeriodGroup ? 'active' : ''}" onclick="switchPeriodGroup('${g.key}')">${g.label}</div>`
+    ).join('');
+    html += '</div>';
+  }
+
+  // Row 2: Market type tabs
+  html += '<div class="market-tabs-row">';
+  html += markets.map(m =>
+    `<div class="market-tab ${m.key === currentMarket ? 'active' : ''}" onclick="switchMarket('${m.key}', this)">${m.label}</div>`
   ).join('');
+  html += '</div>';
+
+  container.innerHTML = html;
+}
+
+function switchPeriodGroup(groupKey) {
+  currentPeriodGroup = groupKey;
+  // Reset market to first in the new group
+  const config = SPORT_MARKET_CONFIG[currentSport];
+  if (config) {
+    const group = config.groups.find(g => g.key === groupKey);
+    if (group && group.markets.length > 0) {
+      currentMarket = group.markets[0].key;
+    }
+  }
+  renderMarketTabs();
+  renderOddsScreen();
 }
 
 // ── Main Line Detection ──
@@ -850,7 +958,7 @@ async function loadOdds() {
 
 async function loadEV() {
   const container = document.getElementById('evContent');
-  if (!evData || evData.length === 0) {
+  if (evData === null) {
     container.innerHTML = '<div class="loading-state"><div class="spinner"></div>Calculating +EV bets...</div>';
   }
   try {
@@ -874,7 +982,7 @@ async function loadEV() {
 
 async function loadArb() {
   const container = document.getElementById('arbContent');
-  if (!arbData || arbData.length === 0) {
+  if (arbData === null) {
     container.innerHTML = '<div class="loading-state"><div class="spinner"></div>Scanning for arbitrage...</div>';
   }
   try {
@@ -959,15 +1067,19 @@ function getMarketLayout(marketKey) {
   return { type: 'moneyline', rows: ['home', 'away'] };
 }
 
-// Extract odds value and point for a given side from generic market data
+// Exchange books that show liquidity
+const EXCHANGE_BOOKS = new Set(['kalshi', 'prophetx', 'novig']);
+
+// Extract odds value, point, and liquidity for a given side from generic market data
 function extractOddsFromMarket(mktData, side) {
-  if (!mktData) return { odds: null, point: null };
-  if (side === 'home') return { odds: mktData.home?.price ?? null, point: mktData.home?.point ?? null };
-  if (side === 'away') return { odds: mktData.away?.price ?? null, point: mktData.away?.point ?? null };
-  if (side === 'draw') return { odds: mktData.draw?.price ?? null, point: null };
-  if (side === 'over') return { odds: mktData.over?.price ?? null, point: mktData.over?.point ?? null };
-  if (side === 'under') return { odds: mktData.under?.price ?? null, point: mktData.under?.point ?? null };
-  return { odds: null, point: null };
+  if (!mktData) return { odds: null, point: null, liquidity: null };
+  const sideData = side === 'home' ? mktData.home : side === 'away' ? mktData.away : side === 'draw' ? mktData.draw : side === 'over' ? mktData.over : side === 'under' ? mktData.under : null;
+  if (!sideData) return { odds: null, point: null, liquidity: null };
+  return {
+    odds: sideData.price ?? null,
+    point: sideData.point ?? null,
+    liquidity: sideData.liquidity ?? null,
+  };
 }
 
 // Row label for a given side
@@ -1000,14 +1112,8 @@ function renderOddsScreen() {
 
   const layout = getMarketLayout(currentMarket);
 
-  // Collect all unique sportsbooks that have data for the current market (respecting filter)
-  const bookKeysSet = new Set();
-  events.forEach(event => {
-    event.bookmakers.forEach(bm => {
-      if (isBookVisible(bm.key) && getMarketDataForBook(bm, currentMarket, event)) bookKeysSet.add(bm.key);
-    });
-  });
-  const bookKeys = Array.from(bookKeysSet);
+  // Show ALL sportsbooks that the user hasn't filtered out (even those with no data yet)
+  const bookKeys = Object.keys(BOOK_META).filter(k => isBookVisible(k));
 
   // Build table
   let html = '<div class="odds-table-wrapper"><table class="odds-table">';
@@ -1126,7 +1232,7 @@ function buildGenericRow(label, best, avg, bookKeys, event, side, marketKey) {
   bookKeys.forEach(key => {
     const bm = event.bookmakers.find(b => b.key === key);
     const mktData = bm ? getMarketDataForBook(bm, marketKey, event) : null;
-    const { odds, point } = extractOddsFromMarket(mktData, side);
+    const { odds, point, liquidity } = extractOddsFromMarket(mktData, side);
     let pointLabel = '';
 
     if (point != null) {
@@ -1138,10 +1244,17 @@ function buildGenericRow(label, best, avg, bookKeys, event, side, marketKey) {
       }
     }
 
+    // Liquidity label for exchange books
+    let liqLabel = '';
+    if (EXCHANGE_BOOKS.has(key) && liquidity != null && liquidity > 0) {
+      const liqStr = liquidity >= 1000 ? '$' + (liquidity / 1000).toFixed(1) + 'k' : '$' + Math.round(liquidity);
+      liqLabel = `<div class="liquidity-label">${liqStr}</div>`;
+    }
+
     if (odds != null) {
       const isBest = odds === best.odds;
       const cls = isBest ? 'best-highlight' : (odds > 0 ? 'positive' : 'negative');
-      html += `<td><span class="odds-val ${cls}">${fmtOdds(odds)}</span>${pointLabel}</td>`;
+      html += `<td><span class="odds-val ${cls}">${fmtOdds(odds)}</span>${pointLabel}${liqLabel}</td>`;
     } else {
       html += '<td><span class="odds-val empty">-</span></td>';
     }
@@ -1435,6 +1548,8 @@ function avgAmericanOdds(oddsArr) {
   let count = 0;
   for (const odds of oddsArr) {
     if (odds == null || odds === 0) continue;
+    // Skip invalid odds — valid American odds are <= -100 or >= +100
+    if (odds > -100 && odds < 100) continue;
     // Convert American odds to implied probability
     let prob;
     if (odds > 0) prob = 100 / (odds + 100);
@@ -1451,6 +1566,8 @@ function avgAmericanOdds(oddsArr) {
 
 function fmtOdds(odds) {
   if (!odds || odds === 0) return '-';
+  // Skip invalid odds between -99 and +99 (likely unconverted cent/probability values)
+  if (odds > -100 && odds < 100) return '-';
   return odds > 0 ? '+' + odds : '' + odds;
 }
 

@@ -1120,6 +1120,7 @@ const ODDS_SPORTSBOOKS = [
   { key: 'novig', name: 'Novig', shortName: 'NOV' },
   { key: 'bookmaker', name: 'Bookmaker', shortName: 'BM' },
   { key: 'buckeye', name: 'Buckeye', shortName: 'BKY' },
+  { key: 'stakeus', name: 'StakeUS', shortName: 'STK' },
 ];
 const SHARP_BOOKS = ['pinnacle', 'novig', 'bookmaker'];
 
@@ -4891,6 +4892,14 @@ async function refreshGuidesCache() {
 loadGuidesCache();
 
 console.log('[Guides] Loaded ' + guidesCache.size + ' guides from disk cache');
+
+// Refresh guides from Google Docs 45s after startup, then every 6 hours
+setTimeout(() => {
+  refreshGuidesCache().catch(err => console.error('[Guides] Startup refresh failed:', err.message));
+  setInterval(() => {
+    refreshGuidesCache().catch(err => console.error('[Guides] Periodic refresh failed:', err.message));
+  }, 6 * 60 * 60 * 1000); // 6 hours
+}, 45000);
 
 // GET /api/guides/:slug — returns guide content (JWT auth required)
 app.get('/api/guides/:slug', requireAuth, (req, res) => {

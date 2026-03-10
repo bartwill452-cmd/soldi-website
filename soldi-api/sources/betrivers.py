@@ -281,6 +281,9 @@ class BetRiversSource(DataSource):
                     continue
                 base = "spreads"
             elif "total" in label_lower:
+                # Skip alternate total lines
+                if "alternate" in label_lower or "alt " in label_lower:
+                    continue
                 # Check if this is a team total
                 home_lower = home.lower()
                 away_lower = away.lower()
