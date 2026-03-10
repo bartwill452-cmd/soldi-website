@@ -143,7 +143,7 @@ class FanDuelSource(DataSource):
             return events, {"x-requests-remaining": "unlimited"}
 
         except Exception as e:
-            logger.warning(f"FanDuel failed for {sport_key}: {e}")
+            logger.warning(f"FanDuel failed for {sport_key}: {type(e).__name__}: {e!r}")
             return [], {"x-requests-remaining": "unlimited"}
 
     async def _enrich_all(
@@ -158,6 +158,7 @@ class FanDuelSource(DataSource):
     # ---- Period market enrichment (1H, Q1, etc.) from event detail pages ----
 
     # FanDuel event-page tabs that contain period markets we want (sport-specific)
+    # Sports with no period tabs (MMA, boxing) use empty lists to skip enrichment.
     _SPORT_PERIOD_TABS = {
         "basketball_nba": ["half", "1st-quarter", "2nd-quarter", "3rd-quarter", "4th-quarter"],
         "basketball_ncaab": ["half"],
@@ -165,6 +166,8 @@ class FanDuelSource(DataSource):
         "baseball_mlb": ["1st-inning", "first-5-innings", "first-7-innings"],
         "americanfootball_nfl": ["half", "1st-quarter", "2nd-quarter", "3rd-quarter", "4th-quarter"],
         "americanfootball_ncaaf": ["half", "1st-quarter"],
+        "mma_mixed_martial_arts": [],  # MMA fights have no halves/quarters
+        "boxing_boxing": [],  # Boxing has no halves/quarters
     }
     # Fallback for sports not listed
     _PERIOD_TABS = ["half", "1st-quarter", "2nd-quarter", "3rd-quarter", "4th-quarter"]

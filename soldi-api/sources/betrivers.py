@@ -7,7 +7,6 @@ No authentication required.
 import asyncio
 import logging
 import re
-import time
 from typing import Dict, List, Optional, Tuple
 
 import httpx
@@ -27,12 +26,6 @@ logger = logging.getLogger(__name__)
 
 # Kambi API base (rsiuspa = Rush Street Interactive US PA)
 BASE_URL = "https://eu-offering-api.kambicdn.com/offering/v2018/rsiuspa"
-
-# Minimum seconds between Kambi API requests (across all sports).
-# Kambi CDN allows ~3-5 req/s sustained; 0.25s gives us 4 req/s.
-# Combined with semaphore(4) concurrency, this handles 50+ events within
-# the 45s composite timeout.  429 retries with exponential backoff handle spikes.
-_MIN_REQUEST_INTERVAL = 0.25
 
 # Maximum retries for 429 responses
 _MAX_RETRIES = 3
@@ -81,27 +74,11 @@ class BetRiversSource(DataSource):
         )
         # Cache: canonical_event_id → (kambi_event_id, event_url)
         self._event_ids: Dict[str, Tuple[int, Optional[str]]] = {}
-        # Global request throttle: serialize all Kambi requests to avoid 429s
-        self._request_lock = asyncio.Lock()
-        self._last_request_time: float = 0.0
 
-    async def _throttled_get(self, url: str, params: dict) -> httpx.Response:
-        """Make a GET request with global rate-limiting and 429 retry logic.
-
-        Ensures at least _MIN_REQUEST_INTERVAL seconds between requests and
-        retries with exponential backoff on 429 responses.
-        """
+    async def _get_json(self, url: str, params: dict) -> httpx.Response:
+        """Make a GET request with 429 retry logic."""
         for attempt in range(_MAX_RETRIES + 1):
-            async with self._request_lock:
-                # Enforce minimum interval between requests
-                now = time.monotonic()
-                elapsed = now - self._last_request_time
-                if elapsed < _MIN_REQUEST_INTERVAL:
-                    await asyncio.sleep(_MIN_REQUEST_INTERVAL - elapsed)
-                self._last_request_time = time.monotonic()
-
             response = await self._client.get(url, params=params)
-
             if response.status_code == 429:
                 if attempt < _MAX_RETRIES:
                     backoff = _RETRY_BACKOFF_BASE * (2 ** attempt)
@@ -118,7 +95,6 @@ class BetRiversSource(DataSource):
                         url.split("/")[-1], _MAX_RETRIES,
                     )
             return response
-
         return response  # Return last response (will be 429)
 
     async def get_odds(
@@ -137,10 +113,10 @@ class BetRiversSource(DataSource):
             return [], {"x-requests-remaining": "unlimited"}
 
         try:
-            # Step 1: Get event list from listView
+            # Step 1: Get event list from listView (lightweight, ~50KB)
             list_url = f"{BASE_URL}/listView/{sport_path}.json"
             params = {"lang": "en_US", "market": "US"}
-            response = await self._throttled_get(list_url, params)
+            response = await self._get_json(list_url, params)
             response.raise_for_status()
             data = response.json()
 
@@ -148,24 +124,48 @@ class BetRiversSource(DataSource):
             if not kambi_events:
                 return [], {"x-requests-remaining": "unlimited"}
 
-            # Step 2: Fetch full bet offers per event with bounded concurrency.
-            # We use a semaphore to allow up to 4 concurrent requests while
-            # the throttled_get still enforces the minimum interval between
-            # requests. This is ~4x faster than fully sequential.
-            sem = asyncio.Semaphore(4)
+            # Extract the league groupId from first event
+            group_id = kambi_events[0].get("event", {}).get("groupId")
+            if not group_id:
+                logger.warning("BetRivers: no groupId found for %s", sport_key)
+                return [], {"x-requests-remaining": "unlimited"}
+
+            # Build a map of event info by eventId
+            event_map = {}  # type: Dict[int, dict]
+            for ev in kambi_events:
+                info = ev.get("event", {})
+                eid = info.get("id")
+                if eid:
+                    event_map[eid] = info
+
+            # Step 2: Fetch ALL bet offers in bulk via group endpoint.
+            # This makes 1-3 HTTP requests instead of N+1 per-event calls,
+            # avoiding the timeout issues caused by serialized rate-limited
+            # per-event fetches across concurrent sports.
+            all_offers = await self._fetch_group_offers(group_id)
+
+            # Group offers by eventId
+            offers_by_event = {}  # type: Dict[int, List[dict]]
+            for offer in all_offers:
+                eid = offer.get("eventId")
+                if eid and eid in event_map:
+                    if eid not in offers_by_event:
+                        offers_by_event[eid] = []
+                    offers_by_event[eid].append(offer)
+
+            # Step 3: Parse events
             sport_title = get_sport_title(sport_key)
-
-            async def _fetch_and_parse(ev):
-                async with sem:
-                    result = await self._fetch_event_offers(ev)
-                    if result is not None:
-                        return self._parse_event(result, sport_key, sport_title)
-                    return None
-
-            parsed_results = await asyncio.gather(
-                *[_fetch_and_parse(ev) for ev in kambi_events]
-            )
-            events = [e for e in parsed_results if e is not None]
+            events = []
+            for eid, info in event_map.items():
+                event_offers = offers_by_event.get(eid, [])
+                if not event_offers:
+                    continue
+                result = self._parse_event(
+                    {"event": info, "betOffers": event_offers},
+                    sport_key, sport_title,
+                )
+                if result:
+                    events.append(result)
 
             logger.info(f"BetRivers: {len(events)} events for {sport_key}")
             return events, {"x-requests-remaining": "unlimited"}
@@ -174,23 +174,41 @@ class BetRiversSource(DataSource):
             logger.warning(f"BetRivers failed for {sport_key}: {type(e).__name__}: {e}")
             return [], {"x-requests-remaining": "unlimited"}
 
-    async def _fetch_event_offers(self, kambi_event: dict) -> Optional[dict]:
-        """Fetch full bet offers for a single event with throttling."""
-        event_info = kambi_event.get("event", {})
-        event_id = event_info.get("id")
-        if not event_id:
-            return None
+    async def _fetch_group_offers(self, group_id: int) -> List[dict]:
+        """Fetch all bet offers for a league group with pagination.
 
-        url = f"{BASE_URL}/betoffer/event/{event_id}.json"
-        params = {"lang": "en_US", "market": "US"}
-        try:
-            response = await self._throttled_get(url, params)
+        Uses the Kambi group endpoint which returns all offers in 1-3 calls
+        instead of N+1 per-event calls. Typical sports have 2000-5000 offers.
+        """
+        all_offers = []  # type: List[dict]
+        page_size = 2000
+        start = 0
+
+        while True:
+            url = f"{BASE_URL}/betoffer/group/{group_id}.json"
+            params = {
+                "lang": "en_US",
+                "market": "US",
+                "range_start": start,
+                "range_size": page_size,
+            }
+            response = await self._get_json(url, params)
             if response.status_code != 200:
-                return None
+                logger.warning("BetRivers group endpoint returned %d for group %d",
+                               response.status_code, group_id)
+                break
             data = response.json()
-            return {"event": event_info, "betOffers": data.get("betOffers", [])}
-        except Exception:
-            return None
+            offers = data.get("betOffers", [])
+            all_offers.extend(offers)
+
+            # Check pagination
+            range_info = data.get("range", {})
+            total = range_info.get("total", 0)
+            start += len(offers)
+            if start >= total or not offers:
+                break
+
+        return all_offers
 
     def _parse_event(self, data: dict, sport_key: str, sport_title: str) -> Optional[OddsEvent]:
         event_info = data["event"]
@@ -436,13 +454,32 @@ class BetRiversSource(DataSource):
         # Compute the variance of absolute prices from 110.
         return sum((p - 110) ** 2 for p in prices)
 
+    @staticmethod
+    def _outcome_name(o: dict) -> str:
+        """Extract best available name from a Kambi outcome.
+
+        Kambi outcomes have both 'label' (e.g. "1", "2", "PHI 76ers") and
+        'participant' (e.g. "(5) Israel Adesanya").  For MMA/boxing,
+        labels are just "1"/"2" — prefer participant in that case.
+        Also strip ranking prefixes like "(5) " from participant names.
+        """
+        label = o.get("label", "")
+        participant = o.get("participant", "")
+        # Use participant if label is just a digit (1, 2, X)
+        if participant and (label.isdigit() or label.upper() == "X"):
+            # Strip ranking prefix like "(5) " or "(14) "
+            name = re.sub(r"^\(\d+\)\s*", "", participant)
+        else:
+            name = label
+        return resolve_team_name(name)
+
     def _parse_moneyline(self, outcomes: list) -> List[Outcome]:
         result = []
         for o in outcomes:
             milliodds = o.get("odds")
             if milliodds is None:
                 continue
-            name = resolve_team_name(o.get("label", ""))
+            name = self._outcome_name(o)
             price = self._milliodds_to_american(milliodds)
             result.append(Outcome(name=name, price=price))
         return result if len(result) >= 2 else []
@@ -454,7 +491,7 @@ class BetRiversSource(DataSource):
             line = o.get("line")
             if milliodds is None or line is None:
                 continue
-            name = resolve_team_name(o.get("label", ""))
+            name = self._outcome_name(o)
             price = self._milliodds_to_american(milliodds)
             point = line / 1000.0  # Kambi uses milliunits
             result.append(Outcome(name=name, price=price, point=point))
@@ -563,7 +600,7 @@ class BetRiversSource(DataSource):
         try:
             url = f"{BASE_URL}/betoffer/event/{kambi_id}.json"
             params = {"lang": "en_US", "market": "US"}
-            response = await self._throttled_get(url, params)
+            response = await self._get_json(url, params)
             if response.status_code != 200:
                 return []
             data = response.json()
