@@ -1104,24 +1104,6 @@ button { cursor: pointer; font-family: inherit; }
   border-color: rgba(34, 197, 94, 0.2);
   background: rgba(34, 197, 94, 0.03);
 }
-.dash-card-finder {
-  border-color: rgba(59, 130, 246, 0.2);
-  background: rgba(59, 130, 246, 0.03);
-}
-.dash-card-finder .dash-card-header svg { stroke: #3b82f6; }
-.dash-card-finder .dash-affiliate-info strong { color: #3b82f6; }
-.dash-card-leads {
-  border-color: rgba(249, 115, 22, 0.2);
-  background: rgba(249, 115, 22, 0.03);
-}
-.dash-card-leads .dash-card-header svg { stroke: #f97316; }
-.dash-card-leads .dash-affiliate-info strong { color: #f97316; }
-.dash-card-imagegen {
-  border-color: rgba(168, 85, 247, 0.2);
-  background: rgba(168, 85, 247, 0.03);
-}
-.dash-card-imagegen .dash-card-header svg { stroke: #a855f7; }
-.dash-card-imagegen .dash-affiliate-info strong { color: #a855f7; }
 .dash-card-reviews {
   border-color: rgba(244, 63, 94, 0.2);
   background: rgba(244, 63, 94, 0.03);

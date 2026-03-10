@@ -492,14 +492,19 @@ async function checkAccount(account, state) {
       ? tweet.text.substring(0, 497) + '...'
       : tweet.text;
 
+    // Build description with tweet text + direct link to the tweet
+    const tweetLink = tweet.url || `https://x.com/${handle}`;
+    const descriptionWithLink = (tweetText || 'New tweet') + `\n\n🔗 [View Tweet](${tweetLink})`;
+
     const embed = createEmbed({
       author: {
         name: `@${handle}`,
         url: `https://x.com/${handle}`,
         icon_url: 'https://abs.twimg.com/responsive-web/client-web/icon-ios.77d25eba.png',
       },
-      description: tweetText || 'New tweet',
-      url: tweet.url,
+      title: `${emoji} New ${sport} Tweet`,
+      description: descriptionWithLink,
+      url: tweetLink,
       color: COLORS.TWITTER,
       footer: { text: `Soldi • ${sport} ${emoji}` },
       image: tweet.images?.[0] || undefined,
