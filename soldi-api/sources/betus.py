@@ -57,7 +57,7 @@ _SPORT_SLUGS: Dict[str, str] = {
 }
 
 _CACHE_TTL = 90  # seconds
-_STALE_TTL = 300  # serve stale up to 5 min
+_STALE_TTL = 600  # serve stale up to 10 min (prefetch cycles are long ~4-7 min)
 
 # JS to extract all game data from the DOM.
 # BetUS uses ASP.NET WebForms with server-rendered HTML.
@@ -193,7 +193,10 @@ class BetUSSource(DataSource):
                     for sport_key, slug in _SPORT_SLUGS.items():
                         try:
                             events = await self._fetch_sport(sport_key, slug)
-                            self._cache[sport_key] = (events, time.time())
+                            # Only update cache if we got events (preserve
+                            # previous good data when page fails to load)
+                            if events:
+                                self._cache[sport_key] = (events, time.time())
                             logger.info("BetUS prefetch: %d events for %s", len(events), sport_key)
                         except Exception as e:
                             logger.warning("BetUS prefetch %s failed: %s", sport_key, e)
@@ -269,16 +272,19 @@ class BetUSSource(DataSource):
 
         url = f"{SITE_URL}/sportsbook/{slug}"
         try:
-            # Use domcontentloaded — networkidle times out on BetUS
-            # because of persistent tracking/analytics connections
-            await self._page.goto(url, timeout=30000, wait_until="domcontentloaded")
-            # Wait for game containers to render (server-side rendered,
-            # should be available immediately after DOM load)
+            # Use 'load' — BetUS uses ASP.NET UpdatePanels that render game
+            # content AFTER domcontentloaded.  'networkidle' is too strict
+            # (persistent analytics connections), but 'load' gives the page
+            # enough time to render the UpdatePanel content.
+            await self._page.goto(url, timeout=45000, wait_until="load")
+            # Wait for game containers to render after page load
             try:
-                await self._page.wait_for_selector(".game-tbl", timeout=10000)
+                await self._page.wait_for_selector(
+                    ".game-tbl, .bn-lines, .game-block", timeout=15000,
+                )
             except Exception:
-                # Fallback: wait a fixed duration for any dynamic rendering
-                await asyncio.sleep(3)
+                # ASP.NET may still be rendering — give it more time
+                await asyncio.sleep(5)
         except Exception as e:
             logger.warning("BetUS: Navigation to %s failed: %s", url, e)
             return []
