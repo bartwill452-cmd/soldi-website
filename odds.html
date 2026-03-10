@@ -325,7 +325,11 @@
     }
     .lm-close:hover { color: #fff; background: rgba(255,255,255,0.08); }
     .lm-title { font-size: 18px; font-weight: 800; color: #fff; margin-bottom: 4px; }
-    .lm-subtitle { font-size: 13px; color: #71717a; margin-bottom: 16px; }
+    .lm-subtitle { font-size: 13px; color: #71717a; margin-bottom: 12px; }
+    .lm-market-tabs { display: flex; gap: 4px; margin-bottom: 14px; background: rgba(255,255,255,0.03); border-radius: 8px; padding: 3px; border: 1px solid rgba(255,255,255,0.06); }
+    .lm-market-tab { flex: 1; padding: 6px 10px; background: transparent; border: none; border-radius: 6px; color: #71717a; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.15s; text-align: center; }
+    .lm-market-tab.active { background: #22c55e; color: #050507; }
+    .lm-market-tab:hover:not(.active) { background: rgba(255,255,255,0.06); color: #a1a1aa; }
     .lm-filters { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
     .lm-filter-chip {
       padding: 5px 12px; border-radius: 16px; font-size: 11px; font-weight: 600;
@@ -483,6 +487,7 @@
       <button class="lm-close" onclick="closeLM()">&times;</button>
       <div class="lm-title" id="lmTitle"></div>
       <div class="lm-subtitle" id="lmSubtitle"></div>
+      <div class="lm-market-tabs" id="lmMarketTabs"></div>
       <div class="lm-filters" id="lmFilters"></div>
       <div class="lm-chart-wrap"><canvas id="lmChart"></canvas></div>
       <div id="lmTableWrap"></div>
@@ -1232,7 +1237,7 @@ function renderOddsScreen() {
           <span class="event-sport-badge ${badge}">${event.sportKey.split('_').pop().toUpperCase()}</span>
           <span class="event-matchup">${event.awayTeam} @ ${event.homeTeam}</span>
         </div>
-        <span style="margin-left:auto;cursor:pointer;font-size:11px;color:#71717a;padding:4px 10px;border:1px solid rgba(255,255,255,0.08);border-radius:6px;font-weight:600;" onclick="openLM('${event.id}','${event.sportKey}','${event.awayTeam} @ ${event.homeTeam}')" title="View line movement">Lines</span>
+        <span style="margin-left:auto;cursor:pointer;color:#71717a;padding:4px 8px;border:1px solid rgba(255,255,255,0.08);border-radius:6px;display:inline-flex;align-items:center;" onclick="openLM('${event.id}','${event.sportKey}','${event.awayTeam} @ ${event.homeTeam}')" title="View line movement"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span>
       </div>
     </td></tr>`;
 
@@ -1321,12 +1326,44 @@ async function openLM(eventId, sportKey, matchup) {
   lmEventId = eventId;
   lmSportKey = sportKey;
   document.getElementById('lmTitle').textContent = matchup;
-  document.getElementById('lmSubtitle').textContent = `Line movement for ${sportKey.split('_').pop().toUpperCase()} — ${currentMarket.replace(/_/g, ' ').toUpperCase()}`;
   document.getElementById('lmOverlay').classList.add('open');
   lmActiveMarket = currentMarket;
 
+  renderLMMarketTabs();
+  await fetchLMData();
+}
+
+function renderLMMarketTabs() {
+  const config = SPORT_MARKET_CONFIG[lmSportKey];
+  const container = document.getElementById('lmMarketTabs');
+  if (!config) {
+    // Fallback: simple ML/Spread/Total
+    const tabs = DEFAULT_MARKET_TABS;
+    container.innerHTML = tabs.map(t =>
+      `<div class="lm-market-tab ${t.key === lmActiveMarket ? 'active' : ''}" onclick="switchLMMarket('${t.key}')">${t.label}</div>`
+    ).join('');
+    return;
+  }
+  // Get markets from the current period group
+  const group = config.groups.find(g => g.key === currentPeriodGroup) || config.groups[0];
+  container.innerHTML = group.markets.map(m =>
+    `<div class="lm-market-tab ${m.key === lmActiveMarket ? 'active' : ''}" onclick="switchLMMarket('${m.key}')">${m.label}</div>`
+  ).join('');
+}
+
+async function switchLMMarket(marketKey) {
+  lmActiveMarket = marketKey;
+  renderLMMarketTabs();
+  await fetchLMData();
+}
+
+async function fetchLMData() {
+  const sportLabel = lmSportKey.split('_').pop().toUpperCase();
+  const marketLabel = lmActiveMarket.replace(/_/g, ' ').toUpperCase();
+  document.getElementById('lmSubtitle').textContent = `Line movement for ${sportLabel} — ${marketLabel}`;
+
   try {
-    const url = buildUrl(`/api/odds/line-history/${encodeURIComponent(eventId)}`, { sport: sportKey, market: lmActiveMarket });
+    const url = buildUrl(`/api/odds/line-history/${encodeURIComponent(lmEventId)}`, { sport: lmSportKey, market: lmActiveMarket });
     const res = await fetch(url, { headers: getAuthHeaders() });
     const json = await res.json();
     lmData = json.history || [];
@@ -1335,6 +1372,7 @@ async function openLM(eventId, sportKey, matchup) {
     lmData = [];
   }
 
+  lmFilterBook = null;
   renderLMFilters();
   renderLMChart();
   renderLMTable();
@@ -1413,7 +1451,7 @@ function renderLMChart() {
       borderWidth: 2,
       pointRadius: 3,
       pointHoverRadius: 5,
-      tension: 0.3,
+      stepped: 'before',
       fill: false,
     });
   });
@@ -1446,7 +1484,12 @@ function renderLMChart() {
           grid: { color: 'rgba(255,255,255,0.04)' },
           ticks: {
             color: '#71717a', font: { size: 11 },
-            callback: (v) => (v > 0 ? '+' : '') + v
+            callback: function(v) {
+              // Spread/total markets show point values, ML shows American odds with +/-
+              const isML = lmActiveMarket.startsWith('h2h') || lmActiveMarket === 'fight_to_go_distance';
+              if (isML) return (v > 0 ? '+' : '') + v;
+              return v;
+            }
           }
         }
       }
