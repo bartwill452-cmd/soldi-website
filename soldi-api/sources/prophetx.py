@@ -278,6 +278,17 @@ class ProphetXSource(DataSource):
                             "team_total_q4", "home_total_q4", "away_total_q4",
                             "first_half_moneyline", "first_half_spread", "first_half_total",
                             "1h_moneyline", "1h_spread", "1h_total",
+                            # Hockey periods
+                            "moneyline_p1", "spread_p1", "total_p1",
+                            "team_total_p1", "home_total_p1", "away_total_p1",
+                            "moneyline_p2", "spread_p2", "total_p2",
+                            "moneyline_p3", "spread_p3", "total_p3",
+                            # Baseball periods
+                            "moneyline_f5", "spread_f5", "total_f5",
+                            "team_total_f5", "home_total_f5", "away_total_f5",
+                            "moneyline_f7", "spread_f7", "total_f7",
+                            "moneyline_i1", "spread_i1", "total_i1",
+                            "total_i1", "moneyline_i1",
                         ]),
                         "event_ids": batch_str,
                     },
@@ -397,6 +408,21 @@ class ProphetXSource(DataSource):
 
         # Detect period suffix from market name (e.g., "1st Half Moneyline" -> "_h1")
         base_name, period_suffix = detect_period_suffix(market_name)
+
+        # Fallback: detect suffix from market_type if not found in name
+        # ProphetX uses types like "moneyline_p1", "spread_f5", "total_i1"
+        if not period_suffix:
+            _, type_suffix = detect_period_suffix(market_type)
+            if not type_suffix:
+                # Check for explicit underscore suffixes in market_type
+                import re as _re
+                _suffix_match = _re.search(
+                    r"[_](?:h[12]|q[1-4]|p[1-3]|f[57]|i1|s[1-3])$", market_type
+                )
+                if _suffix_match:
+                    type_suffix = _suffix_match.group(0)
+            if type_suffix:
+                period_suffix = type_suffix
 
         # Determine base market type from name
         parsed = None  # type: Optional[Market]

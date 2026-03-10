@@ -210,6 +210,10 @@ class BetOnlineSource(DataSource):
                 if f5_data:
                     f5_events = self._parse_offering(f5_data, sport_key, period_suffix="_f5")
                     self._merge_period_markets(events, f5_events)
+                f7_data = await self._api_call_http(sport, league, period=5)
+                if f7_data:
+                    f7_events = self._parse_offering(f7_data, sport_key, period_suffix="_f7")
+                    self._merge_period_markets(events, f7_events)
 
         return events
 
