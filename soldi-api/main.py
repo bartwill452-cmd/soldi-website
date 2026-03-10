@@ -74,8 +74,7 @@ async def _background_refresh_loop() -> None:
     HTTP sources hit APIs directly (~0.2-9s depending on source).
     With 0s pause, a new cycle starts immediately — updates every ~5-10s.
     """
-    # Short initial delay — Playwright sources need a moment to warm up
-    await asyncio.sleep(2)
+    # No initial delay — synchronous refresh already populated cache at startup.
     logger.info(
         "Background refresh loop started — %d sports, ALL concurrent",
         len(_ACTIVE_SPORTS),
@@ -295,6 +294,21 @@ async def lifespan(app: FastAPI):
     # Initialize line history database
     line_history.init_db(settings.line_history_db)
     line_history.purge_old_snapshots(settings.line_history_retention_days)
+
+    # ── Synchronous initial refresh (no warmup period) ──
+    # Populate cache for ALL sports BEFORE the server starts accepting requests.
+    # This eliminates the "warming up" empty-response window after deploys.
+    logger.info("Running synchronous initial refresh for %d sports...", len(_ACTIVE_SPORTS))
+    t0 = time.time()
+    init_results = await asyncio.gather(
+        *[_refresh_one_sport(sk) for sk in _ACTIVE_SPORTS],
+        return_exceptions=True,
+    )
+    ok = sum(1 for r in init_results if not isinstance(r, Exception))
+    logger.info(
+        "Initial refresh done: %d/%d sports in %.1fs — server ready",
+        ok, len(_ACTIVE_SPORTS), time.time() - t0,
+    )
 
     # Start continuous background refresh loop (keeps cache always warm)
     global _refresh_task

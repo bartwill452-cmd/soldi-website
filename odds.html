@@ -718,7 +718,11 @@ function renderBookFilter() {
   const chips = document.getElementById('bookFilterChips');
   const bar = document.getElementById('bookFilterBar');
   if (!chips || !bar) return;
-  const allKeys = Object.keys(BOOK_META);
+  // Only show books that actually have data (hides disabled/blocked scrapers)
+  const booksWithData = oddsData && oddsData.length > 0
+    ? new Set(oddsData.flatMap(e => (e.bookmakers || []).map(b => b.key)))
+    : new Set(Object.keys(BOOK_META));
+  const allKeys = Object.keys(BOOK_META).filter(k => booksWithData.has(k));
   if (allKeys.length === 0) { bar.style.display = 'none'; return; }
   bar.style.display = 'block';
   chips.innerHTML = allKeys.map(key => {
@@ -1112,8 +1116,10 @@ function renderOddsScreen() {
 
   const layout = getMarketLayout(currentMarket);
 
-  // Show ALL sportsbooks that the user hasn't filtered out (even those with no data yet)
-  const bookKeys = Object.keys(BOOK_META).filter(k => isBookVisible(k));
+  // Only show sportsbook columns that have data AND aren't filtered out.
+  // This hides disabled/blocked scrapers automatically (no empty columns).
+  const booksWithData = new Set(events.flatMap(e => (e.bookmakers || []).map(b => b.key)));
+  const bookKeys = Object.keys(BOOK_META).filter(k => isBookVisible(k) && booksWithData.has(k));
 
   // Build table
   let html = '<div class="odds-table-wrapper"><table class="odds-table">';
