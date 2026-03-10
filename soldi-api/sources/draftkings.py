@@ -303,10 +303,20 @@ class DraftKingsSource(DataSource):
     async def _fetch_sport(
         self, base_url: str, sport_key: str,
     ) -> List[OddsEvent]:
-        """Fetch game lines + player props + team totals for a sport."""
+        """Fetch game lines + player props + team totals for a sport.
+
+        After the base game lines load, we immediately cache them so the
+        composite can serve DraftKings data while sub-pages (periods,
+        player props) are still loading.  Each sub-page updates the cache
+        incrementally.
+        """
         # 1. Main game lines (Moneyline, Spread, Total)
         events = await self._navigate_and_capture(base_url, sport_key)
         logger.info("DraftKings: base capture for %s: %d events", sport_key, len(events))
+
+        # Cache base lines immediately so composite doesn't wait for sub-pages
+        if events:
+            self._cache[sport_key] = (events, time.time())
 
         # 2. Team totals via subcategory page (skip for combat sports — no team totals)
         # NOTE: NHL uses "team-totals" category; other sports use "team-props"
@@ -328,6 +338,10 @@ class DraftKingsSource(DataSource):
                 logger.info("DraftKings: %s for %s: %d events", mma_cat, sport_key, len(mma_events))
                 events = self._merge_events(events, mma_events)
 
+        # Update cache after team/MMA sub-pages
+        if events:
+            self._cache[sport_key] = (events, time.time())
+
         # 4. Half / quarter / period pages (sport-specific categories)
         if sport_key in _SPORTS_WITH_PERIODS:
             period_cats = _SPORT_PERIOD_CATS.get(sport_key, _PERIOD_CATS)
@@ -339,7 +353,11 @@ class DraftKingsSource(DataSource):
                 logger.info("DraftKings: %s for %s: %d events", period_cat, sport_key, len(period_events))
                 events = self._merge_events(events, period_events)
 
-        # 4. Player props (sport-specific categories)
+        # Update cache after period pages
+        if events:
+            self._cache[sport_key] = (events, time.time())
+
+        # 5. Player props (sport-specific categories)
         if sport_key in _SPORTS_WITH_PLAYER_PROPS:
             prop_cats = _SPORT_PROP_CATS.get(sport_key, _PLAYER_PROP_CATS)
             for prop_cat in prop_cats:
