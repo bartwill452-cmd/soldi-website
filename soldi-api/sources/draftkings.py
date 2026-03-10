@@ -557,19 +557,29 @@ class DraftKingsSource(DataSource):
         if not raw_events:
             return []
 
-        # Index markets by eventId
+        # Index markets by eventId (coerce to str to avoid int/str mismatch)
         markets_by_event = {}  # type: Dict[str, List[dict]]
         for m in raw_markets:
             eid = m.get("eventId")
-            if eid:
-                markets_by_event.setdefault(eid, []).append(m)
+            if eid is not None:
+                markets_by_event.setdefault(str(eid), []).append(m)
 
-        # Index selections by marketId
+        # Index selections by marketId (coerce to str)
         sels_by_market = {}  # type: Dict[str, List[dict]]
         for s in raw_selections:
             mid = s.get("marketId")
-            if mid:
-                sels_by_market.setdefault(mid, []).append(s)
+            if mid is not None:
+                sels_by_market.setdefault(str(mid), []).append(s)
+
+        # Log ID types for debugging market-event matching
+        if raw_events and raw_markets:
+            ev0_id = raw_events[0].get("id")
+            m0_eid = raw_markets[0].get("eventId")
+            logger.info(
+                "DraftKings ID types: event.id=%r (%s), market.eventId=%r (%s), matched=%s",
+                ev0_id, type(ev0_id).__name__, m0_eid, type(m0_eid).__name__,
+                str(ev0_id) in markets_by_event,
+            )
 
         sport_title = get_sport_title(sport_key)
         events = []  # type: List[OddsEvent]
@@ -618,8 +628,8 @@ class DraftKingsSource(DataSource):
             home_team = resolve_team_name(home_team)
             away_team = resolve_team_name(away_team)
 
-            # Build markets for this event
-            event_markets = markets_by_event.get(event_id, [])
+            # Build markets for this event (coerce to str for matching)
+            event_markets = markets_by_event.get(str(event_id), [])
             dk_markets = []  # type: List[Market]
 
             if ("mma" in sport_key or "boxing" in sport_key):
@@ -634,14 +644,14 @@ class DraftKingsSource(DataSource):
                     # Debug: check selections for first market
                     m0 = event_markets[0]
                     m0_id = m0.get("id")
-                    m0_sels = sels_by_market.get(m0_id, [])
+                    m0_sels = sels_by_market.get(str(m0_id), [])
                     logger.info("  market[0] id=%r has %d selections, sels_by_market keys=%s",
                                 m0_id, len(m0_sels), list(sels_by_market.keys())[:5])
 
             for mkt in event_markets:
                 market_id = mkt.get("id")
                 market_name = (mkt.get("name") or "").strip()
-                sels = sels_by_market.get(market_id, [])
+                sels = sels_by_market.get(str(market_id), [])
                 if not sels:
                     continue
 

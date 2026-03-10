@@ -286,11 +286,52 @@ class BetUSSource(DataSource):
 
         url = f"{SITE_URL}/sportsbook/{slug}"
         try:
-            await self._page.goto(url, timeout=30000, wait_until="load")
-            await asyncio.sleep(5)  # Wait for content to render
+            await self._page.goto(url, timeout=30000, wait_until="networkidle")
+            # Wait for game blocks to appear (try multiple selectors)
+            try:
+                await self._page.wait_for_selector(
+                    '.game-block, .gameblock, [class*="game-block"], .game-card, [class*="game-card"], .event-card, [class*="event"]',
+                    timeout=8000,
+                )
+            except Exception:
+                # If no matching selector found, wait a bit and try anyway
+                await asyncio.sleep(3)
         except Exception as e:
             logger.warning("BetUS: Navigation to %s failed: %s", url, e)
             return []
+
+        # Debug: log DOM structure hints to understand page layout
+        try:
+            dom_info = await self._page.evaluate("""
+                () => {
+                    const body = document.body;
+                    const allClasses = new Set();
+                    body.querySelectorAll('[class]').forEach(el => {
+                        el.className.split(/\\s+/).forEach(c => {
+                            if (c.toLowerCase().includes('game') || c.toLowerCase().includes('event') ||
+                                c.toLowerCase().includes('match') || c.toLowerCase().includes('line') ||
+                                c.toLowerCase().includes('odds') || c.toLowerCase().includes('team'))
+                                allClasses.add(c);
+                        });
+                    });
+                    return {
+                        title: document.title,
+                        url: window.location.href,
+                        classes: Array.from(allClasses).slice(0, 30),
+                        gameBlocks: document.querySelectorAll('.game-block, .gameblock').length,
+                        gameCards: document.querySelectorAll('[class*="game-card"], [class*="event-card"]').length,
+                        bodyLen: body.innerHTML.length,
+                    };
+                }
+            """)
+            logger.info(
+                "BetUS DOM debug for %s: title=%s blocks=%d cards=%d bodyLen=%d classes=%s",
+                sport_key, dom_info.get("title", "?"), dom_info.get("gameBlocks", 0),
+                dom_info.get("gameCards", 0), dom_info.get("bodyLen", 0),
+                dom_info.get("classes", []),
+            )
+        except Exception as e:
+            logger.warning("BetUS: DOM debug failed: %s", e)
 
         try:
             raw_events = await self._page.evaluate(_JS_EXTRACT)
@@ -299,7 +340,7 @@ class BetUSSource(DataSource):
             return []
 
         if not raw_events:
-            logger.debug("BetUS: No events found for %s", sport_key)
+            logger.info("BetUS: No events found for %s (0 game blocks matched)", sport_key)
             return []
 
         sport_title = get_sport_title(sport_key)
