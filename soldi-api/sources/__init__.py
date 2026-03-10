@@ -14,6 +14,7 @@ from sources.bookmaker import BookmakerSource
 from sources.hardrock import HardRockBetSource
 from sources.caesars import CaesarsSource
 from sources.betus import BetUSSource
+from sources.stakeus import StakeUSSource
 
 __all__ = [
     "DataSource",
@@ -32,4 +33,5 @@ __all__ = [
     "HardRockBetSource",
     "CaesarsSource",
     "BetUSSource",
+    "StakeUSSource",
 ]

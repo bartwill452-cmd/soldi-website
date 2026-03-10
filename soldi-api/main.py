@@ -30,6 +30,7 @@ from sources import (
     NovigSource,
     PinnacleSource,
     ProphetXSource,
+    StakeUSSource,
 )
 from sources.sport_mapping import resolve_team_name, canonical_event_id
 
@@ -181,6 +182,12 @@ async def lifespan(app: FastAPI):
         logger.info("Initializing Novig exchange scraper")
         sources.append(NovigSource())
 
+    stakeus = None
+    if is_enabled("stakeus"):
+        logger.info("Initializing Stake.us scraper (Playwright)")
+        stakeus = StakeUSSource()
+        sources.append(stakeus)
+
     if is_enabled("hardrock"):
         logger.info("Initializing Hard Rock Bet scraper")
         hardrock = HardRockBetSource()
@@ -282,6 +289,8 @@ async def lifespan(app: FastAPI):
         bookmaker.start_prefetch()
     if betus is not None:
         betus.start_prefetch()
+    if stakeus is not None:
+        stakeus.start_prefetch()
 
     # Initialize line history database
     line_history.init_db(settings.line_history_db)

@@ -235,7 +235,7 @@ client.on('messageCreate', async (message) => {
 
     // 1. Website Server
     try {
-      const res = await fetch('https://soldi-website.onrender.com/api/health', {
+      const res = await fetch('http://localhost:3000/api/health', {
         signal: AbortSignal.timeout(10000),
       });
       if (res.ok) {
