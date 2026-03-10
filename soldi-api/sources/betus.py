@@ -7,11 +7,15 @@ HTML (no SPA), so we can scrape with a headless browser + DOM parsing.
 
 No login required — public odds are visible without authentication.
 
-DOM structure per game (.game-block):
-  - Team names: span#awayName, span#homeName
-  - Markets: div.line-container with Spread, Total, Money columns
-  - Each column has .team-line elements for away/home
-  - Date: span.time
+DOM structure:
+  - Main wrapper: div.game-block (SINGLE container for ALL games)
+  - Per-game container: div.game-tbl
+  - Away team: div.visitor -> span#awayName (inside awayTeamContainer)
+  - Home team: div.home -> span#homeName (inside homeTeamContainer)
+  - Markets: div.line-container with a.bet-link for each odds value
+  - Line order per team row: Spread, Moneyline, Total (in column order)
+  - Time: span.time inside .gamelines-info-row
+  - ASP.NET WebForms server-rendered HTML, no SPA/XHR for odds data
 """
 
 import asyncio
@@ -55,125 +59,104 @@ _SPORT_SLUGS: Dict[str, str] = {
 _CACHE_TTL = 90  # seconds
 _STALE_TTL = 300  # serve stale up to 5 min
 
-# JS to extract all game data from the DOM
+# JS to extract all game data from the DOM.
+# BetUS uses ASP.NET WebForms with server-rendered HTML.
+# Each game is in a .game-tbl div (NOT .game-block, which is a wrapper).
 _JS_EXTRACT = """
 () => {
     const results = [];
-    const blocks = document.querySelectorAll('.game-block, .gameblock, [class*="game-block"]');
+    const games = document.querySelectorAll('.game-tbl');
 
-    blocks.forEach(block => {
+    games.forEach(game => {
         const ev = {};
 
-        // Team names
-        const awayEl = block.querySelector('#awayName, [id*="awayName"], .away-name, .team-name:first-child');
-        const homeEl = block.querySelector('#homeName, [id*="homeName"], .home-name, .team-name:last-child');
+        // Team names — visitor (away) and home sections
+        const visitorSection = game.querySelector('.visitor');
+        const homeSection = game.querySelector('.home');
+        if (!visitorSection || !homeSection) return;
 
-        if (!awayEl || !homeEl) {
-            // Try alternate: look for team rows
-            const rows = block.querySelectorAll('.team-line, .team-row, tr');
-            if (rows.length >= 2) {
-                const awayText = rows[0].querySelector('.team-name, td:first-child');
-                const homeText = rows[1].querySelector('.team-name, td:first-child');
-                ev.away = awayText ? awayText.textContent.trim() : '';
-                ev.home = homeText ? homeText.textContent.trim() : '';
-            } else {
-                return;
-            }
-        } else {
-            ev.away = awayEl.textContent.trim();
-            ev.home = homeEl.textContent.trim();
-        }
+        // Team names: look for awayName/homeName spans, or fallback to .team .t-desc links
+        const awayNameEl = visitorSection.querySelector('[id*="awayName"] a, [id*="awayName"], .team.t-desc a, .team a');
+        const homeNameEl = homeSection.querySelector('[id*="homeName"] a, [id*="homeName"], .team.t-desc a, .team a');
 
+        ev.away = awayNameEl ? awayNameEl.textContent.trim() : '';
+        ev.home = homeNameEl ? homeNameEl.textContent.trim() : '';
         if (!ev.away || !ev.home) return;
 
-        // Date/time
-        const timeEl = block.querySelector('.time, .game-time, .date-time, [class*="time"]');
+        // Game time — from the info row above the team rows
+        const timeEl = game.querySelector('.time span, .time');
         ev.time = timeEl ? timeEl.textContent.trim() : '';
 
-        // Parse markets from line-container or table structure
+        // Markets: extract from bet-link anchors inside line-container divs
+        // Column order per row: Spread | Moneyline | Total | Team Total
+        // Visitor row = .visitor-lines .line-container
+        // Home row = .home-lines .line-container
+
+        const visitorLines = visitorSection.querySelector('.visitor-lines');
+        const homeLines = homeSection.querySelector('.home-lines');
+
+        // Get all line-container divs (spread, moneyline, total, team-total)
+        const vContainers = visitorLines ? visitorLines.querySelectorAll('.line-container, .line-container-teamtotal') : [];
+        const hContainers = homeLines ? homeLines.querySelectorAll('.line-container, .line-container-teamtotal') : [];
+
         ev.spread = { away: {}, home: {} };
         ev.total = {};
         ev.money = { away: null, home: null };
 
-        // Look for spread, total, money columns
-        const containers = block.querySelectorAll('.line-container, .odds-container, .market-column');
-        containers.forEach((c, index) => {
-            const headerEl = c.querySelector('.line-header, .header, th, h4, h5');
-            const header = headerEl ? headerEl.textContent.trim().toLowerCase() : '';
+        // Parse line text from a container's bet-link
+        function parseBetLink(container) {
+            if (!container) return null;
+            const link = container.querySelector('a.bet-link');
+            if (!link) return null;
+            // Get direct text only (not nested spans like "Added")
+            let text = '';
+            link.childNodes.forEach(node => {
+                if (node.nodeType === 3) text += node.textContent;
+            });
+            text = text.trim();
+            if (!text) text = link.textContent.trim();
+            return text || null;
+        }
 
-            const lines = c.querySelectorAll('.team-line, .odd-line, .line, td');
+        // Parse spread text: "+4 -115" or "-1½ +105"
+        function parseSpread(text) {
+            if (!text) return {};
+            text = text.replace(/½/g, '.5');
+            const match = text.match(/([+-]?\\d+\\.?\\d*)\\s*([+-]\\d{3,4})/);
+            if (match) return { point: parseFloat(match[1]), odds: parseInt(match[2]) };
+            return {};
+        }
 
-            if (header.includes('spread') || header.includes('handicap') || (index === 0 && !header && containers.length === 3)) {
-                if (lines.length >= 2) {
-                    ev.spread.away = parseLine(lines[0]);
-                    ev.spread.home = parseLine(lines[1]);
-                }
-            } else if (header.includes('total') || header.includes('o/u') || header.includes('over') || header.includes('under') || header.includes('points') || (index === 1 && !header && containers.length === 3)) {
-                if (lines.length >= 2) {
-                    ev.total.over = parseLine(lines[0]);
-                    ev.total.under = parseLine(lines[1]);
-                }
-            } else if (header.includes('money') || header.includes('ml') || header.includes('winner') || (index === 2 && !header && containers.length === 3)) {
-                if (lines.length >= 2) {
-                    ev.money.away = parseOdds(lines[0]);
-                    ev.money.home = parseOdds(lines[1]);
-                }
-            }
-        });
+        // Parse moneyline text: "+600" or "-900"
+        function parseML(text) {
+            if (!text) return null;
+            const match = text.match(/([+-]\\d{3,4})/);
+            return match ? parseInt(match[1]) : null;
+        }
 
-        // Alternate: parse from table rows (some BetUS pages use tables)
-        if (!ev.money.away && !ev.money.home) {
-            const allText = block.textContent;
-            // Try to find American odds patterns like +150, -200
-            const oddsPattern = /([+-]\\d{3,4})/g;
-            const allOdds = allText.match(oddsPattern) || [];
-            // If we have at least 6 numbers, assume: away_spread_odds, away_total_odds, away_ml, home_spread_odds, home_total_odds, home_ml
-            if (allOdds.length >= 6) {
-                ev.money.away = parseInt(allOdds[2]);
-                ev.money.home = parseInt(allOdds[5]);
-            } else if (allOdds.length >= 2) {
-                ev.money.away = parseInt(allOdds[0]);
-                ev.money.home = parseInt(allOdds[1]);
-            }
+        // Parse total text: "O 228½ -105" or "U 228½ -115"
+        function parseTotal(text) {
+            if (!text) return {};
+            text = text.replace(/½/g, '.5');
+            const match = text.match(/[oOuU]\\s*([\\d.]+)\\s*([+-]\\d{3,4})/);
+            if (match) return { point: parseFloat(match[1]), odds: parseInt(match[2]) };
+            return {};
+        }
 
-            // Try spread parsing from text
-            const spreadPattern = /([+-]?\\d+\\.?\\d*)\\s*([+-]\\d{3})/g;
-            let spreadMatch;
-            const spreads = [];
-            const tempText = allText;
-            while ((spreadMatch = spreadPattern.exec(tempText)) !== null) {
-                spreads.push({ point: parseFloat(spreadMatch[1]), odds: parseInt(spreadMatch[2]) });
-            }
-            if (spreads.length >= 2 && !ev.spread.away.point) {
-                ev.spread.away = spreads[0];
-                ev.spread.home = spreads[1];
-            }
+        // Column order: 0=Spread, 1=Moneyline, 2=Total, 3=TeamTotal
+        if (vContainers.length >= 3) {
+            ev.spread.away = parseSpread(parseBetLink(vContainers[0]));
+            ev.money.away = parseML(parseBetLink(vContainers[1]));
+            ev.total.over = parseTotal(parseBetLink(vContainers[2]));
+        }
+        if (hContainers.length >= 3) {
+            ev.spread.home = parseSpread(parseBetLink(hContainers[0]));
+            ev.money.home = parseML(parseBetLink(hContainers[1]));
+            ev.total.under = parseTotal(parseBetLink(hContainers[2]));
         }
 
         results.push(ev);
     });
-
-    function parseLine(el) {
-        if (!el) return {};
-        const text = el.textContent.trim();
-        // Look for point + odds pattern: "+6.5 -110" or "o218.5 -108"
-        const match = text.match(/([+-]?[oOuU]?\\d+\\.?\\d*)\\s*([+-]\\d{3,4})/);
-        if (match) {
-            let point = match[1].replace(/^[oOuU]/, '');
-            return { point: parseFloat(point), odds: parseInt(match[2]) };
-        }
-        // Just odds
-        const oddsMatch = text.match(/([+-]\\d{3,4})/);
-        if (oddsMatch) return { odds: parseInt(oddsMatch[1]) };
-        return {};
-    }
-
-    function parseOdds(el) {
-        if (!el) return null;
-        const text = el.textContent.trim();
-        const match = text.match(/([+-]\\d{3,4})/);
-        return match ? parseInt(match[1]) : null;
-    }
 
     return results;
 }
@@ -286,52 +269,19 @@ class BetUSSource(DataSource):
 
         url = f"{SITE_URL}/sportsbook/{slug}"
         try:
-            await self._page.goto(url, timeout=30000, wait_until="networkidle")
-            # Wait for game blocks to appear (try multiple selectors)
+            # Use domcontentloaded — networkidle times out on BetUS
+            # because of persistent tracking/analytics connections
+            await self._page.goto(url, timeout=30000, wait_until="domcontentloaded")
+            # Wait for game containers to render (server-side rendered,
+            # should be available immediately after DOM load)
             try:
-                await self._page.wait_for_selector(
-                    '.game-block, .gameblock, [class*="game-block"], .game-card, [class*="game-card"], .event-card, [class*="event"]',
-                    timeout=8000,
-                )
+                await self._page.wait_for_selector(".game-tbl", timeout=10000)
             except Exception:
-                # If no matching selector found, wait a bit and try anyway
+                # Fallback: wait a fixed duration for any dynamic rendering
                 await asyncio.sleep(3)
         except Exception as e:
             logger.warning("BetUS: Navigation to %s failed: %s", url, e)
             return []
-
-        # Debug: log DOM structure hints to understand page layout
-        try:
-            dom_info = await self._page.evaluate("""
-                () => {
-                    const body = document.body;
-                    const allClasses = new Set();
-                    body.querySelectorAll('[class]').forEach(el => {
-                        el.className.split(/\\s+/).forEach(c => {
-                            if (c.toLowerCase().includes('game') || c.toLowerCase().includes('event') ||
-                                c.toLowerCase().includes('match') || c.toLowerCase().includes('line') ||
-                                c.toLowerCase().includes('odds') || c.toLowerCase().includes('team'))
-                                allClasses.add(c);
-                        });
-                    });
-                    return {
-                        title: document.title,
-                        url: window.location.href,
-                        classes: Array.from(allClasses).slice(0, 30),
-                        gameBlocks: document.querySelectorAll('.game-block, .gameblock').length,
-                        gameCards: document.querySelectorAll('[class*="game-card"], [class*="event-card"]').length,
-                        bodyLen: body.innerHTML.length,
-                    };
-                }
-            """)
-            logger.info(
-                "BetUS DOM debug for %s: title=%s blocks=%d cards=%d bodyLen=%d classes=%s",
-                sport_key, dom_info.get("title", "?"), dom_info.get("gameBlocks", 0),
-                dom_info.get("gameCards", 0), dom_info.get("bodyLen", 0),
-                dom_info.get("classes", []),
-            )
-        except Exception as e:
-            logger.warning("BetUS: DOM debug failed: %s", e)
 
         try:
             raw_events = await self._page.evaluate(_JS_EXTRACT)
