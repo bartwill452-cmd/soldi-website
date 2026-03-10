@@ -24,6 +24,9 @@ RUN npm ci --production
 # Copy all application code
 COPY . .
 
+# Ensure data directory exists for bot persistence (user-tracking.json, etc.)
+RUN mkdir -p /app/data
+
 # Set up supervisor config
 COPY supervisord.conf /etc/supervisor/conf.d/soldi.conf
 
