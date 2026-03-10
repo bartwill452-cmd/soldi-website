@@ -949,6 +949,7 @@ async function loadOdds() {
     if (data.success) {
       oddsData = data.events;
       renderStats('odds');
+      renderBookFilter();  // Update filter chips to reflect which books have data
       renderOddsScreen();
     } else if (!oddsData || oddsData.length === 0) {
       container.innerHTML = `<div class="empty-state">${data.error || 'Failed to load odds'}</div>`;
