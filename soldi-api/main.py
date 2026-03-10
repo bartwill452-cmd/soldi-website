@@ -30,6 +30,7 @@ from sources import (
     NovigSource,
     PinnacleSource,
     ProphetXSource,
+    SBRSource,
     StakeUSSource,
 )
 from sources.sport_mapping import resolve_team_name, canonical_event_id
@@ -180,6 +181,10 @@ async def lifespan(app: FastAPI):
     if is_enabled("novig"):
         logger.info("Initializing Novig exchange scraper")
         sources.append(NovigSource())
+
+    if is_enabled("sbr"):
+        logger.info("Initializing SBR scraper (DraftKings, Caesars, BetMGM)")
+        sources.append(SBRSource())
 
     stakeus = None
     if is_enabled("stakeus"):
