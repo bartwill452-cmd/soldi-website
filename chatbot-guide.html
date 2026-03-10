@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Chatbot Guide - Soldi</title>
+  <script>
+    (function() {
+      var t = localStorage.getItem('soldi_theme');
+      if (!t) t = 'dark';
+      if (t === 'light') document.documentElement.setAttribute('data-theme', 'light');
+    })();
+  </script>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon.png">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <script src="/soldi-analytics.js"></script>
+  <style>
+    .cbg-page { padding: 120px 0 80px; min-height: 100vh; }
+
+    /* Gate */
+    .cbg-gate {
+      max-width: 480px;
+      margin: 80px auto 0;
+      text-align: center;
+    }
+    .cbg-gate-icon {
+      width: 64px;
+      height: 64px;
+      background: rgba(6, 182, 212, 0.12);
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 24px;
+      color: #06b6d4;
+    }
+    .cbg-gate h2 { font-size: 28px; font-weight: 800; color: #fff; margin-bottom: 8px; }
+    .cbg-gate p { font-size: 14px; color: #71717a; line-height: 1.6; margin-bottom: 28px; }
+    .cbg-gate-input { display: flex; gap: 8px; margin-bottom: 12px; }
+    .cbg-gate-input input {
+      flex: 1; padding: 14px 16px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 10px; color: #fff; font-size: 14px;
+      font-family: 'Inter', monospace; outline: none;
+    }
+    .cbg-gate-input input:focus { border-color: #06b6d4; }
+    .btn-cbg {
+      padding: 14px 28px;
+      background: linear-gradient(135deg, #06b6d4, #0891b2);
+      border: none; border-radius: 10px; color: #fff;
+      font-size: 14px; font-weight: 600; cursor: pointer;
+      transition: all 0.2s; font-family: 'Inter', sans-serif;
+    }
+    .btn-cbg:hover { transform: translateY(-1px); box-shadow: 0 4px 20px rgba(6, 182, 212, 0.3); }
+    .cbg-gate-error { color: #ef4444; font-size: 13px; margin-top: 8px; display: none; }
+    .cbg-gate-footer { margin-top: 24px; font-size: 13px; color: #52525b; }
+    .cbg-gate-footer a { color: #06b6d4; text-decoration: none; }
+
+    /* Dashboard */
+    .cbg-dashboard { display: none; }
+    .cbg-dashboard.active { display: block; }
+
+    .cbg-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 32px;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    .cbg-header h1 { font-size: 36px; font-weight: 800; color: #fff; }
+    .cbg-header h1 span { color: #06b6d4; }
+    .cbg-header-right { display: flex; align-items: center; gap: 12px; }
+    .cbg-exit-btn {
+      padding: 8px 16px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px; color: #a1a1aa; font-size: 13px;
+      cursor: pointer; font-family: 'Inter', sans-serif;
+    }
+    .cbg-exit-btn:hover { background: rgba(255,255,255,0.08); color: #fff; }
+    .cbg-builder-link {
+      padding: 10px 20px;
+      background: linear-gradient(135deg, #06b6d4, #0891b2);
+      border: none; border-radius: 10px; color: #fff;
+      font-size: 13px; font-weight: 600; cursor: pointer;
+      text-decoration: none; font-family: 'Inter', sans-serif;
+    }
+    .cbg-builder-link:hover { box-shadow: 0 4px 20px rgba(6, 182, 212, 0.3); }
+
+    /* Table of Contents */
+    .cbg-toc {
+      background: rgba(6, 182, 212, 0.04);
+      border: 1px solid rgba(6, 182, 212, 0.12);
+      border-radius: 16px;
+      padding: 24px 28px;
+      margin-bottom: 40px;
+    }
+    .cbg-toc-title {
+      font-size: 14px; font-weight: 700; color: #06b6d4;
+      text-transform: uppercase; letter-spacing: 0.05em;
+      margin-bottom: 14px;
+    }
+    .cbg-toc ol {
+      margin: 0; padding-left: 20px;
+      display: grid; grid-template-columns: 1fr 1fr; gap: 6px 32px;
+    }
+    .cbg-toc li {
+      font-size: 14px; color: #a1a1aa; line-height: 1.8;
+    }
+    .cbg-toc a { color: #06b6d4; text-decoration: none; }
+    .cbg-toc a:hover { text-decoration: underline; }
+
+    /* Sections */
+    .cbg-section {
+      background: rgba(255,255,255,0.025);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 16px;
+      padding: 32px;
+      margin-bottom: 24px;
+    }
+    .cbg-section h2 {
+      font-size: 22px; font-weight: 800; color: #fff;
+      margin-bottom: 20px; padding-bottom: 12px;
+      border-bottom: 1px solid rgba(6, 182, 212, 0.15);
+    }
+    .cbg-section h2 .cbg-num {
+      color: #06b6d4; margin-right: 8px;
+    }
+    .cbg-section h3 {
+      font-size: 17px; font-weight: 700; color: #e4e4e7;
+      margin: 24px 0 10px;
+    }
+    .cbg-section h3:first-of-type { margin-top: 0; }
+    .cbg-section h4 {
+      font-size: 15px; font-weight: 600; color: #d4d4d8;
+      margin: 18px 0 8px;
+    }
+    .cbg-section p {
+      font-size: 14px; color: #a1a1aa; line-height: 1.8;
+      margin-bottom: 12px;
+    }
+    .cbg-section ul, .cbg-section ol {
+      margin: 0 0 14px 20px;
+    }
+    .cbg-section li {
+      font-size: 14px; color: #a1a1aa; line-height: 1.8;
+      margin-bottom: 4px;
+    }
+    .cbg-section strong { color: #06b6d4; }
+    .cbg-section code {
+      background: rgba(6, 182, 212, 0.1);
+      padding: 2px 8px; border-radius: 4px;
+      font-size: 13px; color: #06b6d4;
+    }
+
+    /* Tip boxes */
+    .cbg-tip {
+      background: rgba(34, 197, 94, 0.06);
+      border: 1px solid rgba(34, 197, 94, 0.15);
+      border-radius: 10px;
+      padding: 16px 20px;
+      margin: 16px 0;
+    }
+    .cbg-tip-title {
+      font-size: 13px; font-weight: 700;
+      color: #22c55e; margin-bottom: 4px;
+    }
+    .cbg-tip p { margin-bottom: 0; }
+
+    .cbg-warning {
+      background: rgba(234, 179, 8, 0.06);
+      border: 1px solid rgba(234, 179, 8, 0.15);
+      border-radius: 10px;
+      padding: 16px 20px;
+      margin: 16px 0;
+    }
+    .cbg-warning-title {
+      font-size: 13px; font-weight: 700;
+      color: #eab308; margin-bottom: 4px;
+    }
+    .cbg-warning p { margin-bottom: 0; }
+
+    /* Code blocks */
+    .cbg-code {
+      background: rgba(0,0,0,0.35);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 10px;
+      padding: 16px 20px;
+      font-family: 'Inter', monospace;
+      font-size: 13px;
+      color: #06b6d4;
+      overflow-x: auto;
+      margin: 12px 0 16px;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
+    /* Pricing table */
+    .cbg-pricing-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 14px 0 18px;
+    }
+    .cbg-pricing-table th {
+      text-align: left; padding: 10px 14px;
+      font-size: 12px; font-weight: 700;
+      color: #06b6d4; text-transform: uppercase;
+      letter-spacing: 0.04em;
+      border-bottom: 1px solid rgba(6, 182, 212, 0.2);
+    }
+    .cbg-pricing-table td {
+      padding: 10px 14px; font-size: 14px;
+      color: #a1a1aa;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+    .cbg-pricing-table tr:last-child td { border-bottom: none; }
+
+    /* Steps */
+    .cbg-steps {
+      counter-reset: step;
+      list-style: none;
+      padding-left: 0;
+      margin: 16px 0;
+    }
+    .cbg-steps li {
+      counter-increment: step;
+      position: relative;
+      padding-left: 44px;
+      margin-bottom: 18px;
+    }
+    .cbg-steps li::before {
+      content: counter(step);
+      position: absolute;
+      left: 0; top: 0;
+      width: 28px; height: 28px;
+      background: rgba(6, 182, 212, 0.12);
+      border: 1px solid rgba(6, 182, 212, 0.25);
+      border-radius: 50%;
+      font-size: 13px; font-weight: 700;
+      color: #06b6d4;
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    /* Script template boxes */
+    .cbg-script {
+      background: rgba(6, 182, 212, 0.04);
+      border: 1px solid rgba(6, 182, 212, 0.12);
+      border-radius: 10px;
+      padding: 16px 20px;
+      margin: 14px 0 16px;
+    }
+    .cbg-script-label {
+      font-size: 11px; font-weight: 700;
+      color: #06b6d4; text-transform: uppercase;
+      letter-spacing: 0.05em; margin-bottom: 8px;
+    }
+    .cbg-script p {
+      font-size: 13px; color: #d4d4d8;
+      font-style: italic;
+    }
+
+    @media (max-width: 768px) {
+      .cbg-header h1 { font-size: 28px; }
+      .cbg-section { padding: 24px 20px; }
+      .cbg-toc ol { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Navbar -->
+  <nav class="navbar">
+    <div class="container nav-container">
+      <a href="/" class="logo">
+        <img src="/images/soldi-logo.svg" alt="Soldi" width="32" height="32">
+        <span>Soldi</span>
+      </a>
+      <div class="nav-links">
+        <a href="/" class="nav-link">Home</a>
+        <a href="/#features" class="nav-link">Features</a>
+        <a href="/#tools" class="nav-link">Tools</a>
+        <a href="/chatbot-builder.html" class="nav-link" style="color: #06b6d4;">Chatbot Builder</a>
+      </div>
+      <div class="nav-right">
+        <a href="/#apply" class="cta-btn-small">Apply Now</a>
+        <button class="theme-toggle" aria-label="Toggle theme">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <section class="cbg-page">
+    <div class="container">
+      <div id="cbgGate" class="cbg-gate">
+        <div class="cbg-gate-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        </div>
+        <h2>AI Chatbot Guide</h2>
+        <p>The complete guide to building, selling, and installing AI chatbots for businesses using the Soldi Chatbot Builder.</p>
+        <div class="cbg-gate-input">
+          <input type="text" id="cbgKeyInput" placeholder="Enter your Soldi API key" autocomplete="off" spellcheck="false">
+          <button class="btn-cbg" onclick="validateKey()">Access</button>
+        </div>
+        <div id="cbgGateError" class="cbg-gate-error"></div>
+        <div class="cbg-gate-footer">
+          Don't have a key? <a href="/">Get access on the dashboard</a>
+        </div>
+      </div>
+
+      <div id="cbgDashboard" class="cbg-dashboard">
+        <div class="cbg-header">
+          <h1>AI Chatbot <span>Guide</span></h1>
+          <div class="cbg-header-right">
+            <a href="/chatbot-builder.html" class="cbg-builder-link">Open Chatbot Builder</a>
+            <button class="cbg-exit-btn" onclick="logout()">Exit</button>
+          </div>
+        </div>
+
+        <!-- Table of Contents -->
+        <div class="cbg-toc">
+          <div class="cbg-toc-title">Table of Contents</div>
+          <ol>
+            <li><a href="#setup">Setting Up Your First Chatbot</a></li>
+            <li><a href="#customize">Customizing for Maximum Impact</a></li>
+            <li><a href="#who-to-sell">Who to Sell To</a></li>
+            <li><a href="#outreach">Best Outreach Methods</a></li>
+            <li><a href="#pitch">The Perfect Pitch</a></li>
+            <li><a href="#pricing">Pricing Your Service</a></li>
+            <li><a href="#demo">The 5-Minute Live Demo</a></li>
+            <li><a href="#objections">Handling Objections</a></li>
+            <li><a href="#install-existing">Installing on Existing Websites</a></li>
+            <li><a href="#install-new">Building a New Website with a Chatbot</a></li>
+          </ol>
+        </div>
+
+        <!-- Section 1: Setup -->
+        <div class="cbg-section" id="setup">
+          <h2><span class="cbg-num">01</span> Setting Up Your First Chatbot</h2>
+          <p>The Chatbot Builder lets you create a fully functional AI support bot in under 5 minutes. Here's how to get started:</p>
+
+          <ul class="cbg-steps">
+            <li><strong>Open the Chatbot Builder</strong> from your Soldi dashboard and click the <strong>"+ New"</strong> button in the sidebar to create a fresh chatbot.</li>
+            <li><strong>Enter the business name and description.</strong> Be detailed here &mdash; this is the core knowledge the AI uses. Include what the business does, who they serve, and what makes them unique.</li>
+            <li><strong>Add services.</strong> Type each service and press Enter. Add every service the business offers &mdash; the more you add, the smarter the chatbot becomes at routing questions.</li>
+            <li><strong>Add FAQs.</strong> Click "+ Add FAQ" and enter common questions with their answers. Pull these from the business website, Google reviews, or ask the business owner directly. Aim for 5-10 FAQs minimum.</li>
+            <li><strong>Set the tone and brand color.</strong> Choose a tone (Friendly, Professional, Casual, or Technical) that matches the business personality. Pick their brand color so the widget looks native on their website.</li>
+            <li><strong>Write a welcome message.</strong> This is the first thing visitors see. Keep it short and inviting: "Hi! How can I help you today?" works great.</li>
+            <li><strong>Click Save</strong> and switch to the Preview tab to test it live. Ask it questions as if you were a customer.</li>
+          </ul>
+
+          <div class="cbg-tip">
+            <div class="cbg-tip-title">Pro Tip</div>
+            <p>Before building for a client, create a test chatbot for a real local business. Use info from their website and Google listing. This becomes your demo when you pitch them.</p>
+          </div>
+        </div>
+
+        <!-- Section 2: Customize -->
+        <div class="cbg-section" id="customize">
+          <h2><span class="cbg-num">02</span> Customizing for Maximum Impact</h2>
+
+          <h3>Account &amp; Support Info</h3>
+          <p>The builder has dedicated fields for support-related information that help the chatbot handle common requests:</p>
+          <ul>
+            <li><strong>Login / Signup URL</strong> &mdash; so the bot can direct users to create accounts or log in</li>
+            <li><strong>Password Reset URL</strong> &mdash; for "I forgot my password" questions (extremely common)</li>
+            <li><strong>Support Email &amp; Phone</strong> &mdash; the bot will provide these when it can't answer a question</li>
+            <li><strong>Business Hours</strong> &mdash; "Are you open right now?" is one of the top questions for local businesses</li>
+            <li><strong>Return / Refund Policy</strong> &mdash; handles the #1 support question for e-commerce</li>
+            <li><strong>Billing FAQ</strong> &mdash; for subscription businesses, reduces support tickets massively</li>
+          </ul>
+
+          <h3>Custom Instructions</h3>
+          <p>This is your secret weapon. Use custom instructions to fine-tune how the chatbot behaves:</p>
+          <ul>
+            <li>"Always suggest booking a free consultation for pricing questions"</li>
+            <li>"Never discuss competitor products or pricing"</li>
+            <li>"If someone asks about [specific topic], direct them to call [phone number]"</li>
+            <li>"Always end conversations by asking if they'd like to schedule an appointment"</li>
+            <li>"Respond in both English and Spanish when the user writes in Spanish"</li>
+          </ul>
+
+          <div class="cbg-tip">
+            <div class="cbg-tip-title">Pro Tip</div>
+            <p>The custom instructions field is how you make generic chatbots feel like premium, custom-built solutions. Tailor them to each business and they'll think you built something from scratch.</p>
+          </div>
+        </div>
+
+        <!-- Section 3: Who to Sell To -->
+        <div class="cbg-section" id="who-to-sell">
+          <h2><span class="cbg-num">03</span> Who to Sell To</h2>
+          <p>Not every business needs a chatbot &mdash; but most do. Focus on businesses that have high website traffic, lots of repetitive questions, or limited staff to answer inquiries.</p>
+
+          <h3>Highest-Converting Niches</h3>
+          <ul>
+            <li><strong>Dental offices &amp; medical clinics</strong> &mdash; appointment scheduling, insurance questions, hours. They lose patients when no one answers the phone.</li>
+            <li><strong>HVAC, plumbing &amp; home services</strong> &mdash; service area questions, emergency availability, pricing estimates. These businesses get calls 24/7.</li>
+            <li><strong>Real estate agents</strong> &mdash; property inquiries, showing requests, pre-qualification questions. Leads go cold fast if no one responds.</li>
+            <li><strong>E-commerce stores</strong> &mdash; shipping, returns, product questions, sizing. Reduces abandoned carts and support tickets.</li>
+            <li><strong>Restaurants &amp; cafes</strong> &mdash; hours, menus, reservations, catering inquiries. Simple questions that shouldn't require a phone call.</li>
+            <li><strong>Gyms &amp; fitness studios</strong> &mdash; membership pricing, class schedules, trial offers. High volume of the same questions.</li>
+            <li><strong>Law firms &amp; accountants</strong> &mdash; practice areas, consultation booking, office hours. Professional services with high-value leads.</li>
+            <li><strong>Auto shops &amp; car dealers</strong> &mdash; service scheduling, inventory questions, financing. Lots of repetitive inquiries.</li>
+          </ul>
+
+          <h3>How to Find Prospects</h3>
+          <ul>
+            <li><strong>Google Maps:</strong> Search "[business type] near me" and look for businesses with websites but no chat widget</li>
+            <li><strong>Yelp:</strong> Businesses with good reviews but complaints about slow response times</li>
+            <li><strong>Instagram/Facebook:</strong> Local businesses with active social but no website chat</li>
+            <li><strong>Chamber of Commerce:</strong> Local business directories with owner contact info</li>
+            <li><strong>BNI / networking groups:</strong> Meet business owners in person, demo on the spot</li>
+          </ul>
+
+          <div class="cbg-warning">
+            <div class="cbg-warning-title">Avoid These</div>
+            <p>Skip businesses with no website at all (sell them a website + chatbot combo instead), businesses that already have a sophisticated chat system, and businesses with very low website traffic.</p>
+          </div>
+        </div>
+
+        <!-- Section 4: Outreach -->
+        <div class="cbg-section" id="outreach">
+          <h2><span class="cbg-num">04</span> Best Outreach Methods</h2>
+          <p>The key to selling chatbots is showing, not telling. Every outreach method below is designed to get you a demo opportunity.</p>
+
+          <h3>1. Cold Email (Best for Scale)</h3>
+          <p>Find the business owner's email from their website contact page or use tools like Hunter.io. Send a short, personalized email:</p>
+          <div class="cbg-script">
+            <div class="cbg-script-label">Email Template</div>
+            <p>Subject: Quick question about [Business Name]'s website</p>
+            <p>Hi [Name],</p>
+            <p>I was checking out [Business Name] online and noticed you don't have a chat feature on your website. I actually built a quick demo of what an AI assistant could look like for your business &mdash; it already knows your services, hours, and FAQs.</p>
+            <p>Would you want me to send you a 30-second screen recording of it in action? No cost or commitment, I just thought it could help you capture more leads after hours.</p>
+            <p>[Your Name]</p>
+          </div>
+
+          <h3>2. Loom / Screen Recording (Highest Conversion)</h3>
+          <p>This is the most effective method. Before reaching out:</p>
+          <ol>
+            <li>Build a chatbot for the prospect's business using info from their website</li>
+            <li>Record a 30-60 second Loom video showing the chatbot answering real questions about their business</li>
+            <li>Send the video link via email, DM, or text</li>
+          </ol>
+          <p>When they see their own business info coming out of the chatbot, it stops being theoretical &mdash; they can immediately see the value.</p>
+
+          <h3>3. Walk-In / In-Person (Best for Local)</h3>
+          <p>For local businesses, nothing beats showing up with a demo ready on your phone or laptop:</p>
+          <ul>
+            <li>Walk in during a slow period (avoid lunch rush for restaurants, Monday mornings for offices)</li>
+            <li>Ask to speak with the owner or manager</li>
+            <li>Show them the chatbot on your phone: "I built this for your business &mdash; want to see it?"</li>
+            <li>Let them ask it questions about their own business</li>
+          </ul>
+
+          <h3>4. Instagram / Facebook DMs (Best for Engagement)</h3>
+          <p>Many local businesses are active on social media. Engage with their content first (comment, like), then DM:</p>
+          <div class="cbg-script">
+            <div class="cbg-script-label">DM Template</div>
+            <p>Hey [Name]! Love what you're doing with [Business]. Quick question &mdash; do you get a lot of the same questions from customers on your website? I built a free AI chat demo for your business that handles all that 24/7. Happy to send a quick video if you're curious!</p>
+          </div>
+
+          <h3>5. LinkedIn (Best for B2B / Professional Services)</h3>
+          <p>Connect with business owners, engage with their posts, then send a personalized message referencing something specific about their business. Works especially well for law firms, accounting firms, and SaaS companies.</p>
+
+          <h3>6. Google Business Profile Reviews</h3>
+          <p>Look for businesses with reviews mentioning slow response times, unanswered calls, or difficulty getting info. These are perfect prospects &mdash; reference the reviews in your outreach to show you understand their pain point.</p>
+        </div>
+
+        <!-- Section 5: Pitch -->
+        <div class="cbg-section" id="pitch">
+          <h2><span class="cbg-num">05</span> The Perfect Pitch</h2>
+          <p>Your pitch should follow a simple framework: <strong>Problem &rarr; Agitate &rarr; Solution &rarr; Demo</strong></p>
+
+          <h3>Lead with Pain Points</h3>
+          <p>Ask questions that make the business owner think about the problem:</p>
+          <ul>
+            <li>"How many website visitors leave without contacting you?"</li>
+            <li>"How many calls and emails do you miss after hours?"</li>
+            <li>"How much time does your staff spend answering the same questions over and over?"</li>
+            <li>"What happens when someone visits your site at midnight with a question?"</li>
+          </ul>
+
+          <h3>Present the Solution</h3>
+          <p>Position the chatbot as a tireless employee:</p>
+          <ul>
+            <li>"This is basically a customer service rep that works 24/7, never takes a break, and costs less than a day's pay per month"</li>
+            <li>"It handles the 80% of questions that are repetitive, so your team can focus on real conversations"</li>
+            <li>"It captures leads while you sleep &mdash; every visitor gets an instant response"</li>
+          </ul>
+
+          <h3>The ROI Argument</h3>
+          <p>Tie it to money. One converted lead from an after-hours chat covers months of the service. For a dentist, one new patient is worth $1,000+ per year. For HVAC, one emergency call is $300+. The chatbot pays for itself many times over.</p>
+
+          <div class="cbg-tip">
+            <div class="cbg-tip-title">Closing Line</div>
+            <p>"Let me show you a live demo right now. I've already set it up with your business info &mdash; it takes 30 seconds to see."</p>
+          </div>
+        </div>
+
+        <!-- Section 6: Pricing -->
+        <div class="cbg-section" id="pricing">
+          <h2><span class="cbg-num">06</span> Pricing Your Service</h2>
+          <p>Your Soldi membership includes unlimited chatbot creation at no extra cost. Here's how to price your service to clients:</p>
+
+          <table class="cbg-pricing-table">
+            <tr>
+              <th>Service</th>
+              <th>Price Range</th>
+              <th>Notes</th>
+            </tr>
+            <tr>
+              <td>Basic Setup</td>
+              <td>$200 &ndash; $500</td>
+              <td>One-time fee. Build the chatbot, configure FAQs, set brand colors.</td>
+            </tr>
+            <tr>
+              <td>Premium Setup</td>
+              <td>$500 &ndash; $1,000</td>
+              <td>Includes custom instructions, detailed FAQ research, tone tuning, and installation.</td>
+            </tr>
+            <tr>
+              <td>Monthly Maintenance</td>
+              <td>$50 &ndash; $150/mo</td>
+              <td>Update FAQs, add new services, adjust responses, monthly performance review.</td>
+            </tr>
+            <tr>
+              <td>Website + Chatbot Bundle</td>
+              <td>$800 &ndash; $2,000</td>
+              <td>For businesses without a website. Build them a simple site + chatbot.</td>
+            </tr>
+          </table>
+
+          <h3>Pricing Tips</h3>
+          <ul>
+            <li><strong>Offer a free trial week</strong> &mdash; let them see the value before asking for payment. Once it's generating leads, they won't want to remove it.</li>
+            <li><strong>Bundle setup + 3 months</strong> &mdash; offer a discount for quarterly or annual prepayment.</li>
+            <li><strong>Agency model</strong> &mdash; manage 10+ chatbots and charge per bot. Scales fast with minimal extra work.</li>
+            <li><strong>Your cost is $0</strong> &mdash; everything is included in your Soldi membership. It's pure profit.</li>
+          </ul>
+        </div>
+
+        <!-- Section 7: Demo -->
+        <div class="cbg-section" id="demo">
+          <h2><span class="cbg-num">07</span> The 5-Minute Live Demo</h2>
+          <p>This is the most powerful sales tool you have. A live demo where you build the chatbot in front of the prospect (or show one you already built) closes more deals than any email or call.</p>
+
+          <h3>Step-by-Step Demo Script</h3>
+          <ul class="cbg-steps">
+            <li>Open the <a href="/chatbot-builder.html" style="color:#06b6d4">Chatbot Builder</a> and click "+ New"</li>
+            <li>Type in the prospect's business name and a quick description (pull from their website/Google listing)</li>
+            <li>Add 3-5 of their most common services</li>
+            <li>Add 3-5 FAQs &mdash; use questions from their Google reviews or website</li>
+            <li>Pick their brand color (grab it from their website) and set a friendly welcome message</li>
+            <li>Hit <strong>Save</strong>, switch to the <strong>Preview</strong> tab, and ask: "What services do you offer?" and "What are your hours?"</li>
+            <li>Show them the <strong>Embed</strong> tab: "One line of code and this is live on your website"</li>
+          </ul>
+
+          <div class="cbg-tip">
+            <div class="cbg-tip-title">Pre-Built Demo</div>
+            <p>For cold outreach, build the chatbot before reaching out. Screen record yourself chatting with it, asking real questions about their business. Send the video &mdash; it's almost impossible to ignore.</p>
+          </div>
+        </div>
+
+        <!-- Section 8: Objections -->
+        <div class="cbg-section" id="objections">
+          <h2><span class="cbg-num">08</span> Handling Objections</h2>
+
+          <h4>"We already have live chat"</h4>
+          <p>"That's great &mdash; this doesn't replace your team, it handles the 80% of questions that are repetitive so your staff can focus on complex conversations. Think of it as your first line of defense."</p>
+
+          <h4>"AI gives wrong answers"</h4>
+          <p>"We configure it with your exact business info and FAQs. It only answers what it's been trained on, and for anything it doesn't know, it directs customers to contact you directly. You control the knowledge."</p>
+
+          <h4>"Our customers won't use it"</h4>
+          <p>"Studies show 70%+ of website visitors prefer instant chat over filling out forms or calling. Especially younger demographics &mdash; they expect instant responses."</p>
+
+          <h4>"It's too expensive"</h4>
+          <p>"One converted lead from a midnight inquiry pays for months of the service. If a single customer finds you through the chatbot, it's already paid for itself."</p>
+
+          <h4>"I need to think about it"</h4>
+          <p>"Totally understand. How about this &mdash; I'll install it for free for one week. If it doesn't capture a single lead or save your team any time, I'll remove it, no charge. Fair?"</p>
+
+          <h4>"Can I just build this myself?"</h4>
+          <p>"Absolutely &mdash; but you'd be spending hours researching AI tools, configuring prompts, and writing code. I handle all of that, plus ongoing maintenance and updates. Your time is better spent running your business."</p>
+        </div>
+
+        <!-- Section 9: Install on Existing Websites -->
+        <div class="cbg-section" id="install-existing">
+          <h2><span class="cbg-num">09</span> Installing on Existing Websites</h2>
+          <p>After saving a chatbot, go to the <strong>Embed</strong> tab in the builder to grab the embed code. It's a single <code>&lt;script&gt;</code> tag that works on any website.</p>
+
+          <h3>WordPress</h3>
+          <h4>Option A &mdash; Plugin (Recommended)</h4>
+          <ol>
+            <li>Install the free <strong>WPCode</strong> or <strong>Insert Headers and Footers</strong> plugin</li>
+            <li>Go to the plugin settings and paste the embed code in the "Footer" section</li>
+            <li>Save &mdash; the chatbot appears on every page automatically</li>
+          </ol>
+          <h4>Option B &mdash; Theme Editor</h4>
+          <ol>
+            <li>Go to <strong>Appearance &gt; Theme File Editor</strong></li>
+            <li>Select <code>footer.php</code> from the file list</li>
+            <li>Paste the embed code right before the <code>&lt;/body&gt;</code> tag</li>
+            <li>Click "Update File"</li>
+          </ol>
+
+          <h3>Shopify</h3>
+          <ol>
+            <li>Go to <strong>Online Store &gt; Themes &gt; Edit Code</strong></li>
+            <li>Open <code>theme.liquid</code></li>
+            <li>Paste the embed code right before <code>&lt;/body&gt;</code></li>
+            <li>Click Save</li>
+          </ol>
+
+          <h3>Squarespace</h3>
+          <ol>
+            <li>Go to <strong>Settings &gt; Advanced &gt; Code Injection</strong></li>
+            <li>Paste the embed code in the <strong>Footer</strong> field</li>
+            <li>Click Save</li>
+          </ol>
+
+          <h3>Wix</h3>
+          <ol>
+            <li>Go to <strong>Settings &gt; Custom Code</strong></li>
+            <li>Click <strong>"+ Add Code"</strong></li>
+            <li>Paste the embed code, set placement to <strong>"Body - End"</strong></li>
+            <li>Apply to <strong>All Pages</strong> and Save</li>
+          </ol>
+
+          <h3>Webflow</h3>
+          <ol>
+            <li>Go to <strong>Project Settings &gt; Custom Code</strong></li>
+            <li>Paste the embed code in the <strong>"Footer Code"</strong> section</li>
+            <li>Publish the site</li>
+          </ol>
+
+          <h3>GoDaddy Website Builder</h3>
+          <ol>
+            <li>Open the website editor and go to <strong>Settings &gt; Site-Wide Code</strong></li>
+            <li>Paste the embed code in the footer section</li>
+            <li>Publish</li>
+          </ol>
+
+          <h3>Any HTML Website</h3>
+          <ol>
+            <li>Open the HTML file(s) in a text editor</li>
+            <li>Find the <code>&lt;/body&gt;</code> closing tag</li>
+            <li>Paste the embed code on the line right above it</li>
+            <li>Save and upload</li>
+          </ol>
+
+          <div class="cbg-tip">
+            <div class="cbg-tip-title">Installation Tips</div>
+            <p>The chatbot widget loads asynchronously and won't slow down the website. It works on all devices and appears in the bottom-right corner. Always test on a staging or preview environment before going live on the client's production site.</p>
+          </div>
+        </div>
+
+        <!-- Section 10: New Websites -->
+        <div class="cbg-section" id="install-new">
+          <h2><span class="cbg-num">10</span> Building a New Website with a Chatbot</h2>
+          <p>Many small businesses don't have a website at all. This is a massive upsell opportunity &mdash; offer a simple website + chatbot package.</p>
+
+          <h3>Free / Low-Cost Platforms</h3>
+
+          <h4>Carrd (Free &mdash; Best for Simple Sites)</h4>
+          <ol>
+            <li>Sign up at <strong>carrd.co</strong> (free plan works for one site)</li>
+            <li>Choose a clean template and add the business name, services, contact info, and photos</li>
+            <li>Add an <strong>Embed</strong> element, switch to "Code" mode, and paste the chatbot embed code</li>
+            <li>Publish &mdash; they now have a website with a live AI chatbot</li>
+          </ol>
+
+          <h4>Google Sites (Free)</h4>
+          <ol>
+            <li>Go to <strong>sites.google.com</strong> and create a new site</li>
+            <li>Add business info, images, hours, and a contact section</li>
+            <li>Click <strong>Insert &gt; Embed &gt; Embed code</strong> and paste the chatbot script</li>
+            <li>Publish &mdash; free hosting with a Google domain</li>
+          </ol>
+
+          <h4>WordPress.com (Free tier available)</h4>
+          <ol>
+            <li>Create a free WordPress.com site with a business-appropriate theme</li>
+            <li>Add pages for services, about, and contact</li>
+            <li>Use the <strong>Custom HTML</strong> block or upgrade to a plan that allows custom code injection to add the chatbot</li>
+          </ol>
+
+          <h3>Paid Platforms (Better for Charging Clients)</h3>
+
+          <h4>Framer / Webflow</h4>
+          <p>Professional-looking websites with drag-and-drop builders. Both support custom code injection for the chatbot embed. Charge clients $800+ for a polished site with an integrated chatbot.</p>
+
+          <h4>Netlify / Vercel (Free Hosting for Custom Sites)</h4>
+          <ol>
+            <li>Build a simple HTML/CSS website (or use a template)</li>
+            <li>Add the chatbot embed code before <code>&lt;/body&gt;</code></li>
+            <li>Deploy for free on Netlify or Vercel</li>
+            <li>Connect the client's custom domain if they have one</li>
+          </ol>
+
+          <h3>The Website + Chatbot Bundle</h3>
+          <p>This is one of the highest-margin offers you can make:</p>
+          <ul>
+            <li><strong>Charge $800 - $2,000</strong> for a simple website with a built-in AI chatbot</li>
+            <li><strong>Add $50 - $150/month</strong> for ongoing maintenance (website updates + chatbot tuning)</li>
+            <li>Your actual cost: domain name (~$12/year) + hosting (free on most platforms)</li>
+            <li>Position it as: "A 24/7 online presence with an AI receptionist for your business"</li>
+          </ul>
+
+          <div class="cbg-tip">
+            <div class="cbg-tip-title">Pro Tip</div>
+            <p>Create 2-3 template websites for common niches (restaurant, dental office, home services). Swap in the client's info and chatbot. You can deliver a "custom" site in under an hour.</p>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer style="border-top: 1px solid rgba(255,255,255,0.06); padding: 24px 0; text-align: center;">
+    <p style="font-size: 13px; color: #52525b;">&copy; 2026 Soldi. All rights reserved.</p>
+  </footer>
+
+  <script>
+    let currentApiKey = '';
+
+    document.getElementById('cbgKeyInput').addEventListener('keydown', e => {
+      if (e.key === 'Enter') validateKey();
+    });
+
+    async function validateKey() {
+      const keyInput = document.getElementById('cbgKeyInput');
+      const errorEl = document.getElementById('cbgGateError');
+      const key = keyInput.value.trim();
+      if (!key) { errorEl.textContent = 'Please enter your API key'; errorEl.style.display = 'block'; return; }
+      try {
+        const res = await fetch('/api/validate-key?key=' + encodeURIComponent(key));
+        const data = await res.json();
+        if (data.success) {
+          currentApiKey = key;
+          sessionStorage.setItem('soldi_chatbot_guide_key', key);
+          errorEl.style.display = 'none';
+          enterDashboard();
+        } else {
+          errorEl.textContent = 'Invalid or expired API key';
+          errorEl.style.display = 'block';
+        }
+      } catch { errorEl.textContent = 'Connection error. Try again.'; errorEl.style.display = 'block'; }
+    }
+
+    function enterDashboard() {
+      document.getElementById('cbgGate').style.display = 'none';
+      document.getElementById('cbgDashboard').classList.add('active');
+    }
+
+    function logout() {
+      sessionStorage.removeItem('soldi_chatbot_guide_key');
+      currentApiKey = '';
+      document.getElementById('cbgDashboard').classList.remove('active');
+      document.getElementById('cbgGate').style.display = '';
+      document.getElementById('cbgKeyInput').value = '';
+    }
+
+    // Auto-auth: try session key, then JWT token, then localStorage API key
+    (async function autoAuth() {
+      if (currentApiKey) return;
+
+      // 1. Check sessionStorage
+      const sessionKey = sessionStorage.getItem('soldi_chatbot_guide_key');
+      if (sessionKey) { currentApiKey = sessionKey; enterDashboard(); return; }
+
+      // 2. Try JWT token
+      const token = localStorage.getItem('soldi_token');
+      if (token) {
+        try {
+          const res = await fetch('/api/me', { headers: { 'Authorization': 'Bearer ' + token } });
+          const data = await res.json();
+          if (res.ok && data.success) {
+            currentApiKey = data.apiKey || 'jwt_auth';
+            if (data.apiKey) localStorage.setItem('soldi_api_key', data.apiKey);
+            sessionStorage.setItem('soldi_chatbot_guide_key', currentApiKey);
+            enterDashboard();
+            return;
+          }
+        } catch (e) {}
+      }
+
+      // 3. Fallback: try saved API key
+      const savedKey = localStorage.getItem('soldi_api_key');
+      if (savedKey) {
+        try {
+          const res = await fetch('/api/validate-key?key=' + encodeURIComponent(savedKey));
+          const data = await res.json();
+          if (data.success) {
+            currentApiKey = savedKey;
+            sessionStorage.setItem('soldi_chatbot_guide_key', savedKey);
+            enterDashboard();
+            return;
+          }
+        } catch (e) {}
+      }
+    })();
+  </script>
+  <script>
+    (function() {
+      document.querySelectorAll('.theme-toggle').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          var current = document.documentElement.getAttribute('data-theme');
+          var next = current === 'light' ? 'dark' : 'light';
+          if (next === 'dark') {
+            document.documentElement.removeAttribute('data-theme');
+          } else {
+            document.documentElement.setAttribute('data-theme', 'light');
+          }
+          localStorage.setItem('soldi_theme', next);
+        });
+      });
+    })();
+  </script>
+</body>
+</html>
