@@ -5,3 +5,6 @@ data/
 _frames/
 soldi-*.png
 soldi-*.mp4
+*.db
+*.db-shm
+*.db-wal
