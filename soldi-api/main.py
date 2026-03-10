@@ -114,8 +114,10 @@ async def _background_refresh_loop() -> None:
 async def _refresh_one_sport(sport_key: str) -> None:
     """Fetch + cache one sport.
 
-    Only updates cache if we got at least as many events as the previous cycle.
-    This prevents slow-source timeouts from temporarily removing events.
+    Merges bookmakers from the previous cache so that intermittent scraper
+    failures don't cause sportsbooks to disappear.  For each event, any
+    bookmaker present in the old cache but missing from the new fetch is
+    carried forward for up to 5 minutes (``_STALE_BOOK_TTL``).
     """
     cache_key = f"{sport_key}:us:h2h::american"
     try:
@@ -128,9 +130,15 @@ async def _refresh_one_sport(sport_key: str) -> None:
         )
         events_data = [e.model_dump(exclude_none=True) for e in events]
 
-        # Only update cache if we got events (or there's no previous data).
-        # This prevents source timeouts from temporarily removing events.
+        # --- Stale-bookmaker carry-forward ---
+        # If the previous cache had bookmakers for events that this cycle
+        # didn't include (e.g. SBR returned 0 this cycle), graft them into
+        # the new data so users don't see books flicker in and out.
         prev = cache.get(cache_key)
+        if prev is not None and events_data:
+            prev_events, _ = prev
+            _merge_stale_bookmakers(events_data, prev_events)
+
         if events_data or prev is None:
             cache.set(cache_key, (events_data, headers))
 
@@ -139,6 +147,62 @@ async def _refresh_one_sport(sport_key: str) -> None:
             line_history.record_snapshots(events, sport_key)
     except Exception as exc:
         logger.warning("Refresh %s failed: %s", sport_key, exc)
+
+
+# Maximum age (seconds) to carry forward a bookmaker that went missing.
+_STALE_BOOK_TTL = 300  # 5 minutes
+
+
+def _merge_stale_bookmakers(
+    new_events: list,
+    old_events: list,
+) -> None:
+    """Merge bookmakers from *old_events* into *new_events* in-place.
+
+    For each event (matched by ``id``), if the old data had a bookmaker that
+    the new data lacks, copy it into the new event so the odds stay visible
+    on the frontend while the scraper recovers.
+
+    Each carried-forward bookmaker is tagged with ``_stale_since`` (epoch)
+    so that subsequent cycles can eventually expire it.
+    """
+    import time as _t
+
+    now = _t.time()
+
+    # Build lookup: event_id → old event dict
+    old_map = {}
+    for ev in old_events:
+        eid = ev.get("id")
+        if eid:
+            old_map[eid] = ev
+
+    carried = 0
+    for ev in new_events:
+        eid = ev.get("id")
+        if not eid or eid not in old_map:
+            continue
+        old_ev = old_map[eid]
+
+        new_bm_keys = {bm.get("key") for bm in ev.get("bookmakers", [])}
+
+        for old_bm in old_ev.get("bookmakers", []):
+            bk = old_bm.get("key")
+            if not bk or bk in new_bm_keys:
+                continue
+
+            # Check staleness — if this bookmaker was already carried forward
+            # from a previous cycle, honour the original stale_since timestamp.
+            stale_since = old_bm.get("_stale_since", now)
+            if now - stale_since > _STALE_BOOK_TTL:
+                continue  # Too old — let it expire
+
+            old_bm["_stale_since"] = stale_since
+            ev.setdefault("bookmakers", []).append(old_bm)
+            carried += 1
+
+    if carried:
+        logger.info("Stale carry-forward: grafted %d bookmaker entries", carried)
 
 
 @asynccontextmanager

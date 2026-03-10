@@ -1464,8 +1464,8 @@ async function fetchOddsEvents(sport) {
   }
   const rawEvents = await apiRes.json();
   const events = transformOddsEvents(rawEvents);
-  // Cache for 1s — frontend polls every 1s for near-instant display
-  setOddsCache(cacheKey, events, 1);
+  // Cache for 5s — Python-side stale carry-forward ensures books persist
+  setOddsCache(cacheKey, events, 5);
   console.log(`[SoldiAPI] Fetched ${events.length} events for ${sport}`);
   return { events, cached: false };
 }
