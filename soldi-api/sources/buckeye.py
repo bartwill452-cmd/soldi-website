@@ -254,8 +254,13 @@ class BuckeyeSource(DataSource):
         try:
             async with async_playwright() as p:
                 browser = await p.chromium.launch(
-                    headless=False,
-                    args=["--disable-blink-features=AutomationControlled"],
+                    headless=True,
+                    args=[
+                        "--disable-blink-features=AutomationControlled",
+                        "--no-sandbox",
+                        "--disable-dev-shm-usage",
+                        "--disable-gpu",
+                    ],
                 )
                 page = await browser.new_page()
 

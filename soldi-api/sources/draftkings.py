@@ -249,6 +249,8 @@ class DraftKingsSource(DataSource):
                 args=[
                     "--disable-blink-features=AutomationControlled",
                     "--no-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-gpu",
                 ],
             )
             self._context = await self._browser.new_context(
