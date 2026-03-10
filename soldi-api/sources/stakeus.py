@@ -203,7 +203,14 @@ class StakeUSSource(DataSource):
     # ------------------------------------------------------------------
 
     async def _prefetch_loop(self) -> None:
-        """Continuously fetch odds for all supported sports."""
+        """Continuously fetch odds for all supported sports.
+
+        NOTE: As of 2026-03, stake.com uses enterprise Cloudflare protection
+        that blocks headless browsers (even with playwright_stealth).
+        The CF challenge ("Just a moment...") never resolves.
+        This scraper is kept in code for future use but should remain
+        disabled in DISABLED_SCRAPERS until a CF bypass is available.
+        """
         await asyncio.sleep(12)  # Stagger behind other Playwright scrapers
         logger.info("StakeUS: Starting background prefetch loop")
         cycle = 0
@@ -329,14 +336,28 @@ class StakeUSSource(DataSource):
                 logger.info("StakeUS: Loading sportsbook to establish session")
                 await self._page.goto(
                     f"{SITE_URL}/sports/basketball",
-                    timeout=45000,
+                    timeout=60000,
                     wait_until="domcontentloaded",
                 )
-                # Wait for CF challenge to resolve and page to load
-                await asyncio.sleep(8)
-                title = await self._page.title()
+
+                # Wait for CF challenge to complete — poll until page title
+                # changes from "Just a moment..." to actual site content
+                for attempt in range(20):  # Up to ~40 seconds
+                    await asyncio.sleep(2)
+                    title = await self._page.title()
+                    if "just a moment" not in title.lower() and "attention" not in title.lower():
+                        break
+                    if attempt == 5:
+                        logger.info("StakeUS: Still on CF challenge after 10s, waiting...")
+                    if attempt == 15:
+                        logger.warning("StakeUS: CF challenge stuck after 30s")
+
                 url = self._page.url
-                logger.info("StakeUS: Session established (title: %r, url: %s)", title, url)
+                title = await self._page.title()
+                logger.info("StakeUS: Session state (title: %r, url: %s)", title, url)
+
+                if "just a moment" in title.lower():
+                    logger.warning("StakeUS: CF challenge did not resolve — may fail")
             except Exception as e:
                 logger.warning("StakeUS: Session setup failed: %s", e)
                 # Page may still have valid CF cookies even if timeout occurred
