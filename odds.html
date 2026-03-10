@@ -733,11 +733,8 @@ function renderBookFilter() {
   const chips = document.getElementById('bookFilterChips');
   const bar = document.getElementById('bookFilterBar');
   if (!chips || !bar) return;
-  // Only show books that actually have data (hides disabled/blocked scrapers)
-  const booksWithData = oddsData && oddsData.length > 0
-    ? new Set(oddsData.flatMap(e => (e.bookmakers || []).map(b => b.key)))
-    : new Set(Object.keys(BOOK_META));
-  const allKeys = Object.keys(BOOK_META).filter(k => booksWithData.has(k));
+  // Show ALL sportsbooks from BOOK_META (empty columns render as —)
+  const allKeys = Object.keys(BOOK_META);
   if (allKeys.length === 0) { bar.style.display = 'none'; return; }
   bar.style.display = 'block';
   chips.innerHTML = allKeys.map(key => {
@@ -1051,7 +1048,7 @@ function renderStats(tab) {
   const bar = document.getElementById('statsBar');
   if (tab === 'odds') {
     const events = oddsData.length;
-    const books = new Set(oddsData.flatMap(e => e.bookmakers.map(b => b.key))).size;
+    const books = Object.keys(BOOK_META).length;
     bar.innerHTML = `
       <div class="stat-card"><div class="label">Events</div><div class="value">${events}</div></div>
       <div class="stat-card"><div class="label">Sportsbooks</div><div class="value">${books}</div></div>
@@ -1154,10 +1151,9 @@ function renderOddsScreen() {
 
   const layout = getMarketLayout(currentMarket);
 
-  // Only show sportsbook columns that have data AND aren't filtered out.
-  // This hides disabled/blocked scrapers automatically (no empty columns).
-  const booksWithData = new Set(events.flatMap(e => (e.bookmakers || []).map(b => b.key)));
-  const bookKeys = Object.keys(BOOK_META).filter(k => isBookVisible(k) && booksWithData.has(k));
+  // Show ALL sportsbook columns from BOOK_META filtered only by user visibility toggle.
+  // Books with no data render as — (empty dashes).
+  const bookKeys = Object.keys(BOOK_META).filter(k => isBookVisible(k));
 
   // Build table
   let html = '<div class="odds-table-wrapper"><table class="odds-table">';
