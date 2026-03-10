@@ -272,22 +272,40 @@ class BetUSSource(DataSource):
 
         url = f"{SITE_URL}/sportsbook/{slug}"
         try:
-            # Use 'load' — BetUS uses ASP.NET UpdatePanels that render game
-            # content AFTER domcontentloaded.  'networkidle' is too strict
-            # (persistent analytics connections), but 'load' gives the page
-            # enough time to render the UpdatePanel content.
             await self._page.goto(url, timeout=45000, wait_until="load")
-            # Wait for game containers to render after page load
-            try:
-                await self._page.wait_for_selector(
-                    ".game-tbl, .bn-lines, .game-block", timeout=15000,
-                )
-            except Exception:
-                # ASP.NET may still be rendering — give it more time
-                await asyncio.sleep(5)
         except Exception as e:
             logger.warning("BetUS: Navigation to %s failed: %s", url, e)
             return []
+
+        # Cloudflare bot protection: BetUS triggers a JS challenge after
+        # the first page load.  Wait for it to auto-solve (the challenge
+        # runs JS in the browser and redirects when complete).
+        for attempt in range(6):  # up to 30 seconds
+            is_cf = await self._page.evaluate("""
+                () => document.body.innerText.includes('security verification')
+                    || document.body.innerText.includes('security service')
+                    || document.body.innerText.includes('Checking your browser')
+                    || document.body.innerText.includes('Just a moment')
+                    || document.querySelector('#challenge-running') !== null
+                    || document.querySelector('.cf-browser-verification') !== null
+            """)
+            if not is_cf:
+                break
+            if attempt == 0:
+                logger.info("BetUS: Cloudflare challenge detected for %s, waiting...", sport_key)
+            await asyncio.sleep(5)
+        else:
+            logger.warning("BetUS: Cloudflare challenge did not resolve for %s", sport_key)
+            return []
+
+        # Wait for game containers to appear after CF challenge clears
+        try:
+            await self._page.wait_for_selector(
+                ".game-tbl, .bn-lines, .game-block", timeout=15000,
+            )
+        except Exception:
+            # May genuinely have no games — fall through to extraction
+            await asyncio.sleep(3)
 
         # Quick DOM check: what's on the page?
         try:
