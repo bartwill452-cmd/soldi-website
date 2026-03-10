@@ -3465,13 +3465,15 @@ const TIKTOK_CACHE = new Map();
 const TIKTOK_CACHE_TTL = 5 * 60 * 1000; // 5 minutes — matches auto-refresh
 const TIKTOK_RATE_LIMITS = new Map();
 const TIKTOK_REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutes
+const TIKTOK_RATE_LIMIT_WINDOW = 5 * 60 * 1000; // 5 minutes
+const TIKTOK_RATE_LIMIT_MAX = 10; // max 10 requests per window
 
 function checkTiktokRateLimit(apiKey) {
   const now = Date.now();
   let record = TIKTOK_RATE_LIMITS.get(apiKey);
   if (!record) { record = { searches: [] }; TIKTOK_RATE_LIMITS.set(apiKey, record); }
-  record.searches = record.searches.filter(t => now - t < RATE_LIMIT_WINDOW);
-  if (record.searches.length >= RATE_LIMIT_MAX) return false;
+  record.searches = record.searches.filter(t => now - t < TIKTOK_RATE_LIMIT_WINDOW);
+  if (record.searches.length >= TIKTOK_RATE_LIMIT_MAX) return false;
   record.searches.push(now);
   return true;
 }
