@@ -29,8 +29,10 @@ logger = logging.getLogger(__name__)
 BASE_URL = "https://eu-offering-api.kambicdn.com/offering/v2018/rsiuspa"
 
 # Minimum seconds between Kambi API requests (across all sports).
-# Kambi CDN allows ~2-3 req/s sustained; 0.4s gives us 2.5 req/s with margin.
-_MIN_REQUEST_INTERVAL = 0.4
+# Kambi CDN allows ~3-5 req/s sustained; 0.25s gives us 4 req/s.
+# Combined with semaphore(4) concurrency, this handles 50+ events within
+# the 45s composite timeout.  429 retries with exponential backoff handle spikes.
+_MIN_REQUEST_INTERVAL = 0.25
 
 # Maximum retries for 429 responses
 _MAX_RETRIES = 3
