@@ -168,8 +168,6 @@ class BetUSSource(DataSource):
 
     def __init__(self):
         self._browser = None  # type: Any
-        self._context = None  # type: Any
-        self._page = None  # type: Any
         self._pw = None  # type: Any
         self._lock = asyncio.Lock()
         self._cache: Dict[str, Tuple[List[OddsEvent], float]] = {}
@@ -187,27 +185,52 @@ class BetUSSource(DataSource):
             async with self._lock:
                 try:
                     await self._ensure_browser()
-                    if self._page is None:
+                    if self._browser is None:
                         await asyncio.sleep(30)
                         continue
                     for sport_key, slug in _SPORT_SLUGS.items():
                         try:
-                            events = await self._fetch_sport(sport_key, slug)
-                            # Only update cache if we got events (preserve
-                            # previous good data when page fails to load)
-                            if events:
-                                self._cache[sport_key] = (events, time.time())
-                            logger.info("BetUS prefetch: %d events for %s", len(events), sport_key)
+                            # Create a fresh browser context + page for each
+                            # sport to avoid Cloudflare challenges.  CF grants
+                            # a session cookie on the first navigation but
+                            # blocks subsequent navigations in the same context.
+                            ctx = await self._browser.new_context(
+                                user_agent=(
+                                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                                    "Chrome/131.0.0.0 Safari/537.36"
+                                ),
+                                viewport={"width": 1920, "height": 1080},
+                            )
+                            try:
+                                from playwright_stealth import Stealth
+                                stealth = Stealth()
+                                await stealth.apply_stealth_async(ctx)
+                            except ImportError:
+                                await ctx.add_init_script("""
+                                    Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+                                    window.chrome = {runtime: {}};
+                                """)
+                            page = await ctx.new_page()
+                            try:
+                                events = await self._fetch_sport_page(page, sport_key, slug)
+                                if events:
+                                    self._cache[sport_key] = (events, time.time())
+                                logger.info("BetUS prefetch: %d events for %s", len(events), sport_key)
+                            finally:
+                                await page.close()
+                                await ctx.close()
                         except Exception as e:
                             logger.warning("BetUS prefetch %s failed: %s", sport_key, e)
-                        await asyncio.sleep(2)
+                        await asyncio.sleep(3)
                 except Exception as e:
                     logger.warning("BetUS prefetch error: %s", e)
             logger.info("BetUS: Prefetch cycle #%d complete", cycle)
             await asyncio.sleep(30)
 
     async def _ensure_browser(self) -> None:
-        if self._page is not None:
+        """Launch browser if needed.  Contexts/pages are created per-sport."""
+        if self._browser is not None:
             return
         try:
             from playwright.async_api import async_playwright
@@ -220,28 +243,10 @@ class BetUSSource(DataSource):
                     "--disable-dev-shm-usage",
                 ],
             )
-            self._context = await self._browser.new_context(
-                user_agent=(
-                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/131.0.0.0 Safari/537.36"
-                ),
-                viewport={"width": 1920, "height": 1080},
-            )
-            try:
-                from playwright_stealth import Stealth
-                stealth = Stealth()
-                await stealth.apply_stealth_async(self._context)
-            except ImportError:
-                await self._context.add_init_script("""
-                    Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
-                    window.chrome = {runtime: {}};
-                """)
-            self._page = await self._context.new_page()
             logger.info("BetUS: Playwright browser launched")
         except Exception as e:
             logger.warning("BetUS: Failed to launch browser: %s", e)
-            self._page = None
+            self._browser = None
 
     async def get_odds(
         self,
@@ -265,79 +270,62 @@ class BetUSSource(DataSource):
             return cached[0], headers
         return [], headers
 
-    async def _fetch_sport(self, sport_key: str, slug: str) -> List[OddsEvent]:
-        """Navigate to BetUS sport page and scrape game blocks."""
-        if self._page is None:
-            return []
+    async def _fetch_sport_page(self, page, sport_key: str, slug: str) -> List[OddsEvent]:
+        """Navigate a fresh page to a BetUS sport URL and scrape game blocks.
 
+        Each call uses a disposable browser context+page to avoid Cloudflare
+        session-based challenges that block reused contexts.
+        """
         url = f"{SITE_URL}/sportsbook/{slug}"
         try:
-            await self._page.goto(url, timeout=45000, wait_until="load")
+            await page.goto(url, timeout=45000, wait_until="load")
         except Exception as e:
             logger.warning("BetUS: Navigation to %s failed: %s", url, e)
             return []
 
-        # Cloudflare bot protection: BetUS triggers a JS challenge after
-        # the first page load.  Wait for it to auto-solve (the challenge
-        # runs JS in the browser and redirects when complete).
-        for attempt in range(6):  # up to 30 seconds
-            is_cf = await self._page.evaluate("""
+        # Cloudflare challenge detection: wait up to 30s for auto-resolve
+        for attempt in range(6):
+            is_cf = await page.evaluate("""
                 () => document.body.innerText.includes('security verification')
-                    || document.body.innerText.includes('security service')
                     || document.body.innerText.includes('Checking your browser')
                     || document.body.innerText.includes('Just a moment')
                     || document.querySelector('#challenge-running') !== null
-                    || document.querySelector('.cf-browser-verification') !== null
             """)
             if not is_cf:
                 break
             if attempt == 0:
-                logger.info("BetUS: Cloudflare challenge detected for %s, waiting...", sport_key)
+                logger.info("BetUS: Cloudflare challenge for %s, waiting...", sport_key)
             await asyncio.sleep(5)
         else:
             logger.warning("BetUS: Cloudflare challenge did not resolve for %s", sport_key)
             return []
 
-        # Wait for game containers to appear after CF challenge clears
+        # Wait for game containers
         try:
-            await self._page.wait_for_selector(
+            await page.wait_for_selector(
                 ".game-tbl, .bn-lines, .game-block", timeout=15000,
             )
         except Exception:
-            # May genuinely have no games — fall through to extraction
             await asyncio.sleep(3)
 
-        # Quick DOM check: what's on the page?
+        # DOM check for debugging
         try:
-            dom_check = await self._page.evaluate("""
-                () => {
-                    const body = document.body;
-                    const html = body.innerHTML;
-                    // Get first 500 chars of visible text (skip scripts/styles)
-                    let textContent = body.innerText || '';
-                    textContent = textContent.replace(/\\s+/g, ' ').trim().substring(0, 300);
-                    return {
-                        url: window.location.href,
-                        title: document.title,
-                        gameTbls: document.querySelectorAll('.game-tbl').length,
-                        gameBlocks: document.querySelectorAll('.game-block').length,
-                        bnLines: document.querySelectorAll('.bn-lines').length,
-                        bodyLen: html.length,
-                        textSnippet: textContent,
-                    };
-                }
+            dom_check = await page.evaluate("""
+                () => ({
+                    url: window.location.href,
+                    gameTbls: document.querySelectorAll('.game-tbl').length,
+                    bodyLen: document.body.innerHTML.length,
+                })
             """)
             logger.info(
-                "BetUS DOM check %s: url=%s gameTbls=%d gameBlocks=%d bodyLen=%d text=%.200s",
-                sport_key, dom_check.get("url", "?"),
-                dom_check.get("gameTbls", 0), dom_check.get("gameBlocks", 0),
-                dom_check.get("bodyLen", 0), dom_check.get("textSnippet", ""),
+                "BetUS DOM %s: gameTbls=%d bodyLen=%d",
+                sport_key, dom_check.get("gameTbls", 0), dom_check.get("bodyLen", 0),
             )
-        except Exception as e:
-            logger.warning("BetUS: DOM check failed for %s: %s", sport_key, e)
+        except Exception:
+            pass
 
         try:
-            raw_events = await self._page.evaluate(_JS_EXTRACT)
+            raw_events = await page.evaluate(_JS_EXTRACT)
         except Exception as e:
             logger.warning("BetUS: DOM extraction failed for %s: %s", sport_key, e)
             return []
@@ -460,14 +448,12 @@ class BetUSSource(DataSource):
         return ""
 
     async def close(self) -> None:
-        for attr in ("_page", "_context", "_browser"):
-            obj = getattr(self, attr, None)
-            if obj is not None:
-                try:
-                    await obj.close()
-                except Exception:
-                    pass
-                setattr(self, attr, None)
+        if self._browser is not None:
+            try:
+                await self._browser.close()
+            except Exception:
+                pass
+            self._browser = None
         if self._pw is not None:
             try:
                 await self._pw.stop()
