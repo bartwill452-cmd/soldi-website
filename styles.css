@@ -1117,20 +1117,6 @@ button { cursor: pointer; font-family: inherit; }
 .dash-card-chatbot .dash-card-header svg { stroke: #06b6d4; }
 .dash-card-chatbot .dash-card-header span { color: #06b6d4; }
 .dash-card-chatbot .dash-link { color: #06b6d4; }
-.dash-card-tiktok {
-  border-color: rgba(236, 72, 153, 0.2);
-  background: rgba(236, 72, 153, 0.03);
-}
-.dash-card-tiktok .dash-card-header svg { stroke: #ec4899; }
-.dash-card-tiktok .dash-card-header span { color: #ec4899; }
-.dash-card-tiktok .dash-link { color: #ec4899; }
-.dash-card-tiktok-analytics {
-  border-color: rgba(244, 63, 94, 0.2);
-  background: rgba(244, 63, 94, 0.03);
-}
-.dash-card-tiktok-analytics .dash-card-header svg { stroke: #f43f5e; }
-.dash-card-tiktok-analytics .dash-card-header span { color: #f43f5e; }
-.dash-card-tiktok-analytics .dash-link { color: #f43f5e; }
 .dash-card-header {
   display: flex;
   align-items: center;
