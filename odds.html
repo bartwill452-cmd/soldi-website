@@ -800,11 +800,19 @@ function toggleAllBooks(on) {
 function selectSport(sportKey, el) {
   currentSport = sportKey;
   currentPeriodGroup = 'fg'; // Reset to Full Game when switching sports
-  // Clear data so loading spinner shows for new sport
-  oddsData = []; evData = null; arbData = null;
+  // Try to load cached data for instant rendering, fresh data fetches in background
+  oddsData = loadCache('odds') || [];
+  evData = loadCache('ev') || null;
+  arbData = loadCache('arb') || null;
   document.querySelectorAll('.sport-chip').forEach(c => c.classList.remove('active'));
   if (el) el.classList.add('active');
   renderMarketTabs();
+  // If we have cached odds, render them immediately before the fetch
+  if (oddsData.length > 0 && currentTab === 'odds') {
+    renderStats('odds');
+    renderBookFilter();
+    renderOddsScreen();
+  }
   refreshData();
 }
 
@@ -997,6 +1005,22 @@ function _pickMainLineOutcome(outcomes, name, marketKey, side, event) {
   return best;
 }
 
+// ── Local Cache Helpers ──
+function cacheKey(type) { return `soldi_${type}_${currentSport}`; }
+function saveCache(type, data) {
+  try { sessionStorage.setItem(cacheKey(type), JSON.stringify({ ts: Date.now(), data })); } catch(e) {}
+}
+function loadCache(type) {
+  try {
+    const raw = sessionStorage.getItem(cacheKey(type));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    // Cache valid for 5 minutes max
+    if (Date.now() - parsed.ts > 300000) { sessionStorage.removeItem(cacheKey(type)); return null; }
+    return parsed.data;
+  } catch(e) { return null; }
+}
+
 // ── Data Loading ──
 async function refreshData() {
   const now = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
@@ -1008,10 +1032,22 @@ async function refreshData() {
 
 async function loadOdds() {
   const container = document.getElementById('oddsContent');
-  // Only show loading spinner on initial load (no data yet)
+
+  // Render cached data instantly (no spinner, no waiting)
   if (!oddsData || oddsData.length === 0) {
-    container.innerHTML = '<div class="loading-state"><div class="spinner"></div>Loading odds...</div>';
+    const cached = loadCache('odds');
+    if (cached && cached.length > 0) {
+      oddsData = cached;
+      renderStats('odds');
+      renderBookFilter();
+      renderOddsScreen();
+      prefetchEVAndArb();
+    } else {
+      container.innerHTML = '<div class="loading-state"><div class="spinner"></div>Loading odds...</div>';
+    }
   }
+
+  // Fetch fresh data in background
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 20000);
@@ -1020,10 +1056,10 @@ async function loadOdds() {
     const data = await res.json();
     if (data.success) {
       oddsData = data.events;
+      saveCache('odds', data.events);
       renderStats('odds');
       renderBookFilter();
       renderOddsScreen();
-      // Pre-fetch EV and arb data in background so tab switching is instant
       prefetchEVAndArb();
     } else if (!oddsData || oddsData.length === 0) {
       container.innerHTML = `<div class="empty-state">${data.error || 'Failed to load odds'}</div>`;
@@ -1037,12 +1073,19 @@ async function loadOdds() {
 
 async function loadEV() {
   const container = document.getElementById('evContent');
-  // If data was pre-fetched, render immediately then refresh in background
+  // Render pre-fetched or cached data instantly
   if (evData !== null && Array.isArray(evData)) {
     renderStats('ev');
     renderEVBets();
   } else {
-    container.innerHTML = '<div class="loading-state"><div class="spinner"></div>Calculating +EV bets...</div>';
+    const cached = loadCache('ev');
+    if (cached && Array.isArray(cached)) {
+      evData = cached;
+      renderStats('ev');
+      renderEVBets();
+    } else {
+      container.innerHTML = '<div class="loading-state"><div class="spinner"></div>Calculating +EV bets...</div>';
+    }
   }
   try {
     const controller = new AbortController();
@@ -1052,6 +1095,7 @@ async function loadEV() {
     const data = await res.json();
     if (data.success) {
       evData = data.bets;
+      saveCache('ev', data.bets);
       renderStats('ev');
       renderEVBets();
     } else if (!evData || !Array.isArray(evData)) {
@@ -1071,7 +1115,14 @@ async function loadArb() {
     renderStats('arb');
     renderArbitrage();
   } else {
-    container.innerHTML = '<div class="loading-state"><div class="spinner"></div>Scanning for arbitrage...</div>';
+    const cached = loadCache('arb');
+    if (cached && Array.isArray(cached)) {
+      arbData = cached;
+      renderStats('arb');
+      renderArbitrage();
+    } else {
+      container.innerHTML = '<div class="loading-state"><div class="spinner"></div>Scanning for arbitrage...</div>';
+    }
   }
   try {
     const controller = new AbortController();
@@ -1081,6 +1132,7 @@ async function loadArb() {
     const data = await res.json();
     if (data.success) {
       arbData = data.arbs;
+      saveCache('arb', data.arbs);
       renderStats('arb');
       renderArbitrage();
     } else if (!arbData || !Array.isArray(arbData)) {
@@ -1104,8 +1156,8 @@ async function prefetchEVAndArb() {
       fetch(buildUrl('/api/odds/ev', { sport: currentSport }), { headers: getAuthHeaders() }).then(r => r.json()),
       fetch(buildUrl('/api/odds/arbitrage', { sport: currentSport }), { headers: getAuthHeaders() }).then(r => r.json())
     ]);
-    if (evRes.status === 'fulfilled' && evRes.value.success) evData = evRes.value.bets;
-    if (arbRes.status === 'fulfilled' && arbRes.value.success) arbData = arbRes.value.arbs;
+    if (evRes.status === 'fulfilled' && evRes.value.success) { evData = evRes.value.bets; saveCache('ev', evData); }
+    if (arbRes.status === 'fulfilled' && arbRes.value.success) { arbData = arbRes.value.arbs; saveCache('arb', arbData); }
   } catch (e) { /* silent — data will load when user switches tabs */ }
   prefetchInFlight = false;
 }
