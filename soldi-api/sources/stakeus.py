@@ -277,7 +277,8 @@ class StakeUSSource(DataSource):
                 )
                 await asyncio.sleep(10)  # Wait for CF challenge to resolve
                 title = await self._page.title()
-                logger.info("StakeUS: Session established (title: %r)", title)
+                url = self._page.url
+                logger.info("StakeUS: Session established (title: %r, url: %s)", title, url)
             except Exception as e:
                 logger.warning("StakeUS: Session setup failed: %s", e)
 
@@ -352,8 +353,14 @@ class StakeUSSource(DataSource):
                     logger.warning("StakeUS: GraphQL 403 — CF block, restarting browser")
                     await self._close_browser()
                     return None
-                logger.info("StakeUS: GraphQL error: %s", err)
+                logger.warning("StakeUS: GraphQL error: %s", err)
                 return None
+
+            # Log response shape for debugging
+            if isinstance(result, dict):
+                keys = list(result.keys())[:5]
+                data_keys = list((result.get("data") or {}).keys())[:5] if result.get("data") else []
+                logger.info("StakeUS: GQL response keys=%s, data keys=%s", keys, data_keys)
 
             return result
         except Exception as exc:
@@ -371,22 +378,41 @@ class StakeUSSource(DataSource):
         variables = {"sportSlug": sport_slug, "limit": 100, "offset": 0}
         data = await self._gql_call(GQL_FIXTURES, variables)
         if not data:
+            logger.info("StakeUS: No GQL data for %s (slug=%s)", sport_key, sport_slug)
             return []
 
         fixtures = (data.get("data") or {}).get("sportFixtures") or []
+        logger.info(
+            "StakeUS: GQL returned %d raw fixtures for %s (slug=%s)",
+            len(fixtures), sport_key, sport_slug,
+        )
 
         # Check for serviceDisabled error
         errors = data.get("errors")
         if errors:
+            logger.warning("StakeUS: GQL errors for %s: %s", sport_key, errors)
             for err in errors:
                 msg = (err.get("message") or "").lower()
                 if "disabled" in msg or "unavailable" in msg:
                     logger.info("StakeUS: Service disabled for %s", sport_key)
                     return []
 
+        # Log first fixture for debugging
+        if fixtures:
+            sample = fixtures[0]
+            t = sample.get("tournament") or {}
+            t_name = t.get("name", "?")
+            c_name = ((t.get("category") or {}).get("name") or "?")
+            status = sample.get("status", "?")
+            logger.info(
+                "StakeUS: Sample fixture — tournament=%r, category=%r, status=%r",
+                t_name, c_name, status,
+            )
+
         # Filter to relevant league
         league_keywords = LEAGUE_FILTERS.get(sport_key, [])
         filtered = []
+        skipped_leagues = set()
         for fix in fixtures:
             if not fix or not fix.get("data"):
                 continue
@@ -398,6 +424,7 @@ class StakeUSSource(DataSource):
             if league_keywords:
                 combined = f"{tournament_name} {category_name}"
                 if not any(kw in combined for kw in league_keywords):
+                    skipped_leagues.add(tournament_name)
                     continue
 
             status = (fix.get("status") or "").lower()
@@ -405,6 +432,12 @@ class StakeUSSource(DataSource):
                 continue
 
             filtered.append(fix)
+
+        if skipped_leagues:
+            logger.info(
+                "StakeUS: %s — filtered out leagues: %s",
+                sport_key, list(skipped_leagues)[:5],
+            )
 
         # Parse fixtures
         events = []
