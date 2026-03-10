@@ -146,18 +146,24 @@ class BetRiversSource(DataSource):
             if not kambi_events:
                 return [], {"x-requests-remaining": "unlimited"}
 
-            # Step 2: Fetch full bet offers per event SEQUENTIALLY with throttling.
-            # The Kambi CDN rate-limits aggressively; concurrent requests cause
-            # 429s that cascade into total data loss. Sequential + throttled
-            # requests are slower but reliable.
-            events = []
+            # Step 2: Fetch full bet offers per event with bounded concurrency.
+            # We use a semaphore to allow up to 4 concurrent requests while
+            # the throttled_get still enforces the minimum interval between
+            # requests. This is ~4x faster than fully sequential.
+            sem = asyncio.Semaphore(4)
             sport_title = get_sport_title(sport_key)
-            for ev in kambi_events:
-                result = await self._fetch_event_offers(ev)
-                if result is not None:
-                    parsed = self._parse_event(result, sport_key, sport_title)
-                    if parsed:
-                        events.append(parsed)
+
+            async def _fetch_and_parse(ev):
+                async with sem:
+                    result = await self._fetch_event_offers(ev)
+                    if result is not None:
+                        return self._parse_event(result, sport_key, sport_title)
+                    return None
+
+            parsed_results = await asyncio.gather(
+                *[_fetch_and_parse(ev) for ev in kambi_events]
+            )
+            events = [e for e in parsed_results if e is not None]
 
             logger.info(f"BetRivers: {len(events)} events for {sport_key}")
             return events, {"x-requests-remaining": "unlimited"}

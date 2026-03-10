@@ -927,6 +927,25 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', uptime: process.uptime(), timestamp: new Date().toISOString(), version: '2.1.0' });
 });
 
+// GET /api/health/detailed - Proxy to SoldiAPI for per-scraper health data
+app.get('/api/health/detailed', async (req, res) => {
+  try {
+    const apiUrl = process.env.SOLDI_API_URL || 'http://localhost:3001';
+    const apiKey = process.env.SOLDI_API_KEY || 'dev-key-change-me';
+    const response = await fetchWithTimeout(
+      `${apiUrl}/health/detailed`,
+      { headers: { 'Authorization': `Bearer ${apiKey}` } },
+      10000
+    );
+    const data = await response.json();
+    // Merge Express health info
+    data.express = { uptime: process.uptime(), timestamp: new Date().toISOString() };
+    res.json(data);
+  } catch (err) {
+    res.status(502).json({ error: 'SoldiAPI unreachable', details: err.message });
+  }
+});
+
 // Diagnostic: test Whop API connectivity (no sensitive data exposed)
 app.get('/api/debug/whop-test', async (req, res) => {
   const hasKey = !!WHOP_API_KEY && WHOP_API_KEY !== 'YOUR_API_KEY_HERE';
