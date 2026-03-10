@@ -1332,8 +1332,8 @@ function calculatePositiveEV(events) {
           const sharpAway = sharpBms.map(b => b.markets[marketKey].outcomes.find(o => o.name === event.awayTeam)?.price).filter(Boolean);
           if (sharpHome.length === 0 || sharpAway.length === 0) continue;
           const label = marketKey === 'fight_to_go_distance' ? 'Go Distance' : `ML${displaySuffix}`;
-          addEVBet(evBets, event, bm, bookInfo, label, homeOutcome.price, event.homeTeam, sharpHome, sharpAway, null);
-          addEVBet(evBets, event, bm, bookInfo, label, awayOutcome.price, event.awayTeam, sharpAway, sharpHome, null);
+          addEVBet(evBets, event, bm, bookInfo, label, homeOutcome.price, event.homeTeam, sharpHome, sharpAway, null, marketKey);
+          addEVBet(evBets, event, bm, bookInfo, label, awayOutcome.price, event.awayTeam, sharpAway, sharpHome, null, marketKey);
         } else if (isSpread) {
           const homeOutcome = mkt.outcomes.find(o => o.name === event.homeTeam);
           const awayOutcome = mkt.outcomes.find(o => o.name === event.awayTeam);
@@ -1348,9 +1348,9 @@ function calculatePositiveEV(events) {
           const sharpHome = matchingSharp.map(b => b.markets[marketKey].outcomes.find(o => o.name === event.homeTeam)?.price).filter(Boolean);
           const sharpAway = matchingSharp.map(b => b.markets[marketKey].outcomes.find(o => o.name === event.awayTeam)?.price).filter(Boolean);
           const hpt = homeOutcome.point || 0;
-          addEVBet(evBets, event, bm, bookInfo, `Spread${displaySuffix} ${hpt > 0 ? '+' : ''}${hpt}`, homeOutcome.price, event.homeTeam, sharpHome, sharpAway, hpt);
+          addEVBet(evBets, event, bm, bookInfo, `Spread${displaySuffix} ${hpt > 0 ? '+' : ''}${hpt}`, homeOutcome.price, event.homeTeam, sharpHome, sharpAway, hpt, marketKey);
           const apt = awayOutcome.point || 0;
-          addEVBet(evBets, event, bm, bookInfo, `Spread${displaySuffix} ${apt > 0 ? '+' : ''}${apt}`, awayOutcome.price, event.awayTeam, sharpAway, sharpHome, apt);
+          addEVBet(evBets, event, bm, bookInfo, `Spread${displaySuffix} ${apt > 0 ? '+' : ''}${apt}`, awayOutcome.price, event.awayTeam, sharpAway, sharpHome, apt, marketKey);
         } else if (isTotal) {
           const overOutcome = mkt.outcomes.find(o => o.name === 'Over');
           const underOutcome = mkt.outcomes.find(o => o.name === 'Under');
@@ -1365,8 +1365,8 @@ function calculatePositiveEV(events) {
           const sharpOver = matchingSharp.map(b => b.markets[marketKey].outcomes.find(o => o.name === 'Over')?.price).filter(Boolean);
           const sharpUnder = matchingSharp.map(b => b.markets[marketKey].outcomes.find(o => o.name === 'Under')?.price).filter(Boolean);
           const prefix = marketKey.startsWith('team_total') ? 'Team Total' : marketKey === 'total_rounds' ? 'Total Rounds' : 'Total';
-          addEVBet(evBets, event, bm, bookInfo, `${prefix}${displaySuffix} O${overOutcome.point}`, overOutcome.price, 'Over', sharpOver, sharpUnder, overOutcome.point);
-          addEVBet(evBets, event, bm, bookInfo, `${prefix}${displaySuffix} U${underOutcome.point}`, underOutcome.price, 'Under', sharpUnder, sharpOver, underOutcome.point);
+          addEVBet(evBets, event, bm, bookInfo, `${prefix}${displaySuffix} O${overOutcome.point}`, overOutcome.price, 'Over', sharpOver, sharpUnder, overOutcome.point, marketKey);
+          addEVBet(evBets, event, bm, bookInfo, `${prefix}${displaySuffix} U${underOutcome.point}`, underOutcome.price, 'Under', sharpUnder, sharpOver, underOutcome.point, marketKey);
         }
       }
     }
@@ -1375,7 +1375,7 @@ function calculatePositiveEV(events) {
   return evBets;
 }
 
-function addEVBet(evBets, event, bm, bookInfo, marketType, odds, team, sharpSide, sharpOpp, point) {
+function addEVBet(evBets, event, bm, bookInfo, marketType, odds, team, sharpSide, sharpOpp, point, marketKey) {
   if (!odds) return;
   const result = findMarketConsensusEV(odds, sharpSide, sharpOpp);
   if (result.isPositive && result.ev > 0.5) {
@@ -1387,7 +1387,7 @@ function addEVBet(evBets, event, bm, bookInfo, marketType, odds, team, sharpSide
       homeTeam: event.homeTeam, awayTeam: event.awayTeam, commenceTime: event.commenceTime,
       bookmaker: bm.key, bookmakerName: bookInfo?.name || bm.name,
       team, odds, fairOdds: probToAmericanOdds(tp), ev: result.ev,
-      trueProb: result.trueProb, kelly: result.kelly, marketType, point
+      trueProb: result.trueProb, kelly: result.kelly, marketType, point, marketKey
     });
   }
 }

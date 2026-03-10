@@ -261,7 +261,7 @@
     }
 
     /* ── EV Cards (Tab 2) ── */
-    .ev-card { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 14px; padding: 18px; margin-bottom: 10px; display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; transition: border-color 0.2s; }
+    .ev-card { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 14px; padding: 18px; margin-bottom: 10px; display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; transition: border-color 0.2s; cursor: pointer; }
     .ev-card:hover { border-color: rgba(34,197,94,0.2); }
     .ev-left { display: flex; flex-direction: column; gap: 4px; }
     .ev-game { font-size: 13px; color: #a1a1aa; }
@@ -274,6 +274,29 @@
     .ev-metric .val.green { color: #22c55e; }
     .ev-metric .val.blue { color: #3b82f6; }
     .ev-book { display: inline-block; padding: 3px 8px; background: rgba(255,255,255,0.06); border-radius: 6px; font-size: 11px; font-weight: 600; color: #a1a1aa; margin-top: 4px; }
+
+    /* ── EV Detail Modal ── */
+    .ev-detail-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 1000; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+    .ev-detail-overlay.open { opacity: 1; pointer-events: auto; }
+    .ev-detail-modal { background: #0d0d12; border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 28px; max-width: 600px; width: 95%; max-height: 80vh; overflow-y: auto; }
+    .ev-detail-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
+    .ev-detail-title { font-size: 18px; font-weight: 800; color: #fff; }
+    .ev-detail-subtitle { font-size: 13px; color: #71717a; margin-top: 4px; }
+    .ev-detail-close { background: none; border: none; color: #71717a; font-size: 24px; cursor: pointer; padding: 0 4px; }
+    .ev-detail-close:hover { color: #fff; }
+    .ev-detail-stats { display: flex; gap: 20px; margin-bottom: 20px; padding: 14px; background: rgba(34,197,94,0.06); border: 1px solid rgba(34,197,94,0.15); border-radius: 10px; }
+    .ev-detail-stat { text-align: center; }
+    .ev-detail-stat .label { font-size: 10px; color: #71717a; text-transform: uppercase; letter-spacing: 0.5px; }
+    .ev-detail-stat .val { font-size: 18px; font-weight: 800; margin-top: 2px; }
+    .ev-odds-table { width: 100%; border-collapse: collapse; }
+    .ev-odds-table th { font-size: 11px; color: #71717a; text-transform: uppercase; letter-spacing: 0.5px; padding: 8px 12px; border-bottom: 1px solid rgba(255,255,255,0.06); text-align: left; }
+    .ev-odds-table td { padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.04); font-size: 14px; color: #e4e4e7; }
+    .ev-odds-table tr:hover { background: rgba(255,255,255,0.02); }
+    .ev-odds-table .book-cell { display: flex; align-items: center; gap: 8px; }
+    .ev-odds-table .book-cell img { width: 20px; height: 20px; border-radius: 4px; }
+    .ev-odds-table .best-odds { color: #22c55e; font-weight: 800; }
+    .ev-odds-table .ev-source { color: #06b6d4; font-weight: 700; }
+    .ev-odds-no-data { color: #3f3f46; }
 
     /* ── Arb Cards (Tab 3) ── */
     .arb-card { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 14px; padding: 18px; margin-bottom: 10px; }
@@ -491,6 +514,21 @@
       <div class="lm-filters" id="lmFilters"></div>
       <div class="lm-chart-wrap"><canvas id="lmChart"></canvas></div>
       <div id="lmTableWrap"></div>
+    </div>
+  </div>
+
+  <!-- EV Detail Modal -->
+  <div class="ev-detail-overlay" id="evDetailOverlay" onclick="if(event.target===this)closeEVDetail()">
+    <div class="ev-detail-modal">
+      <div class="ev-detail-header">
+        <div>
+          <div class="ev-detail-title" id="evDetailTitle"></div>
+          <div class="ev-detail-subtitle" id="evDetailSubtitle"></div>
+        </div>
+        <button class="ev-detail-close" onclick="closeEVDetail()">&times;</button>
+      </div>
+      <div class="ev-detail-stats" id="evDetailStats"></div>
+      <div id="evDetailTable"></div>
     </div>
   </div>
 
@@ -983,8 +1021,10 @@ async function loadOdds() {
     if (data.success) {
       oddsData = data.events;
       renderStats('odds');
-      renderBookFilter();  // Update filter chips to reflect which books have data
+      renderBookFilter();
       renderOddsScreen();
+      // Pre-fetch EV and arb data in background so tab switching is instant
+      prefetchEVAndArb();
     } else if (!oddsData || oddsData.length === 0) {
       container.innerHTML = `<div class="empty-state">${data.error || 'Failed to load odds'}</div>`;
     }
@@ -997,7 +1037,11 @@ async function loadOdds() {
 
 async function loadEV() {
   const container = document.getElementById('evContent');
-  if (evData === null) {
+  // If data was pre-fetched, render immediately then refresh in background
+  if (evData !== null && Array.isArray(evData)) {
+    renderStats('ev');
+    renderEVBets();
+  } else {
     container.innerHTML = '<div class="loading-state"><div class="spinner"></div>Calculating +EV bets...</div>';
   }
   try {
@@ -1010,18 +1054,23 @@ async function loadEV() {
       evData = data.bets;
       renderStats('ev');
       renderEVBets();
-    } else {
+    } else if (!evData || !Array.isArray(evData)) {
       container.innerHTML = `<div class="empty-state">${data.error || 'Failed to calculate EV'}</div>`;
     }
   } catch (e) {
     console.error('loadEV error:', e);
-    container.innerHTML = `<div class="empty-state">${e.name === 'AbortError' ? 'Request timed out — try again' : 'Connection error'}</div>`;
+    if (!evData || !Array.isArray(evData)) {
+      container.innerHTML = `<div class="empty-state">${e.name === 'AbortError' ? 'Request timed out — try again' : 'Connection error'}</div>`;
+    }
   }
 }
 
 async function loadArb() {
   const container = document.getElementById('arbContent');
-  if (arbData === null) {
+  if (arbData !== null && Array.isArray(arbData)) {
+    renderStats('arb');
+    renderArbitrage();
+  } else {
     container.innerHTML = '<div class="loading-state"><div class="spinner"></div>Scanning for arbitrage...</div>';
   }
   try {
@@ -1034,13 +1083,31 @@ async function loadArb() {
       arbData = data.arbs;
       renderStats('arb');
       renderArbitrage();
-    } else {
+    } else if (!arbData || !Array.isArray(arbData)) {
       container.innerHTML = `<div class="empty-state">${data.error || 'Failed to scan arbitrage'}</div>`;
     }
   } catch (e) {
     console.error('loadArb error:', e);
-    container.innerHTML = `<div class="empty-state">${e.name === 'AbortError' ? 'Request timed out — try again' : 'Connection error'}</div>`;
+    if (!arbData || !Array.isArray(arbData)) {
+      container.innerHTML = `<div class="empty-state">${e.name === 'AbortError' ? 'Request timed out — try again' : 'Connection error'}</div>`;
+    }
   }
+}
+
+// Pre-fetch EV and arb data in background so tab switching is instant
+let prefetchInFlight = false;
+async function prefetchEVAndArb() {
+  if (prefetchInFlight) return;
+  prefetchInFlight = true;
+  try {
+    const [evRes, arbRes] = await Promise.allSettled([
+      fetch(buildUrl('/api/odds/ev', { sport: currentSport }), { headers: getAuthHeaders() }).then(r => r.json()),
+      fetch(buildUrl('/api/odds/arbitrage', { sport: currentSport }), { headers: getAuthHeaders() }).then(r => r.json())
+    ]);
+    if (evRes.status === 'fulfilled' && evRes.value.success) evData = evRes.value.bets;
+    if (arbRes.status === 'fulfilled' && arbRes.value.success) arbData = arbRes.value.arbs;
+  } catch (e) { /* silent — data will load when user switches tabs */ }
+  prefetchInFlight = false;
 }
 
 // ── Stats ──
@@ -1570,9 +1637,9 @@ function renderEVBets() {
     return;
   }
   let html = '';
-  evData.forEach(bet => {
+  evData.forEach((bet, idx) => {
     const badge = getSportBadge(bet.sportKey);
-    html += `<div class="ev-card">
+    html += `<div class="ev-card" onclick="openEVDetail(${idx})">
       <div class="ev-left">
         <div class="ev-game"><span class="event-sport-badge ${badge}" style="font-size:10px;padding:1px 6px;">${bet.sportKey?.split('_').pop().toUpperCase() || ''}</span> ${bet.awayTeam} @ ${bet.homeTeam}</div>
         <div class="ev-team">${bet.team} — ${bet.marketType}</div>
@@ -1582,12 +1649,143 @@ function renderEVBets() {
         <div class="ev-metric"><div class="label">Your Odds</div><div class="val">${fmtOdds(bet.odds)}</div></div>
         <div class="ev-metric"><div class="label">Fair Odds</div><div class="val blue">${fmtOdds(bet.fairOdds)}</div></div>
         <div class="ev-metric"><div class="label">EV%</div><div class="val green">+${bet.ev.toFixed(1)}%</div></div>
-        <div class="ev-metric"><div class="label">Kelly%</div><div class="val">${bet.kelly.toFixed(1)}%</div></div>
       </div>
     </div>`;
   });
   container.innerHTML = html;
 }
+
+// ── EV Detail Modal ──
+async function openEVDetail(betIdx) {
+  const bet = evData[betIdx];
+  if (!bet) return;
+
+  // Set title & subtitle
+  document.getElementById('evDetailTitle').textContent = `${bet.awayTeam} @ ${bet.homeTeam}`;
+  document.getElementById('evDetailSubtitle').textContent = `${bet.team} — ${bet.marketType}`;
+
+  // Stats bar
+  document.getElementById('evDetailStats').innerHTML = `
+    <div class="ev-detail-stat"><div class="label">Your Odds</div><div class="val" style="color:#fff;">${fmtOdds(bet.odds)}</div></div>
+    <div class="ev-detail-stat"><div class="label">Fair Odds</div><div class="val" style="color:#3b82f6;">${fmtOdds(bet.fairOdds)}</div></div>
+    <div class="ev-detail-stat"><div class="label">EV%</div><div class="val" style="color:#22c55e;">+${bet.ev.toFixed(1)}%</div></div>
+    <div class="ev-detail-stat"><div class="label">Best At</div><div class="val" style="color:#06b6d4;">${bet.bookmakerName}</div></div>
+  `;
+
+  // Show modal immediately
+  document.getElementById('evDetailOverlay').classList.add('open');
+
+  // Ensure odds data is loaded for this sport
+  if (!oddsData || oddsData.length === 0) {
+    document.getElementById('evDetailTable').innerHTML = '<div style="text-align:center;color:#71717a;padding:20px;">Loading odds data...</div>';
+    try {
+      const res = await fetch(buildUrl('/api/odds/events', { sport: bet.sportKey || currentSport }), { headers: getAuthHeaders() });
+      const data = await res.json();
+      if (data.success) oddsData = data.events;
+    } catch (e) {
+      document.getElementById('evDetailTable').innerHTML = '<div style="text-align:center;color:#ef4444;padding:20px;">Failed to load odds data</div>';
+      return;
+    }
+  }
+
+  // Find this event in oddsData
+  const event = oddsData.find(e => e.id === bet.eventId);
+  if (!event) {
+    document.getElementById('evDetailTable').innerHTML = '<div style="text-align:center;color:#71717a;padding:20px;">Event not found in current odds data</div>';
+    return;
+  }
+
+  // Determine market key and extract odds from all books
+  const mKey = bet.marketKey || guessMarketKey(bet);
+  const isMoneyline = mKey.startsWith('h2h') || mKey === 'fight_to_go_distance';
+  const isSpread = mKey.startsWith('spreads');
+
+  // Collect odds from every sportsbook
+  const rows = [];
+  for (const bm of event.bookmakers) {
+    if (!bm.markets || !bm.markets[mKey]) continue;
+    const mkt = bm.markets[mKey];
+    const meta = BOOK_META[bm.key] || { short: bm.key.substring(0, 3).toUpperCase(), name: bm.name || bm.key, logo: '' };
+
+    let betSideOdds = null, oppSideOdds = null, betSideName = bet.team, oppSideName = '';
+
+    if (isMoneyline) {
+      const betOutcome = mkt.outcomes.find(o => o.name === bet.team);
+      const oppOutcome = mkt.outcomes.find(o => o.name !== bet.team);
+      betSideOdds = betOutcome?.price;
+      oppSideOdds = oppOutcome?.price;
+      oppSideName = oppOutcome?.name || '';
+    } else if (isSpread) {
+      const betOutcome = mkt.outcomes.find(o => o.name === bet.team);
+      const oppOutcome = mkt.outcomes.find(o => o.name !== bet.team);
+      betSideOdds = betOutcome?.price;
+      oppSideOdds = oppOutcome?.price;
+      oppSideName = oppOutcome?.name || '';
+    } else {
+      // Total/team total
+      const betOutcome = mkt.outcomes.find(o => o.name === bet.team);
+      const oppOutcome = mkt.outcomes.find(o => o.name !== bet.team);
+      betSideOdds = betOutcome?.price;
+      oppSideOdds = oppOutcome?.price;
+      oppSideName = oppOutcome?.name || '';
+    }
+
+    rows.push({ key: bm.key, meta, betSideOdds, oppSideOdds, oppSideName });
+  }
+
+  // Also add books with no data for this market
+  for (const bKey of Object.keys(BOOK_META)) {
+    if (!rows.find(r => r.key === bKey)) {
+      rows.push({ key: bKey, meta: BOOK_META[bKey], betSideOdds: null, oppSideOdds: null, oppSideName: '' });
+    }
+  }
+
+  // Find best odds for highlighting
+  const bestBetOdds = Math.max(...rows.filter(r => r.betSideOdds).map(r => r.betSideOdds));
+
+  // Determine opposite side name
+  const oppName = rows.find(r => r.oppSideName)?.oppSideName || 'Opponent';
+
+  // Build table
+  let tableHtml = `<table class="ev-odds-table">
+    <thead><tr><th>Sportsbook</th><th>${bet.team}</th><th>${oppName}</th></tr></thead><tbody>`;
+
+  for (const row of rows) {
+    const logoHtml = row.meta.logo ? `<img src="${row.meta.logo}" alt="${row.meta.short}" onerror="this.style.display='none'">` : '';
+    const isBest = row.betSideOdds === bestBetOdds && row.betSideOdds != null;
+    const isSource = row.key === bet.bookmaker;
+    const betClass = isBest ? 'best-odds' : isSource ? 'ev-source' : '';
+    const betOddsStr = row.betSideOdds ? `<span class="${betClass}">${fmtOdds(row.betSideOdds)}</span>` : '<span class="ev-odds-no-data">—</span>';
+    const oppOddsStr = row.oppSideOdds ? fmtOdds(row.oppSideOdds) : '<span class="ev-odds-no-data">—</span>';
+    tableHtml += `<tr><td><div class="book-cell">${logoHtml} ${row.meta.name}</div></td><td>${betOddsStr}</td><td>${oppOddsStr}</td></tr>`;
+  }
+
+  tableHtml += '</tbody></table>';
+  document.getElementById('evDetailTable').innerHTML = tableHtml;
+}
+
+function closeEVDetail() {
+  document.getElementById('evDetailOverlay').classList.remove('open');
+}
+
+// Fallback market key guesser (if server doesn't provide marketKey)
+function guessMarketKey(bet) {
+  const mt = bet.marketType || '';
+  const suffixMap = { ' 1H': '_h1', ' Q1': '_q1', ' P1': '_p1', ' F5': '_f5', ' F7': '_f7', ' 1st Inn': '_i1' };
+  let suffix = '';
+  for (const [s, k] of Object.entries(suffixMap)) {
+    if (mt.includes(s)) { suffix = k; break; }
+  }
+  if (mt.startsWith('ML') || mt.startsWith('Go Distance')) return (mt === 'Go Distance' ? 'fight_to_go_distance' : 'h2h') + suffix;
+  if (mt.startsWith('Spread')) return 'spreads' + suffix;
+  if (mt.startsWith('Team Total')) return 'team_totals' + suffix;
+  if (mt.startsWith('Total Rounds')) return 'total_rounds' + suffix;
+  if (mt.startsWith('Total')) return 'totals' + suffix;
+  return 'h2h' + suffix;
+}
+
+// Close EV detail modal on Escape
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeEVDetail(); });
 
 // ── Render: Arbitrage ──
 function renderArbitrage() {
