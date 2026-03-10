@@ -867,12 +867,24 @@ app.post('/api/verify-membership', async (req, res) => {
 // GET /api/me - Validate existing JWT
 // ============================================
 app.get('/api/me', requireAuth, (req, res) => {
-  // Also return the API key for this member
-  const existing = findKeyByMembershipId(req.user.membershipId);
+  // Also return the API key for this member — auto-generate if missing
+  let existing = findKeyByMembershipId(req.user.membershipId);
+  if (!existing) {
+    const keys = loadApiKeys();
+    const newKey = generateApiKey();
+    keys[newKey] = {
+      email: req.user.email,
+      membershipId: req.user.membershipId,
+      createdAt: new Date().toISOString(),
+      status: 'active'
+    };
+    saveApiKeys(keys);
+    existing = { key: newKey };
+  }
   return res.json({
     success: true,
     user: req.user,
-    apiKey: existing ? existing.key : null
+    apiKey: existing.key
   });
 });
 
@@ -3619,13 +3631,12 @@ setTimeout(() => {
 // GET /api/tiktok-shop/trending
 app.get('/api/tiktok-shop/trending', async (req, res) => {
   try {
-    const { key, period = 'today' } = req.query;
-    if (!key) return res.status(400).json({ error: 'API key required' });
+    const { period = 'today' } = req.query;
 
-    // Validate key
-    const keys = loadApiKeys();
-    const keyData = keys[key];
-    if (!keyData || keyData.status !== 'active') return res.status(403).json({ error: 'Invalid API key' });
+    // Accept API key OR JWT Bearer token
+    const auth = authenticateRequest(req);
+    if (!auth.authenticated) return res.status(403).json({ error: 'Invalid API key' });
+    const key = auth.apiKey || auth.email || 'anon';
 
     // Rate limit
     if (!checkTiktokRateLimit(key)) {
@@ -3655,14 +3666,13 @@ app.get('/api/tiktok-shop/trending', async (req, res) => {
 // POST /api/tiktok-shop/analyze
 app.post('/api/tiktok-shop/analyze', async (req, res) => {
   try {
-    const { key, video } = req.body;
-    if (!key) return res.status(400).json({ error: 'API key required' });
-    if (!video) return res.status(400).json({ error: 'Video data required' });
+    const { video } = req.body;
 
-    // Validate key
-    const keys = loadApiKeys();
-    const keyData = keys[key];
-    if (!keyData || keyData.status !== 'active') return res.status(403).json({ error: 'Invalid API key' });
+    // Accept API key (in body or query) OR JWT Bearer token
+    const auth = authenticateRequest({ query: { key: req.body.key }, headers: req.headers });
+    if (!auth.authenticated) return res.status(403).json({ error: 'Invalid API key' });
+
+    if (!video) return res.status(400).json({ error: 'Video data required' });
 
     const prompt = `Analyze this TikTok Shop UGC video and explain why it performed well. Be specific and actionable.
 

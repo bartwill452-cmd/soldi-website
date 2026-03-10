@@ -418,7 +418,10 @@
           });
           const data = await res.json();
           if (res.ok && data.success) {
+            // Use real API key if available, otherwise 'jwt_auth' placeholder
+            // (server accepts JWT Bearer token directly so the key param doesn't matter)
             API_KEY = data.apiKey || 'jwt_auth';
+            if (data.apiKey) localStorage.setItem('soldi_api_key', data.apiKey);
             sessionStorage.setItem('soldi_tiktok_analytics_key', API_KEY);
             document.getElementById('ttGate').style.display = 'none';
             document.getElementById('ttApp').style.display = 'block';
