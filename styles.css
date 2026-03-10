@@ -151,6 +151,8 @@ button { cursor: pointer; font-family: inherit; }
   font-weight: 800;
   font-size: 18px;
   color: #050507;
+  line-height: 1;
+  padding-top: 1px;
 }
 .logo-text { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; }
 .nav-links { display: flex; align-items: center; gap: 32px; }
