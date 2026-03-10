@@ -289,23 +289,31 @@ class BetUSSource(DataSource):
             logger.warning("BetUS: Navigation to %s failed: %s", url, e)
             return []
 
-        # Quick DOM check: how many game-tbl elements are on the page?
+        # Quick DOM check: what's on the page?
         try:
             dom_check = await self._page.evaluate("""
-                () => ({
-                    url: window.location.href,
-                    title: document.title,
-                    gameTbls: document.querySelectorAll('.game-tbl').length,
-                    gameBlocks: document.querySelectorAll('.game-block').length,
-                    bnLines: document.querySelectorAll('.bn-lines').length,
-                    bodyLen: document.body.innerHTML.length,
-                })
+                () => {
+                    const body = document.body;
+                    const html = body.innerHTML;
+                    // Get first 500 chars of visible text (skip scripts/styles)
+                    let textContent = body.innerText || '';
+                    textContent = textContent.replace(/\\s+/g, ' ').trim().substring(0, 300);
+                    return {
+                        url: window.location.href,
+                        title: document.title,
+                        gameTbls: document.querySelectorAll('.game-tbl').length,
+                        gameBlocks: document.querySelectorAll('.game-block').length,
+                        bnLines: document.querySelectorAll('.bn-lines').length,
+                        bodyLen: html.length,
+                        textSnippet: textContent,
+                    };
+                }
             """)
             logger.info(
-                "BetUS DOM check %s: url=%s gameTbls=%d gameBlocks=%d bnLines=%d bodyLen=%d",
+                "BetUS DOM check %s: url=%s gameTbls=%d gameBlocks=%d bodyLen=%d text=%.200s",
                 sport_key, dom_check.get("url", "?"),
                 dom_check.get("gameTbls", 0), dom_check.get("gameBlocks", 0),
-                dom_check.get("bnLines", 0), dom_check.get("bodyLen", 0),
+                dom_check.get("bodyLen", 0), dom_check.get("textSnippet", ""),
             )
         except Exception as e:
             logger.warning("BetUS: DOM check failed for %s: %s", sport_key, e)
