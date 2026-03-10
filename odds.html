@@ -237,6 +237,15 @@
       background: rgba(34,197,94,0.12);
       color: #22c55e;
       font-weight: 800;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .best-book-logo {
+      width: 18px;
+      height: 18px;
+      border-radius: 3px;
+      flex-shrink: 0;
     }
     .odds-val.avg-col {
       color: #a1a1aa;
@@ -527,7 +536,7 @@ const BOOK_META = {
   bookmaker:     { short: 'BM',  name: 'Bookmaker',     logo: '/images/books/bookmaker.png' },
   buckeye:       { short: 'BKY', name: 'Buckeye',       logo: '/images/books/buckeye.png' },
   stakeus:       { short: 'STK', name: 'StakeUS',       logo: '/images/books/stakeus.png' },
-  betmgm:        { short: 'MGM', name: 'BetMGM',        logo: '/images/books/betmgm.png' },
+  betmgm:        { short: 'MGM', name: 'BetMGM',        logo: '/images/books/betmgm.svg' },
 };
 
 // ── Sport Market Configuration (2-level: Period Group → Markets) ──
@@ -873,6 +882,13 @@ function computeConsensusPointForEvent(event, marketKey, side) {
   return bestPoint;
 }
 
+// Check if two names share a last name (for MMA fighter matching)
+function _lastNameMatch(a, b) {
+  const aLast = a.trim().split(/\s+/).pop().toLowerCase();
+  const bLast = b.trim().split(/\s+/).pop().toLowerCase();
+  return aLast.length >= 3 && aLast === bLast;
+}
+
 // Generic market data extractor for any market key
 // For spreads/totals with alternates, picks the main-line outcome
 function getMarketDataForBook(bm, marketKey, event) {
@@ -881,11 +897,26 @@ function getMarketDataForBook(bm, marketKey, event) {
 
   // Moneyline-type markets (h2h, fight_to_go_distance, h2h_3way_*)
   if (marketKey.startsWith('h2h') || marketKey === 'fight_to_go_distance') {
-    const home = market.outcomes.find(o => o.name === event.homeTeam);
-    const away = market.outcomes.find(o => o.name === event.awayTeam);
+    // Try exact match first
+    let home = market.outcomes.find(o => o.name === event.homeTeam);
+    let away = market.outcomes.find(o => o.name === event.awayTeam);
     const draw = market.outcomes.find(o => o.name === 'Draw');
     const yes = market.outcomes.find(o => o.name === 'Yes');
     const no = market.outcomes.find(o => o.name === 'No');
+    // Fuzzy fallback for MMA/fighters with different name formats
+    if ((!home || !away) && market.outcomes.length >= 2) {
+      const homeNorm = event.homeTeam.toLowerCase().replace(/[^a-z]/g, '');
+      const awayNorm = event.awayTeam.toLowerCase().replace(/[^a-z]/g, '');
+      for (const o of market.outcomes) {
+        const oNorm = o.name.toLowerCase().replace(/[^a-z]/g, '');
+        if (!home && (oNorm.includes(homeNorm) || homeNorm.includes(oNorm) || _lastNameMatch(o.name, event.homeTeam))) home = o;
+        else if (!away && (oNorm.includes(awayNorm) || awayNorm.includes(oNorm) || _lastNameMatch(o.name, event.awayTeam))) away = o;
+      }
+      // Final fallback: if we still have one side missing but 2 outcomes,
+      // assign the unmatched outcome to the missing side (positional)
+      if (home && !away) away = market.outcomes.find(o => o !== home && o.name !== 'Draw');
+      if (away && !home) home = market.outcomes.find(o => o !== away && o.name !== 'Draw');
+    }
     return {
       type: 'moneyline',
       home: home || yes || null,
@@ -1165,7 +1196,7 @@ function renderOddsScreen() {
     // Compute best and average for each row/side
     const rowStats = {};
     layout.rows.forEach(side => {
-      rowStats[side] = { best: { odds: -Infinity, book: '' }, all: [] };
+      rowStats[side] = { best: { odds: -Infinity, book: '', bookKey: '' }, all: [] };
     });
 
     event.bookmakers.forEach(bm => {
@@ -1179,6 +1210,7 @@ function renderOddsScreen() {
           if (odds > rowStats[side].best.odds) {
             rowStats[side].best.odds = odds;
             rowStats[side].best.book = bm.name;
+            rowStats[side].best.bookKey = bm.key;
           }
         }
       });
@@ -1222,9 +1254,13 @@ function buildGenericRow(label, best, avg, bookKeys, event, side, marketKey) {
   let html = '<tr class="team-row">';
   html += `<td>${label}</td>`;
 
-  // Best odds
+  // Best odds — show sportsbook logo next to odds
   if (best.odds > -Infinity) {
-    html += `<td class="col-best"><span class="odds-val best-col" title="Best @ ${best.book}">${fmtOdds(best.odds)}</span></td>`;
+    const bestMeta = BOOK_META[best.bookKey] || {};
+    const bestLogo = bestMeta.logo
+      ? `<img class="best-book-logo" src="${bestMeta.logo}" alt="${bestMeta.short || ''}" title="${bestMeta.name || best.book}">`
+      : '';
+    html += `<td class="col-best"><span class="odds-val best-col" title="Best @ ${best.book}">${bestLogo}${fmtOdds(best.odds)}</span></td>`;
   } else {
     html += '<td class="col-best"><span class="odds-val empty">-</span></td>';
   }

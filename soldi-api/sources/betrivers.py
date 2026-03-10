@@ -221,8 +221,16 @@ class BetRiversSource(DataSource):
         commence_time = event_info.get("start", "")
 
         # Parse bet offers into markets (with period detection)
+        # ── Main-line selection ──
+        # Kambi returns multiple bet offers for spreads/totals.
+        # Collect all candidates per market key, then pick the main line
+        # (the one whose two-outcome odds are most balanced, i.e. closest
+        # to -110/-110).
         br_markets = []
         seen_keys = set()  # type: set
+        # Store all candidate (market_key -> list of (Market, balance_score))
+        _candidates: dict = {}
+
         for offer in offers:
             label = offer.get("criterion", {}).get("label", "")
             outcomes_raw = offer.get("outcomes", [])
@@ -327,60 +335,63 @@ class BetRiversSource(DataSource):
                 continue
 
             market_key = base + suffix
-            if market_key in seen_keys:
-                continue
-            seen_keys.add(market_key)
 
+            # ── Parse the offer into outcomes ──
+            parsed = None
             if base == "h2h":
                 parsed = self._parse_moneyline(outcomes_raw)
-                if parsed:
-                    br_markets.append(Market(key=market_key, outcomes=parsed))
             elif base == "h2h_3way":
-                # 3-way result: home/draw/away (Kambi uses 1/X/2 labels)
                 parsed = self._parse_moneyline_3way(outcomes_raw, home, away)
-                if parsed and len(parsed) >= 3:
-                    br_markets.append(Market(key=market_key, outcomes=parsed))
+                if parsed and len(parsed) < 3:
+                    parsed = None
             elif base == "draw_no_bet":
-                # Draw No Bet / Tie No Bet: 2-way (home/away)
-                # Kambi uses 1/2 labels with OT_ONE/OT_TWO types
                 parsed = self._parse_two_way_1x2(outcomes_raw, home, away)
-                if parsed:
-                    br_markets.append(Market(key=market_key, outcomes=parsed))
             elif base == "btts":
-                # Both Teams to Score: Yes/No
                 parsed = self._parse_yes_no(outcomes_raw)
-                if parsed:
-                    br_markets.append(Market(key=market_key, outcomes=parsed))
             elif base == "fight_to_go_distance":
-                # MMA: Will the fight go the distance? Yes/No
                 parsed = self._parse_yes_no(outcomes_raw)
-                if parsed:
-                    br_markets.append(Market(key=market_key, outcomes=parsed))
             elif base == "total_rounds":
-                # MMA: Total rounds (Over/Under)
                 parsed = self._parse_total(outcomes_raw)
-                if parsed:
-                    br_markets.append(Market(key=market_key, outcomes=parsed))
             elif base == "double_chance":
-                # Double Chance: 3 outcomes (1X = Home/Draw, 12 = Home/Away, X2 = Draw/Away)
                 parsed = self._parse_double_chance(outcomes_raw, home, away)
-                if parsed:
-                    br_markets.append(Market(key=market_key, outcomes=parsed))
             elif base == "spreads":
                 parsed = self._parse_spread(outcomes_raw)
-                if parsed:
-                    # Skip draw-no-bet lines disguised as spreads (±0.5 points)
-                    if any(abs(o.point) == 0.5 for o in parsed if o.point is not None):
-                        continue
-                    br_markets.append(Market(key=market_key, outcomes=parsed))
+                # Skip draw-no-bet lines disguised as spreads (±0.5 points)
+                if parsed and any(abs(o.point) == 0.5 for o in parsed if o.point is not None):
+                    parsed = None
             elif base.startswith("team_total_"):
                 parsed = self._parse_total(outcomes_raw)
-                if parsed:
-                    br_markets.append(Market(key=market_key, outcomes=parsed))
             elif base == "totals":
                 parsed = self._parse_total(outcomes_raw)
-                if parsed:
-                    br_markets.append(Market(key=market_key, outcomes=parsed))
+
+            if not parsed:
+                continue
+
+            mkt = Market(key=market_key, outcomes=parsed)
+
+            # ── Main-line selection for spreads & totals ──
+            # Kambi returns multiple bet offers (main + alt) for spreads
+            # and totals.  Instead of taking the first one we see, we
+            # collect all candidates and later pick the one whose two
+            # outcome prices are most balanced (closest to -110/-110),
+            # which is the hallmark of a main line.
+            if base in ("spreads", "totals") or base.startswith("team_total_"):
+                balance = self._odds_balance(parsed)
+                if market_key not in _candidates:
+                    _candidates[market_key] = []
+                _candidates[market_key].append((mkt, balance))
+            else:
+                # Non-spread/total markets: first-come-first-served
+                if market_key in seen_keys:
+                    continue
+                seen_keys.add(market_key)
+                br_markets.append(mkt)
+
+        # Pick the best (most balanced) candidate for each spread/total key
+        for mkey, cands in _candidates.items():
+            # Sort by balance score ascending (lower = more balanced = main line)
+            cands.sort(key=lambda x: x[1])
+            br_markets.append(cands[0][0])
 
         if not br_markets:
             return None
@@ -409,6 +420,21 @@ class BetRiversSource(DataSource):
         """Convert Kambi milliodds (e.g. 1910 = 1.91 decimal) to American."""
         decimal_odds = milliodds / 1000.0
         return decimal_to_american(decimal_odds)
+
+    @staticmethod
+    def _odds_balance(outcomes: List[Outcome]) -> float:
+        """Score how balanced a set of outcomes is.
+
+        Lower is better (more balanced = closer to main line).
+        A perfect main line with -110/-110 has a balance of 0.
+        Alt lines like -160/+140 have larger imbalances.
+        """
+        prices = [abs(o.price) for o in outcomes if o.price is not None]
+        if len(prices) < 2:
+            return 9999.0
+        # For a main spread/total line, both sides are near 110.
+        # Compute the variance of absolute prices from 110.
+        return sum((p - 110) ** 2 for p in prices)
 
     def _parse_moneyline(self, outcomes: list) -> List[Outcome]:
         result = []

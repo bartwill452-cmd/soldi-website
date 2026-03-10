@@ -102,6 +102,7 @@ _JS_EXTRACT = """
         ev.spread = { away: {}, home: {} };
         ev.total = {};
         ev.money = { away: null, home: null };
+        ev.teamTotal = { away: {}, home: {} };
 
         // Parse line text from a container's bet-link
         function parseBetLink(container) {
@@ -153,6 +154,13 @@ _JS_EXTRACT = """
             ev.spread.home = parseSpread(parseBetLink(hContainers[0]));
             ev.money.home = parseML(parseBetLink(hContainers[1]));
             ev.total.under = parseTotal(parseBetLink(hContainers[2]));
+        }
+        // Team totals — column index 3 (may be in .line-container-teamtotal)
+        if (vContainers.length >= 4) {
+            ev.teamTotal.away = parseTotal(parseBetLink(vContainers[3]));
+        }
+        if (hContainers.length >= 4) {
+            ev.teamTotal.home = parseTotal(parseBetLink(hContainers[3]));
         }
 
         results.push(ev);
@@ -380,6 +388,24 @@ class BetUSSource(DataSource):
                     outcomes=[
                         Outcome(name="Over", price=int(total_over["odds"]), point=float(total_over["point"])),
                         Outcome(name="Under", price=int(total_under["odds"]), point=float(total_under["point"])),
+                    ],
+                ))
+
+            # Team totals (away = Over, home = Under convention on BetUS)
+            tt_away = ev.get("teamTotal", {}).get("away", {})
+            tt_home = ev.get("teamTotal", {}).get("home", {})
+            if tt_away.get("point") is not None and tt_away.get("odds") is not None:
+                betus_markets.append(Market(
+                    key="team_total_away",
+                    outcomes=[
+                        Outcome(name="Over", price=int(tt_away["odds"]), point=float(tt_away["point"])),
+                    ],
+                ))
+            if tt_home.get("point") is not None and tt_home.get("odds") is not None:
+                betus_markets.append(Market(
+                    key="team_total_home",
+                    outcomes=[
+                        Outcome(name="Under", price=int(tt_home["odds"]), point=float(tt_home["point"])),
                     ],
                 ))
 
