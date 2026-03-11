@@ -249,7 +249,9 @@ client.on('messageCreate', async (message) => {
                  '**`!untrack 0x...`** — Stop tracking a wallet address.\n' +
                  '> Example: `!untrack 0xAbC123...` (send in DMs)\n\n' +
                  '**`!mytrackers`** — See all the wallets you\'re currently tracking.\n\n' +
-                 '**`!whales`** — View the default list of whale wallets being tracked.',
+                 '**`!whales`** — View the default list of whale wallets being tracked.\n\n' +
+                 '**`!pnl`** — View all-time profit/loss for every tracked wallet.\n' +
+                 '> Shows PnL for your custom wallets + all default whales, sorted by profit.',
           inline: false,
         },
         {
@@ -565,6 +567,127 @@ client.on('messageCreate', async (message) => {
       return;
     }
 
+    // !pnl — Show all-time profit/loss for all tracked wallets
+    if (lower === '!pnl') {
+      const tracking = loadUserTracking();
+      const userId = message.author.id;
+      const userAddrs = tracking[userId]?.addresses || [];
+
+      // Combine user's custom addresses + default whales (deduplicated)
+      const allAddrs = [...new Set([...userAddrs, ...DEFAULT_WHALES])];
+
+      await message.reply(`📊 Fetching PnL for **${allAddrs.length}** wallets... this may take a moment.`);
+
+      const results = [];
+      const BATCH_SIZE = 10;
+
+      for (let i = 0; i < allAddrs.length; i += BATCH_SIZE) {
+        const batch = allAddrs.slice(i, i + BATCH_SIZE);
+        const batchResults = await Promise.allSettled(
+          batch.map(async (addr) => {
+            try {
+              const res = await fetch(`https://gamma-api.polymarket.com/public-profile?address=${addr}`, {
+                headers: { 'User-Agent': 'SoldiBot/1.0' },
+                signal: AbortSignal.timeout(10000),
+              });
+              if (!res.ok) return { addr, name: null, pnl: null };
+              const data = await res.json();
+              const name = data.name || data.pseudonym || null;
+              // Try multiple PnL field names that Polymarket API may use
+              const pnl = data.pnl ?? data.profitLoss ?? data.allTimePnl ?? data.totalPnL ?? null;
+              return { addr, name, pnl: pnl !== null ? parseFloat(pnl) : null };
+            } catch {
+              return { addr, name: null, pnl: null };
+            }
+          })
+        );
+        for (const r of batchResults) {
+          if (r.status === 'fulfilled') results.push(r.value);
+        }
+      }
+
+      // Separate into wallets with PnL data vs without
+      const withPnl = results.filter(r => r.pnl !== null && !isNaN(r.pnl));
+      const withoutPnl = results.filter(r => r.pnl === null || isNaN(r.pnl));
+
+      if (withPnl.length === 0) {
+        await sendEmbed(message.channel.id, {
+          title: 'Polymarket PnL',
+          description: 'Could not fetch PnL data for any tracked wallets. The Polymarket API may be temporarily unavailable.',
+          color: COLORS.RED,
+          footer: { text: 'Soldi • Polymarket Tracker' },
+        });
+        return;
+      }
+
+      // Sort by PnL descending (biggest winners first)
+      withPnl.sort((a, b) => b.pnl - a.pnl);
+
+      const totalPnl = withPnl.reduce((sum, r) => sum + r.pnl, 0);
+      const isCustom = (addr) => userAddrs.includes(addr);
+
+      // Format each wallet line
+      const walletLines = withPnl.map((r) => {
+        const label = r.name || `${r.addr.slice(0, 8)}...${r.addr.slice(-4)}`;
+        const pnlStr = r.pnl >= 0
+          ? `+$${r.pnl.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+          : `-$${Math.abs(r.pnl).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        const emoji = r.pnl >= 0 ? '🟢' : '🔴';
+        const tag = isCustom(r.addr) ? ' ⭐' : '';
+        return `${emoji} **${label}**${tag}: ${pnlStr}`;
+      });
+
+      // Discord embed field value max is 1024 chars — split into chunks if needed
+      const FIELD_MAX = 1000;
+      const fields = [];
+      let currentChunk = '';
+      let chunkIndex = 1;
+
+      for (const line of walletLines) {
+        if (currentChunk.length + line.length + 1 > FIELD_MAX) {
+          fields.push({
+            name: fields.length === 0 ? 'Wallets' : `Wallets (cont. ${chunkIndex})`,
+            value: currentChunk,
+            inline: false,
+          });
+          currentChunk = '';
+          chunkIndex++;
+        }
+        currentChunk += (currentChunk ? '\n' : '') + line;
+      }
+      if (currentChunk) {
+        fields.push({
+          name: fields.length === 0 ? 'Wallets' : `Wallets (cont. ${chunkIndex})`,
+          value: currentChunk,
+          inline: false,
+        });
+      }
+
+      // Summary field
+      const totalStr = totalPnl >= 0
+        ? `+$${totalPnl.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+        : `-$${Math.abs(totalPnl).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      const totalEmoji = totalPnl >= 0 ? '🟢' : '🔴';
+
+      fields.push({
+        name: '━━━━━━━━━━━━━━━━━━',
+        value: `${totalEmoji} **Combined PnL: ${totalStr}**\n` +
+               `📊 ${withPnl.length} wallets with data` +
+               (withoutPnl.length > 0 ? ` • ${withoutPnl.length} unavailable` : '') +
+               (userAddrs.length > 0 ? `\n⭐ = your custom tracked wallet` : ''),
+        inline: false,
+      });
+
+      await sendEmbed(message.channel.id, {
+        title: '💰 Polymarket All-Time PnL',
+        description: `Showing profit/loss for **${withPnl.length}** tracked wallets:`,
+        color: totalPnl >= 0 ? COLORS.GREEN : COLORS.RED,
+        fields,
+        footer: { text: 'Soldi • Polymarket Tracker • Data from Polymarket Gamma API' },
+      });
+      return;
+    }
+
     // !help — Show available commands
     if (lower === '!help') {
       await sendEmbed(message.channel.id, {
@@ -573,10 +696,11 @@ client.on('messageCreate', async (message) => {
         color: COLORS.GREEN,
         fields: [
           { name: '!verify', value: 'Verify your Whop membership (can also use in server)', inline: false },
-          { name: '!track 0x...', value: 'Track a Polymarket wallet address (max 10)', inline: false },
+          { name: '!track 0x...', value: 'Track a Polymarket wallet address (max 50)', inline: false },
           { name: '!untrack 0x...', value: 'Stop tracking an address', inline: false },
           { name: '!mytrackers', value: 'List your tracked addresses', inline: false },
           { name: '!whales', value: 'Show default whale addresses', inline: false },
+          { name: '!pnl', value: 'View all-time profit/loss for all tracked wallets', inline: false },
           { name: '!status', value: 'Check health of all Soldi services', inline: false },
         ],
         footer: { text: 'Soldi' },
