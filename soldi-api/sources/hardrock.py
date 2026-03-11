@@ -1,13 +1,15 @@
 """
 Hard Rock Bet sportsbook scraper.
 Uses Hard Rock's public GraphQL API at api.hardrocksportsbook.com.
-No authentication required.
+No authentication required.  Uses Playwright to obtain Cloudflare
+clearance cookies, then passes them to httpx for all subsequent requests.
 """
 
 import asyncio
 import logging
 import math
 import re
+import time
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 
@@ -25,13 +27,15 @@ from sources.sport_mapping import (
 logger = logging.getLogger(__name__)
 
 GRAPHQL_URL = "https://api.hardrocksportsbook.com/java-graphql/graphql"
+SITE_URL = "https://www.hardrocksportsbook.com"
 
 # Channel = state-specific locale for the sportsbook.
 # Florida has the broadest offering (1,488 events, 22 sports).
-# Note: Cloudflare blocks requests from cloud provider IPs (Render, AWS, etc.)
-# so this scraper only works from residential IPs / local dev.
 CHANNEL = "FLORIDA_ONLINE"
 SEGMENT = "fl"
+
+# Cloudflare cookie refresh interval (~25 minutes, cookies last ~30 min)
+_CF_COOKIE_TTL = 1500
 
 # ─── Competition IDs per sport ─────────────────────────────────
 # These are discovered from the event_tree query at startup.
@@ -450,48 +454,141 @@ def _extract_line_from_selection_name(name: str) -> Optional[float]:
 class HardRockBetSource(DataSource):
     """Fetches odds from Hard Rock Bet via their public GraphQL API."""
 
+    _HEADERS = {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                      "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": f"{SITE_URL}/",
+        "Origin": SITE_URL,
+    }
+
     def __init__(self):
-        self._client = httpx.AsyncClient(
-            timeout=20.0,
-            headers={
-                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                              "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-                "Accept-Language": "en-US,en;q=0.9",
-                "Referer": "https://www.hardrocksportsbook.com/",
-                "Origin": "https://www.hardrocksportsbook.com",
-            },
-        )
+        self._cf_cookies: Dict[str, str] = {}
+        self._cf_cookies_expires: float = 0
+        self._client: Optional[httpx.AsyncClient] = None
+        self._init_done = False
         # Discovered competition IDs: sport_key → [comp_id, ...]
         self._comp_ids: Dict[str, List[str]] = {}
         self._tree_fetched = False
         # Cache for event IDs: canonical_event_id → hr_event_id
         self._event_ids: Dict[str, str] = {}
 
+    def _create_client(self) -> httpx.AsyncClient:
+        """Create an httpx client with current CF cookies."""
+        return httpx.AsyncClient(
+            timeout=20.0,
+            headers=self._HEADERS,
+            cookies=self._cf_cookies,
+        )
+
+    async def _ensure_cf_cookies(self) -> bool:
+        """Ensure we have valid Cloudflare cookies, refreshing if needed."""
+        if self._cf_cookies and time.time() < self._cf_cookies_expires:
+            return True
+        return await self._get_cloudflare_cookies()
+
+    async def _get_cloudflare_cookies(self) -> bool:
+        """Use Playwright to get Cloudflare clearance cookies."""
+        try:
+            from playwright.async_api import async_playwright
+        except ImportError:
+            logger.warning("HardRock: playwright not installed, cannot bypass Cloudflare")
+            return False
+
+        try:
+            async with async_playwright() as p:
+                browser = await p.chromium.launch(
+                    headless=True,
+                    args=[
+                        "--disable-blink-features=AutomationControlled",
+                        "--no-sandbox",
+                        "--disable-dev-shm-usage",
+                        "--disable-gpu",
+                    ],
+                )
+                page = await browser.new_page()
+
+                logger.info("HardRock: launching browser for Cloudflare clearance...")
+                await page.goto(SITE_URL + "/", wait_until="load", timeout=30000)
+                # Wait for CF challenge to resolve
+                await page.wait_for_timeout(5000)
+
+                # Extract cookies
+                cookies = await page.context.cookies()
+                self._cf_cookies = {
+                    c["name"]: c["value"]
+                    for c in cookies
+                    if "hardrock" in c.get("domain", "")
+                }
+                self._cf_cookies_expires = time.time() + _CF_COOKIE_TTL
+
+                await browser.close()
+
+            logger.info(
+                "HardRock: got %d cookies (cf_clearance=%s)",
+                len(self._cf_cookies),
+                "cf_clearance" in self._cf_cookies,
+            )
+
+            # Create/recreate httpx client with new cookies
+            if self._client:
+                await self._client.aclose()
+            self._client = self._create_client()
+            self._init_done = True
+            return True
+
+        except Exception as e:
+            logger.warning("HardRock: Cloudflare bypass failed: %s", e)
+            return False
+
     async def _fetch_event_tree(self) -> None:
         """Fetch the sport tree to discover competition IDs."""
         if self._tree_fetched:
             return
 
-        try:
-            resp = await self._client.post(
-                f"{GRAPHQL_URL}?type=event_tree",
-                json={
-                    "query": _EVENT_TREE_QUERY,
-                    "variables": {
-                        "channel": CHANNEL,
-                        "segment": SEGMENT,
-                        "region": "us",
-                        "language": "enus",
-                        "nonTradingFilters": ["DISPLAYED"],
+        # Ensure CF cookies before making requests
+        if not await self._ensure_cf_cookies():
+            logger.warning("HardRock: cannot fetch event tree without CF cookies")
+            return
+
+        for attempt in range(2):
+            try:
+                resp = await self._client.post(
+                    f"{GRAPHQL_URL}?type=event_tree",
+                    json={
+                        "query": _EVENT_TREE_QUERY,
+                        "variables": {
+                            "channel": CHANNEL,
+                            "segment": SEGMENT,
+                            "region": "us",
+                            "language": "enus",
+                            "nonTradingFilters": ["DISPLAYED"],
+                        },
                     },
-                },
-            )
-            resp.raise_for_status()
-            data = resp.json()
-        except Exception as e:
-            logger.warning(f"HardRock: event_tree fetch failed: {e}")
+                )
+                if resp.status_code == 403 and attempt == 0:
+                    logger.info("HardRock: event_tree got 403, refreshing CF cookies...")
+                    self._cf_cookies_expires = 0
+                    if await self._ensure_cf_cookies():
+                        continue
+                    return
+                resp.raise_for_status()
+                data = resp.json()
+                break
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 403 and attempt == 0:
+                    logger.info("HardRock: event_tree got 403, refreshing CF cookies...")
+                    self._cf_cookies_expires = 0
+                    if await self._ensure_cf_cookies():
+                        continue
+                logger.warning(f"HardRock: event_tree fetch failed: {e}")
+                return
+            except Exception as e:
+                logger.warning(f"HardRock: event_tree fetch failed: {e}")
+                return
+        else:
             return
 
         sports = data.get("data", {}).get("betSync", {}).get("sports", [])
@@ -555,6 +652,11 @@ class HardRockBetSource(DataSource):
         if bookmakers and "hardrock" not in bookmakers:
             return [], {"x-requests-remaining": "unlimited"}
 
+        # Ensure CF cookies are fresh
+        if not await self._ensure_cf_cookies():
+            logger.warning("HardRock: skipping %s — no CF cookies", sport_key)
+            return [], {"x-requests-remaining": "unlimited"}
+
         # Discover competitions if not yet done
         await self._fetch_event_tree()
 
@@ -612,23 +714,40 @@ class HardRockBetSource(DataSource):
         if market_types:
             variables["marketTypes"] = market_types
 
-        try:
-            resp = await self._client.post(
-                GRAPHQL_URL,
-                json={"query": _EVENTS_QUERY, "variables": variables},
-            )
-            resp.raise_for_status()
-            data = resp.json()
-        except Exception as e:
-            logger.warning(f"HardRock: events fetch failed for comps {comp_ids}: {e}")
-            return []
+        for attempt in range(2):
+            try:
+                resp = await self._client.post(
+                    GRAPHQL_URL,
+                    json={"query": _EVENTS_QUERY, "variables": variables},
+                )
+                if resp.status_code == 403 and attempt == 0:
+                    logger.info("HardRock: got 403, refreshing CF cookies...")
+                    self._cf_cookies_expires = 0  # force refresh
+                    if await self._ensure_cf_cookies():
+                        continue
+                    return []
+                resp.raise_for_status()
+                data = resp.json()
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 403 and attempt == 0:
+                    logger.info("HardRock: got 403, refreshing CF cookies...")
+                    self._cf_cookies_expires = 0
+                    if await self._ensure_cf_cookies():
+                        continue
+                logger.warning(f"HardRock: events fetch failed for comps {comp_ids}: {e}")
+                return []
+            except Exception as e:
+                logger.warning(f"HardRock: events fetch failed for comps {comp_ids}: {e}")
+                return []
 
-        if "errors" in data:
-            logger.warning(f"HardRock GraphQL errors: {data['errors'][:2]}")
-            return []
+            if "errors" in data:
+                logger.warning(f"HardRock GraphQL errors: {data['errors'][:2]}")
+                return []
 
-        events = data.get("data", {}).get("betSync", {}).get("events", {}).get("data", [])
-        return events
+            events = data.get("data", {}).get("betSync", {}).get("events", {}).get("data", [])
+            return events
+
+        return []
 
     def _parse_event(
         self, event_data: dict, sport_key: str, sport_title: str
