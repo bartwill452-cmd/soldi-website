@@ -193,7 +193,7 @@ class DraftKingsSource(DataSource):
         await asyncio.sleep(3)
         logger.info("DraftKings: Starting continuous background prefetch")
 
-        # Core sports get base game lines first (quick pass), then deep scrape
+        # Core sports scraped in parallel every cycle
         core_sports = [
             "basketball_nba",
             "basketball_ncaab",
@@ -220,30 +220,28 @@ class DraftKingsSource(DataSource):
         while True:
             cycle += 1
 
-            # ── Phase 1: Quick pass — base game lines for ALL core sports ──
-            # Gets ML / Spread / Total for each sport in ~15s per sport.
-            # All 5 core sports have data within ~90 seconds.
-            if cycle == 1:
-                logger.info("DraftKings: Phase 1 — quick base-line pass for %d core sports", len(core_sports))
-            for sport_key in (core_sports if cycle == 1 else []):
-                try:
-                    url = _DK_SPORT_URLS.get(sport_key)
-                    if url is None:
-                        continue
-                    async with self._lock:
-                        await self._ensure_browser()
-                        events = await self._navigate_and_capture(url, sport_key)
+            # ── Parallel blitz — all core sports at once in separate tabs ──
+            # Opens 5 tabs simultaneously, captures data in parallel.
+            # All 5 core sports get base lines in ~15-20 seconds total.
+            t0 = time.time()
+            logger.info("DraftKings: Parallel blitz — %d core sports", len(core_sports))
+            try:
+                async with self._lock:
+                    await self._ensure_browser()
+                    results = await self._parallel_capture(core_sports)
+                for sport_key, events in results.items():
                     if events:
                         self._cache[sport_key] = (events, time.time())
                     logger.info(
-                        "DraftKings quick pass: %s — %d events (base lines)",
+                        "DraftKings blitz: %s — %d events",
                         sport_key, len(events),
                     )
-                except Exception as e:
-                    logger.warning("DraftKings quick pass %s failed: %s", sport_key, e)
-                await asyncio.sleep(0.3)
+                elapsed = time.time() - t0
+                logger.info("DraftKings: Parallel blitz complete in %.1fs", elapsed)
+            except Exception as e:
+                logger.warning("DraftKings parallel blitz failed: %s", e)
 
-            # ── Phase 2: Deep pass — full sub-pages for all sports ──
+            # ── Deep pass — full sub-pages for all sports (sequential) ──
             for sport_key in all_sports:
                 events = []  # type: List[OddsEvent]
                 try:
@@ -287,6 +285,98 @@ class DraftKingsSource(DataSource):
                 await asyncio.sleep(0.3)
             logger.info("DraftKings: Prefetch cycle #%d complete (%d sports)", cycle, len(all_sports))
             await asyncio.sleep(1)
+
+    async def _parallel_capture(
+        self, sport_keys: List[str],
+    ) -> Dict[str, List[OddsEvent]]:
+        """Open parallel tabs and capture all sports simultaneously.
+
+        Each sport gets its own browser tab. All tabs navigate at the same
+        time, capturing API responses in parallel. Returns results in ~15-20s
+        instead of ~90s for sequential navigation.
+        """
+        if self._context is None:
+            return {}
+
+        results = {}  # type: Dict[str, List[OddsEvent]]
+
+        async def _capture_in_tab(sport_key: str) -> None:
+            url = _DK_SPORT_URLS.get(sport_key)
+            if url is None:
+                results[sport_key] = []
+                return
+
+            page = await self._context.new_page()
+            captured = []  # type: List[dict]
+            got_data = asyncio.Event()
+
+            async def on_response(response):
+                try:
+                    if response.status != 200:
+                        return
+                    ct = response.headers.get("content-type", "")
+                    if "json" not in ct:
+                        return
+                    resp_url = response.url
+                    if "sportsbook-nash" in resp_url and "sportscontent" in resp_url:
+                        body = await response.text()
+                        data = json.loads(body)
+                        if "events" in data and "markets" in data and "selections" in data:
+                            captured.append(data)
+                            got_data.set()
+                except Exception:
+                    pass
+
+            page.on("response", on_response)
+            is_combat = "mma" in sport_key or "boxing" in sport_key
+            nav_timeout = 45000 if is_combat else 20000
+            data_timeout = 10.0 if is_combat else 5.0
+            try:
+                await page.goto(url, timeout=nav_timeout, wait_until="domcontentloaded")
+                try:
+                    await asyncio.wait_for(got_data.wait(), timeout=data_timeout)
+                except asyncio.TimeoutError:
+                    pass
+
+                # MMA needs scrolling for lazy-loaded fight cards
+                if is_combat:
+                    if captured:
+                        await asyncio.sleep(2.0)
+                    try:
+                        await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                        await asyncio.sleep(2.0)
+                        prev_count = len(captured)
+                        for scroll_round in range(6):
+                            await page.evaluate("window.scrollBy(0, 1000)")
+                            await asyncio.sleep(0.8)
+                            await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                            await asyncio.sleep(0.8)
+                            if len(captured) > prev_count:
+                                prev_count = len(captured)
+                        await asyncio.sleep(1.0)
+                    except Exception:
+                        pass
+                elif captured:
+                    await asyncio.sleep(0.5)
+            except Exception as e:
+                logger.warning("DraftKings parallel tab %s failed: %s", sport_key, e)
+            finally:
+                page.remove_listener("response", on_response)
+                try:
+                    await page.close()
+                except Exception:
+                    pass
+
+            all_events = []  # type: List[OddsEvent]
+            for data in captured:
+                events = self._parse_nash_response(data, sport_key)
+                all_events.extend(events)
+            results[sport_key] = all_events
+
+        # Launch all tabs simultaneously
+        tasks = [asyncio.ensure_future(_capture_in_tab(sk)) for sk in sport_keys]
+        await asyncio.gather(*tasks, return_exceptions=True)
+        return results
 
     async def _ensure_browser(self) -> None:
         if self._page is not None:
