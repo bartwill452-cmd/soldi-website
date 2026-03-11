@@ -585,16 +585,37 @@ client.on('messageCreate', async (message) => {
         const batchResults = await Promise.allSettled(
           batch.map(async (addr) => {
             try {
-              const res = await fetch(`https://gamma-api.polymarket.com/public-profile?address=${addr}`, {
-                headers: { 'User-Agent': 'SoldiBot/1.0' },
-                signal: AbortSignal.timeout(10000),
-              });
-              if (!res.ok) return { addr, name: null, pnl: null };
-              const data = await res.json();
-              const name = data.name || data.pseudonym || null;
-              // Try multiple PnL field names that Polymarket API may use
-              const pnl = data.pnl ?? data.profitLoss ?? data.allTimePnl ?? data.totalPnL ?? null;
-              return { addr, name, pnl: pnl !== null ? parseFloat(pnl) : null };
+              // Fetch PnL from leaderboard API and name from profile API in parallel
+              const [profitRes, profileRes] = await Promise.allSettled([
+                fetch(`https://lb-api.polymarket.com/profit?window=all&address=${addr}`, {
+                  headers: { 'User-Agent': 'SoldiBot/1.0' },
+                  signal: AbortSignal.timeout(10000),
+                }),
+                fetch(`https://gamma-api.polymarket.com/public-profile?address=${addr}`, {
+                  headers: { 'User-Agent': 'SoldiBot/1.0' },
+                  signal: AbortSignal.timeout(10000),
+                }),
+              ]);
+
+              let name = null;
+              let pnl = null;
+
+              // Extract PnL from lb-api /profit
+              if (profitRes.status === 'fulfilled' && profitRes.value.ok) {
+                const profitData = await profitRes.value.json();
+                const entry = Array.isArray(profitData) ? profitData[0] : profitData;
+                if (entry?.amount != null) pnl = parseFloat(entry.amount);
+                // lb-api also returns name/pseudonym
+                if (!name) name = entry?.name || entry?.pseudonym || null;
+              }
+
+              // Extract name from gamma profile (fallback)
+              if (profileRes.status === 'fulfilled' && profileRes.value.ok) {
+                const profileData = await profileRes.value.json();
+                if (!name) name = profileData.name || profileData.pseudonym || null;
+              }
+
+              return { addr, name, pnl: pnl !== null && !isNaN(pnl) ? pnl : null };
             } catch {
               return { addr, name: null, pnl: null };
             }

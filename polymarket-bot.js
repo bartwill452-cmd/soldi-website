@@ -28,6 +28,7 @@ const RATE_LIMIT_BACKOFF = 10; // seconds to wait if rate limited
 const DATA_API = 'https://data-api.polymarket.com';
 const CLOB_API = 'https://clob.polymarket.com';
 const PROFILE_API = 'https://gamma-api.polymarket.com';
+const LB_API = 'https://lb-api.polymarket.com';
 
 // 37 whale addresses to track
 const TARGET_ADDRESSES = [
@@ -206,12 +207,12 @@ async function getProfileName(addr) {
 async function getTraderProfit(addr) {
   const cached = traderProfitCache[addr];
   if (cached && (Date.now() - cached.fetchedAt < PROFIT_CACHE_TTL)) return cached.value;
-  // If cached N/A, still retry after TTL
+  // Use lb-api.polymarket.com/profit which returns the actual all-time PnL
   try {
-    const profile = await apiFetch(`${PROFILE_API}/public-profile`, { address: addr });
-    // Use ?? so that 0 is a valid value (|| would skip 0)
-    const raw = profile.pnl ?? profile.profitLoss ?? profile.allTimePnl ?? profile.totalPnL ?? profile.totalPnl ?? null;
-    const pnl = raw !== null ? parseFloat(raw) : NaN;
+    const data = await apiFetch(`${LB_API}/profit`, { window: 'all', address: addr });
+    // Response is an array: [{ proxyWallet, amount, pseudonym, ... }]
+    const entry = Array.isArray(data) ? data[0] : data;
+    const pnl = entry?.amount != null ? parseFloat(entry.amount) : NaN;
     if (!isNaN(pnl)) {
       const emoji = pnl >= 0 ? '🟢' : '🔴';
       const formatted = pnl >= 0
