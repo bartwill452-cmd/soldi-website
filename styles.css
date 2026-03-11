@@ -1033,8 +1033,8 @@ button { cursor: pointer; font-family: inherit; }
 .step-card p { font-size: 14px; color: var(--text-muted); line-height: 1.7; }
 .step-connector { padding: 0 16px; color: var(--text-muted); }
 
-/* ===== APPLY FORM ===== */
-.apply-section { padding: 120px 0; }
+/* ===== JOIN CTA ===== */
+.apply-section { padding: 20px 0 80px; }
 .apply-wrapper {
   display: grid;
   grid-template-columns: 1fr 1fr;
