@@ -1175,7 +1175,6 @@ const ODDS_SPORTSBOOKS = [
   { key: 'novig', name: 'Novig', shortName: 'NOV' },
   { key: 'bookmaker', name: 'Bookmaker', shortName: 'BM' },
   { key: 'buckeye', name: 'Buckeye', shortName: 'BKY' },
-  { key: 'stakeus', name: 'StakeUS', shortName: 'STK' },
   { key: 'betmgm', name: 'BetMGM', shortName: 'MGM' },
 ];
 const SHARP_BOOKS = ['pinnacle', 'novig', 'bookmaker'];

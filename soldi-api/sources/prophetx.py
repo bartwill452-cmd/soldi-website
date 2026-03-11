@@ -9,8 +9,9 @@ API endpoints:
   - Markets/Odds:         GET /partner/v2/public/get_multiple_markets?market_types=moneyline,spread,total&event_ids=...
 
 ProphetX is a peer-to-peer sports prediction exchange where selections
-include an order book with multiple price levels. We take the best
-available price (first level) and sum all stakes for liquidity.
+include an order book with multiple price levels. We take the level
+with the most liquidity (the real market price) and report that level's
+stake as the tradeable liquidity.
 
 Odds are returned in American format directly (e.g., -158, +156).
 """
@@ -468,12 +469,32 @@ class ProphetXSource(DataSource):
 
         return parsed
 
+    @staticmethod
+    def _best_level(side: list) -> dict:
+        """Pick the orderbook level with the most liquidity as the market price.
+
+        Exchange orderbooks can contain stale limit orders at extreme prices
+        with tiny amounts.  The level where the most money sits is the
+        real market price that will actually get filled.
+        """
+        best = side[0]
+        best_stake = 0.0
+        for level in side:
+            try:
+                s = float(level.get("stake", 0))
+            except (ValueError, TypeError):
+                s = 0.0
+            if s > best_stake:
+                best_stake = s
+                best = level
+        return best
+
     def _parse_moneyline(
         self, selections: list, home_team: str, away_team: str,
         comp_id_to_name: Dict[int, str],
     ) -> Optional[Market]:
-        """Parse moneyline market. Take best price from each side.
-        Liquidity = total stake across ALL price levels (full depth).
+        """Parse moneyline market. Take the most-liquid price level from each side.
+        Liquidity = stake at that best level only (not full depth).
         """
         outcomes = []  # type: List[Outcome]
         total_liquidity = 0.0
@@ -481,8 +502,8 @@ class ProphetXSource(DataSource):
         for side in selections:
             if not side or not isinstance(side, list):
                 continue
-            # First entry is best price
-            best = side[0]
+            # Pick the level with the most liquidity (real market price)
+            best = self._best_level(side)
             odds = best.get("odds")
             if odds is None:
                 continue
@@ -501,15 +522,12 @@ class ProphetXSource(DataSource):
                 # Fallback: try matching by name substring
                 display_name = self._match_team(name, home_team, away_team)
 
-            # Liquidity = total stake across ALL price levels (full depth)
+            # Liquidity = stake at the best level only
             side_liquidity = 0.0
-            for level in side:
-                stake = level.get("stake")
-                if stake:
-                    try:
-                        side_liquidity += float(stake)
-                    except (ValueError, TypeError):
-                        pass
+            try:
+                side_liquidity = float(best.get("stake", 0))
+            except (ValueError, TypeError):
+                pass
             total_liquidity += side_liquidity
 
             outcomes.append(Outcome(
@@ -531,8 +549,8 @@ class ProphetXSource(DataSource):
         self, selections: list, home_team: str, away_team: str,
         comp_id_to_name: Dict[int, str],
     ) -> Optional[Market]:
-        """Parse spread market. Take best price and line from each side.
-        Liquidity = total stake across ALL price levels (full depth).
+        """Parse spread market. Take the most-liquid price level from each side.
+        Liquidity = stake at that best level only (not full depth).
         """
         outcomes = []  # type: List[Outcome]
         total_liquidity = 0.0
@@ -540,7 +558,8 @@ class ProphetXSource(DataSource):
         for side in selections:
             if not side or not isinstance(side, list):
                 continue
-            best = side[0]
+            # Pick the level with the most liquidity (real market price)
+            best = self._best_level(side)
             odds = best.get("odds")
             if odds is None:
                 continue
@@ -567,15 +586,12 @@ class ProphetXSource(DataSource):
             else:
                 display_name = self._match_team(name, home_team, away_team)
 
-            # Liquidity = total stake across ALL price levels (full depth)
+            # Liquidity = stake at the best level only
             side_liquidity = 0.0
-            for level in side:
-                stake = level.get("stake")
-                if stake:
-                    try:
-                        side_liquidity += float(stake)
-                    except (ValueError, TypeError):
-                        pass
+            try:
+                side_liquidity = float(best.get("stake", 0))
+            except (ValueError, TypeError):
+                pass
             total_liquidity += side_liquidity
 
             outcomes.append(Outcome(
@@ -595,8 +611,8 @@ class ProphetXSource(DataSource):
         )
 
     def _parse_total(self, selections: list) -> Optional[Market]:
-        """Parse totals (O/U) market. Take best price and line from each side.
-        Liquidity = total stake across ALL price levels (full depth).
+        """Parse totals (O/U) market. Take the most-liquid price level from each side.
+        Liquidity = stake at that best level only (not full depth).
         """
         outcomes = []  # type: List[Outcome]
         total_liquidity = 0.0
@@ -604,7 +620,8 @@ class ProphetXSource(DataSource):
         for side in selections:
             if not side or not isinstance(side, list):
                 continue
-            best = side[0]
+            # Pick the level with the most liquidity (real market price)
+            best = self._best_level(side)
             odds = best.get("odds")
             if odds is None:
                 continue
@@ -636,15 +653,12 @@ class ProphetXSource(DataSource):
                 except (ValueError, TypeError):
                     pass
 
-            # Liquidity = total stake across ALL price levels (full depth)
+            # Liquidity = stake at the best level only
             side_liquidity = 0.0
-            for level in side:
-                stake = level.get("stake")
-                if stake:
-                    try:
-                        side_liquidity += float(stake)
-                    except (ValueError, TypeError):
-                        pass
+            try:
+                side_liquidity = float(best.get("stake", 0))
+            except (ValueError, TypeError):
+                pass
             total_liquidity += side_liquidity
 
             outcomes.append(Outcome(
@@ -667,7 +681,14 @@ class ProphetXSource(DataSource):
         self, selections: list, home_team: str, away_team: str,
         comp_id_to_name: Dict[int, str], market_name: str, market_type: str,
     ) -> Optional[Market]:
-        """Parse team total market. Determine home/away from market name or competitor."""
+        """Parse team total market. Determine home/away from market name or competitor.
+
+        Uses multiple matching strategies:
+        1. Individual words from team name (>2 chars) in market text
+        2. Normalized team name substring matching
+        3. City-only / mascot-only matching
+        4. Fallback to "home" / "away" keywords
+        """
         # Try to determine which team from market name or type
         side = ""
         lower_name = market_name.lower()
@@ -676,7 +697,7 @@ class ProphetXSource(DataSource):
         home_lower = home_team.lower()
         away_lower = away_team.lower()
 
-        # Check if team name appears in market name
+        # Strategy 1: Check if any word from team name (>2 chars) appears in market text
         for word in home_lower.split():
             if len(word) > 2 and word in combined:
                 side = "home"
@@ -686,6 +707,35 @@ class ProphetXSource(DataSource):
                 if len(word) > 2 and word in combined:
                     side = "away"
                     break
+
+        # Strategy 2: Normalized full name substring matching
+        if not side:
+            from sources.sport_mapping import normalize_team_name as _norm
+            combined_norm = _norm(combined)
+            home_norm = _norm(home_team)
+            away_norm = _norm(away_team)
+            if len(home_norm) >= 4 and home_norm in combined_norm:
+                side = "home"
+            elif len(away_norm) >= 4 and away_norm in combined_norm:
+                side = "away"
+
+        # Strategy 3: Check city-only or mascot-only (first/last word)
+        if not side:
+            home_parts = home_lower.split()
+            away_parts = away_lower.split()
+            # City name (first word) — e.g., "Cleveland" from "Cleveland Cavaliers"
+            if len(home_parts) > 1 and len(home_parts[0]) > 2 and home_parts[0] in combined:
+                side = "home"
+            elif len(away_parts) > 1 and len(away_parts[0]) > 2 and away_parts[0] in combined:
+                side = "away"
+            # Mascot / last word — e.g., "Cavaliers" or "Magic"
+            if not side:
+                if len(home_parts) > 1 and len(home_parts[-1]) > 2 and home_parts[-1] in combined:
+                    side = "home"
+                elif len(away_parts) > 1 and len(away_parts[-1]) > 2 and away_parts[-1] in combined:
+                    side = "away"
+
+        # Strategy 4: Fallback to "home" / "away" keywords
         if not side:
             if "home" in combined:
                 side = "home"

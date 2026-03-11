@@ -152,6 +152,50 @@ def _is_college_in_pro_feed(event: OddsEvent) -> bool:
     return any(kw in combined for kw in _COLLEGE_TEAM_KEYWORDS)
 
 
+# Mainstream sportsbooks that only list UFC (not regional MMA / PFL / Bellator)
+_UFC_INDICATOR_BOOKS = frozenset([
+    "fanduel", "draftkings", "betmgm", "williamhill_us", "pinnacle",
+])
+
+
+def _is_non_ufc_mma(event: OddsEvent, sport_key: str) -> bool:
+    """Return True if the event is a non-UFC MMA fight.
+
+    UFC events are always listed on mainstream books (FanDuel, DraftKings,
+    BetMGM, Caesars, Pinnacle).  If none of those books carry the event,
+    it's almost certainly a regional / PFL / Bellator fight card.
+    """
+    if "mma" not in sport_key:
+        return False
+    book_keys = {bm.key for bm in event.bookmakers}
+    return not book_keys.intersection(_UFC_INDICATOR_BOOKS)
+
+
+def _has_suspicious_solo_moneyline(event: OddsEvent, sport_key: str) -> bool:
+    """Return True if a book reports h2h but no other book does and no book
+    has spreads — likely a phantom ML from stale SBR data.
+
+    In college basketball, if only ONE bookmaker has moneyline and zero
+    bookmakers have spreads for that event, the moneyline is likely bad data.
+    """
+    if "ncaab" not in sport_key and "ncaaf" not in sport_key:
+        return False
+
+    h2h_books = set()
+    spread_books = set()
+    for bm in event.bookmakers:
+        for mkt in bm.markets:
+            if mkt.key == "h2h":
+                h2h_books.add(bm.key)
+            elif mkt.key == "spreads":
+                spread_books.add(bm.key)
+
+    # If only 1 book has ML and NO book has spreads, it's suspicious
+    if len(h2h_books) == 1 and len(spread_books) == 0:
+        return True
+    return False
+
+
 def _is_stale_event(event: OddsEvent, max_age_hours: int = 12) -> bool:
     """Return True if the event's commence_time is more than max_age_hours in the past."""
     try:
@@ -215,18 +259,21 @@ def _normalize_display_names(events: List[OddsEvent]) -> None:
         event.home_team = resolve_team_name(event.home_team, sport_key=sport_key)
         event.away_team = resolve_team_name(event.away_team, sport_key=sport_key)
 
-        # Normalize outcome names in h2h markets to match event-level team names.
-        # Uses exact normalized match first, then substring match as fallback
-        # (handles cases like "New Orleans" vs "New Orleans Pelicans").
+        # Normalize outcome names in h2h AND spread markets to match event-level
+        # team names.  Uses exact normalized match first, then substring match
+        # as fallback (handles "New Orleans" vs "New Orleans Pelicans").
         home_norm = normalize_team_name(event.home_team)
         away_norm = normalize_team_name(event.away_team)
         for bm in event.bookmakers:
             for mkt in bm.markets:
-                if not mkt.key.startswith("h2h"):
+                if not (mkt.key.startswith("h2h") or mkt.key.startswith("spreads")):
                     continue
                 for outcome in mkt.outcomes:
                     if outcome.name == event.home_team or outcome.name == event.away_team:
                         continue  # already matches
+                    # Skip Over/Under outcomes (totals that leaked into wrong key)
+                    if outcome.name in ("Over", "Under"):
+                        continue
                     o_norm = normalize_team_name(outcome.name)
                     # Exact normalized match
                     if o_norm == home_norm:
@@ -741,7 +788,8 @@ class CompositeSource(DataSource):
         all_events = _fuzzy_merge_by_team_name(all_events)
 
         # Filter out completed events (status="post"), live/in-play events (status="in"),
-        # futures, stale, women's games, prop-market events, and summary rows.
+        # futures, stale, women's games, prop-market events, summary rows,
+        # non-UFC MMA events, and phantom moneylines.
         # We only want pre-game odds.
         result = []
         for ev in all_events.values():
@@ -761,7 +809,16 @@ class CompositeSource(DataSource):
                 continue
             if _is_college_in_pro_feed(ev):
                 continue
+            if _is_non_ufc_mma(ev, sport_key):
+                continue
             result.append(ev)
+
+        # Strip phantom moneylines: if a book has h2h but the event
+        # has no spreads from ANY book (college basketball), remove h2h
+        for ev in result:
+            if _has_suspicious_solo_moneyline(ev, sport_key):
+                for bm in ev.bookmakers:
+                    bm.markets = [m for m in bm.markets if m.key != "h2h"]
 
         # Normalize display names through alias resolution
         _normalize_display_names(result)
