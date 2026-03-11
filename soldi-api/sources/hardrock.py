@@ -469,6 +469,7 @@ class HardRockBetSource(DataSource):
         self._cf_cookies_expires: float = 0
         self._client: Optional[httpx.AsyncClient] = None
         self._init_done = False
+        self._cf_lock = asyncio.Lock()
         # Discovered competition IDs: sport_key → [comp_id, ...]
         self._comp_ids: Dict[str, List[str]] = {}
         self._tree_fetched = False
@@ -487,10 +488,14 @@ class HardRockBetSource(DataSource):
         """Ensure we have valid Cloudflare cookies, refreshing if needed."""
         if self._cf_cookies and time.time() < self._cf_cookies_expires:
             return True
-        return await self._get_cloudflare_cookies()
+        async with self._cf_lock:
+            # Double-check after acquiring lock (another coroutine may have refreshed)
+            if self._cf_cookies and time.time() < self._cf_cookies_expires:
+                return True
+            return await self._get_cloudflare_cookies()
 
     async def _get_cloudflare_cookies(self) -> bool:
-        """Use Playwright to get Cloudflare clearance cookies."""
+        """Use Playwright to get Cloudflare clearance cookies from the API domain."""
         try:
             from playwright.async_api import async_playwright
         except ImportError:
@@ -508,28 +513,49 @@ class HardRockBetSource(DataSource):
                         "--disable-gpu",
                     ],
                 )
-                page = await browser.new_page()
+                context = await browser.new_context(
+                    user_agent=(
+                        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+                    ),
+                )
+                page = await context.new_page()
 
                 logger.info("HardRock: launching browser for Cloudflare clearance...")
-                await page.goto(SITE_URL + "/", wait_until="load", timeout=30000)
-                # Wait for CF challenge to resolve
-                await page.wait_for_timeout(5000)
 
-                # Extract cookies
-                cookies = await page.context.cookies()
-                self._cf_cookies = {
-                    c["name"]: c["value"]
-                    for c in cookies
-                    if "hardrock" in c.get("domain", "")
-                }
+                # Visit the main site first to establish cookies
+                await page.goto(SITE_URL + "/", wait_until="domcontentloaded", timeout=30000)
+                await page.wait_for_timeout(8000)
+
+                # Also visit the API domain to get cookies for it
+                try:
+                    await page.goto(
+                        "https://api.hardrocksportsbook.com/java-graphql/graphql?type=event_tree",
+                        wait_until="domcontentloaded",
+                        timeout=15000,
+                    )
+                    await page.wait_for_timeout(3000)
+                except Exception:
+                    pass  # API may return error page, that's fine — we just want cookies
+
+                # Extract ALL cookies from the browser context
+                cookies = await context.cookies()
+                self._cf_cookies = {}
+                for c in cookies:
+                    domain = c.get("domain", "")
+                    # Collect cookies from both the site and API domains
+                    if "hardrock" in domain:
+                        self._cf_cookies[c["name"]] = c["value"]
+
                 self._cf_cookies_expires = time.time() + _CF_COOKIE_TTL
 
                 await browser.close()
 
+            cf_names = list(self._cf_cookies.keys())
             logger.info(
-                "HardRock: got %d cookies (cf_clearance=%s)",
+                "HardRock: got %d cookies: %s",
                 len(self._cf_cookies),
-                "cf_clearance" in self._cf_cookies,
+                cf_names[:10],
             )
 
             # Create/recreate httpx client with new cookies
@@ -537,7 +563,7 @@ class HardRockBetSource(DataSource):
                 await self._client.aclose()
             self._client = self._create_client()
             self._init_done = True
-            return True
+            return bool(self._cf_cookies)
 
         except Exception as e:
             logger.warning("HardRock: Cloudflare bypass failed: %s", e)
