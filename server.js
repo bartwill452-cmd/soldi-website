@@ -1065,53 +1065,46 @@ function buildWelcomeEmailHtml(firstName, email) {
     <div style="display:inline-block;width:60px;height:60px;background:linear-gradient(135deg,#22c55e,#10b981);border-radius:16px;line-height:60px;font-size:32px;font-weight:900;color:#050507;">S</div>
   </div>
   <h1 style="font-size:26px;font-weight:800;text-align:center;margin:0 0 8px;">Welcome to Soldi, ${firstName}!</h1>
-  <p style="color:#a1a1aa;text-align:center;margin:0 0 32px;font-size:15px;">Your membership is now active. Here's how to get started:</p>
+  <p style="color:#a1a1aa;text-align:center;margin:0 0 32px;font-size:15px;">Your membership is active. Here's how to get started.</p>
 
   <div style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:24px;margin-bottom:16px;">
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
-      <span style="background:#22c55e;color:#050507;width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;">1</span>
-      <h3 style="color:#22c55e;margin:0;font-size:16px;">Verify on the Website</h3>
-    </div>
-    <p style="color:#d4d4d8;font-size:14px;margin:0;padding-left:40px;">Visit <a href="https://trysoldi.com" style="color:#22c55e;text-decoration:none;font-weight:600;">soldi-website.onrender.com</a> and enter your email (<strong style="color:#fff;">${email}</strong>) to unlock your dashboard and AI tools.</p>
+    <h3 style="color:#22c55e;margin:0 0 10px;font-size:16px;">Log Into Your Dashboard</h3>
+    <p style="color:#d4d4d8;font-size:14px;margin:0;line-height:1.7;">Head over to <a href="https://trysoldi.com" style="color:#22c55e;text-decoration:none;font-weight:600;">trysoldi.com</a> and click Login in the top right. Enter your email <strong style="color:#fff;">${email}</strong> and you'll get a verification code sent to your inbox. This is your home base for everything, not Whop. Bookmark trysoldi.com because that's where all your tools and guides live.</p>
   </div>
 
   <div style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:24px;margin-bottom:16px;">
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
-      <span style="background:#22c55e;color:#050507;width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;">2</span>
-      <h3 style="color:#22c55e;margin:0;font-size:16px;">Explore Your AI Tools</h3>
-    </div>
-    <p style="color:#d4d4d8;font-size:14px;margin:0;padding-left:40px;">Access the Odds Screen, Chatbot Builder, Betting Guides, and more — all from your dashboard.</p>
+    <h3 style="color:#22c55e;margin:0 0 10px;font-size:16px;">Your Dashboard</h3>
+    <p style="color:#d4d4d8;font-size:14px;margin:0;line-height:1.7;">Once you're logged in you'll see your member dashboard. You've got your API key for the Odds Screen, your affiliate link where you earn 25% on every person you refer, written guides covering sports betting, e-commerce, AI selling, and affiliate programs, the AI Chatbot Builder, and the Google Review Campaign tool.</p>
+  </div>
+
+  <div style="background:rgba(88,101,242,0.08);border:1px solid rgba(88,101,242,0.2);border-radius:12px;padding:24px;margin-bottom:16px;">
+    <h3 style="color:#5865F2;margin:0 0 10px;font-size:16px;">Join the Discord</h3>
+    <p style="color:#d4d4d8;font-size:14px;margin:0 0 14px;line-height:1.7;">Click below to join the community. Once you're in the server type <strong style="color:#22c55e;">!verify</strong> in any channel. The bot will DM you asking for your email. Reply with <strong style="color:#fff;">${email}</strong> and you'll automatically get the Soldi Paid Member role which unlocks all the private channels, strategy calls, and live picks.</p>
+    <a href="https://discord.gg/HStNMpCAH5" style="display:inline-block;padding:10px 24px;background:#5865F2;color:#fff;font-weight:600;border-radius:8px;text-decoration:none;font-size:14px;">Join Discord Server</a>
   </div>
 
   <div style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:24px;margin-bottom:16px;">
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
-      <span style="background:#5865F2;color:#fff;width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;">3</span>
-      <h3 style="color:#5865F2;margin:0;font-size:16px;">Join the Discord</h3>
-    </div>
-    <p style="color:#d4d4d8;font-size:14px;margin:0 0 12px;padding-left:40px;">Click below to join our private Discord community:</p>
-    <div style="padding-left:40px;">
-      <a href="https://discord.gg/HStNMpCAH5" style="display:inline-block;padding:10px 24px;background:#5865F2;color:#fff;font-weight:600;border-radius:8px;text-decoration:none;font-size:14px;">Join Discord Server</a>
-    </div>
+    <h3 style="color:#22c55e;margin:0 0 10px;font-size:16px;">Polymarket Whale Tracker</h3>
+    <p style="color:#d4d4d8;font-size:14px;margin:0;line-height:1.7;">One of the most powerful tools we have. In Discord type <strong style="color:#22c55e;">!whales</strong> to see the default whale wallets we're already tracking for you. Type <strong style="color:#22c55e;">!track</strong> followed by any wallet address to add it to your watchlist. You'll get a DM alert every time a tracked wallet places a bet.</p>
+  </div>
+
+  <div style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:24px;margin-bottom:16px;">
+    <h3 style="color:#22c55e;margin:0 0 10px;font-size:16px;">The Odds Screen</h3>
+    <p style="color:#d4d4d8;font-size:14px;margin:0;line-height:1.7;">From your dashboard click Open Odds Screen and enter your API key. This gives you real time odds across 10+ sportsbooks including FanDuel, DraftKings, Pinnacle, BetRivers, Caesars, and more. Switch between NBA, NFL, MLB, NHL, and MMA. Look for the highlighted edges where one book has way better odds than the rest.</p>
   </div>
 
   <div style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:24px;margin-bottom:32px;">
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
-      <span style="background:#22c55e;color:#050507;width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;">4</span>
-      <h3 style="color:#22c55e;margin:0;font-size:16px;">Verify in Discord to Unlock Paid Channels</h3>
-    </div>
-    <p style="color:#d4d4d8;font-size:14px;margin:0 0 8px;padding-left:40px;">Once you join, <strong style="color:#fff;">message the Soldi Bot</strong> to get your <strong style="color:#5865F2;">Soldi Paid Member</strong> role:</p>
-    <div style="padding-left:40px;">
-      <div style="background:#0a0a0a;border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:12px 16px;font-family:monospace;font-size:13px;color:#d4d4d8;margin-bottom:8px;">
-        1. Type <strong style="color:#22c55e;">!verify</strong> in any channel<br>
-        2. The bot will DM you asking for your email<br>
-        3. Reply with: <strong style="color:#fff;">${email}</strong><br>
-        4. Your <strong style="color:#5865F2;">Soldi Paid Member</strong> role will be assigned automatically
-      </div>
-    </div>
+    <h3 style="color:#22c55e;margin:0 0 10px;font-size:16px;">Build and Sell AI Chatbots</h3>
+    <p style="color:#d4d4d8;font-size:14px;margin:0;line-height:1.7;">Head to the Chatbot Builder on your dashboard. Set up a business name, add services and FAQs, pick a tone, and you'll get an embeddable widget you can install on any website. Members are selling these to local businesses for $500 to $2,000 upfront plus a monthly retainer fee for ongoing maintenance and updates.</p>
   </div>
 
-  <div style="text-align:center;margin-bottom:24px;">
-    <a href="https://trysoldi.com" style="display:inline-block;padding:14px 40px;background:linear-gradient(135deg,#22c55e,#10b981);color:#050507;font-weight:700;border-radius:10px;text-decoration:none;font-size:15px;">Go to Dashboard</a>
+  <div style="background:rgba(34,197,94,0.06);border:1px solid rgba(34,197,94,0.15);border-radius:12px;padding:20px 24px;margin-bottom:32px;">
+    <p style="color:#d4d4d8;font-size:14px;margin:0;line-height:1.7;"><strong style="color:#22c55e;">Important:</strong> Your Whop account is just for billing. Everything else happens at <a href="https://trysoldi.com" style="color:#22c55e;text-decoration:none;font-weight:600;">trysoldi.com</a>. If you ever need help type <strong style="color:#22c55e;">!commands</strong> in Discord for a full walkthrough of the bot or submit a bug report from your dashboard.</p>
+  </div>
+
+  <div style="text-align:center;margin-bottom:16px;">
+    <a href="https://trysoldi.com" style="display:inline-block;padding:14px 40px;background:linear-gradient(135deg,#22c55e,#10b981);color:#050507;font-weight:700;border-radius:10px;text-decoration:none;font-size:15px;margin-right:8px;">Go to Dashboard</a>
+    <a href="https://trysoldi.com/getting-started" style="display:inline-block;padding:14px 28px;background:rgba(255,255,255,0.08);color:#fff;font-weight:600;border-radius:10px;text-decoration:none;font-size:15px;border:1px solid rgba(255,255,255,0.1);">Full Getting Started Guide</a>
   </div>
 
   <p style="text-align:center;color:#52525b;font-size:12px;margin:0;">&copy; 2026 Soldi. All rights reserved.</p>

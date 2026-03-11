@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Getting Started | Soldi</title>
+  <link rel="icon" type="image/png" href="/images/soldi-logo.png">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #050507;
+      color: #fff;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      line-height: 1.7;
+      min-height: 100vh;
+    }
+    .container {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 40px 24px 80px;
+    }
+    .logo-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 48px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .logo-icon {
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, #22c55e, #10b981);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      font-size: 20px;
+      color: #050507;
+    }
+    .logo-text { font-size: 20px; font-weight: 700; }
+    .back-link {
+      color: #22c55e;
+      text-decoration: none;
+      font-size: 14px;
+      margin-left: auto;
+    }
+    .back-link:hover { text-decoration: underline; }
+    h1 {
+      font-size: clamp(28px, 5vw, 40px);
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      margin-bottom: 8px;
+    }
+    h1 span { color: #22c55e; }
+    .subtitle {
+      color: #9ca3af;
+      font-size: 17px;
+      margin-bottom: 48px;
+    }
+    .step {
+      margin-bottom: 40px;
+    }
+    .step-header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+    .step-num {
+      width: 32px;
+      height: 32px;
+      background: #22c55e;
+      color: #050507;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 15px;
+      flex-shrink: 0;
+    }
+    .step-num.discord { background: #5865F2; color: #fff; }
+    .step h2 {
+      font-size: 20px;
+      font-weight: 700;
+    }
+    .step p {
+      color: #d4d4d8;
+      font-size: 15px;
+      line-height: 1.8;
+    }
+    .step p + p { margin-top: 12px; }
+    .step a {
+      color: #22c55e;
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .step a:hover { text-decoration: underline; }
+    .command {
+      display: inline-block;
+      background: rgba(34, 197, 94, 0.1);
+      border: 1px solid rgba(34, 197, 94, 0.2);
+      color: #22c55e;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 13px;
+      padding: 2px 8px;
+      border-radius: 5px;
+      font-weight: 600;
+    }
+    .important-box {
+      background: rgba(34, 197, 94, 0.06);
+      border: 1px solid rgba(34, 197, 94, 0.15);
+      border-radius: 12px;
+      padding: 24px;
+      margin: 48px 0;
+    }
+    .important-box h3 {
+      color: #22c55e;
+      font-size: 17px;
+      margin-bottom: 10px;
+    }
+    .important-box p {
+      color: #d4d4d8;
+      font-size: 15px;
+    }
+    .cta-box {
+      text-align: center;
+      margin-top: 48px;
+      padding-top: 32px;
+      border-top: 1px solid rgba(255,255,255,0.06);
+    }
+    .cta-btn {
+      display: inline-block;
+      padding: 14px 40px;
+      background: linear-gradient(135deg, #22c55e, #10b981);
+      color: #050507;
+      font-weight: 700;
+      border-radius: 10px;
+      text-decoration: none;
+      font-size: 16px;
+      transition: opacity 0.2s;
+    }
+    .cta-btn:hover { opacity: 0.9; }
+    .cta-btn.discord-btn {
+      background: #5865F2;
+      color: #fff;
+      margin-left: 12px;
+    }
+    .help-text {
+      color: #52525b;
+      font-size: 13px;
+      margin-top: 20px;
+    }
+    .divider {
+      height: 1px;
+      background: rgba(255,255,255,0.06);
+      margin: 40px 0;
+    }
+    @media (max-width: 600px) {
+      .cta-btn { display: block; margin: 8px 0; }
+      .cta-btn.discord-btn { margin-left: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="logo-bar">
+      <div class="logo-icon">S</div>
+      <span class="logo-text">Soldi</span>
+      <a href="https://trysoldi.com" class="back-link">Go to Dashboard</a>
+    </div>
+
+    <h1>Welcome to Soldi! <span>Here's how to get started.</span></h1>
+    <p class="subtitle">Everything you need to start making money online, all in one place.</p>
+
+    <div class="step">
+      <div class="step-header">
+        <div class="step-num">1</div>
+        <h2>Log Into Your Dashboard</h2>
+      </div>
+      <p>Head over to <a href="https://trysoldi.com">trysoldi.com</a> and click Login in the top right. Enter the email you used when you purchased your membership. You'll get a verification code sent to your inbox, punch that in and you're good to go. This is your home base for everything, not Whop. Bookmark trysoldi.com because that's where all your tools and guides live.</p>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <div class="step-num">2</div>
+        <h2>Your Dashboard</h2>
+      </div>
+      <p>Once you're logged in you'll see your member dashboard. You've got your API key which you'll need for the Odds Screen, your affiliate link where you earn 25% on every person you refer, written guides covering sports betting, e-commerce, AI selling, and affiliate programs, the AI Chatbot Builder where you can build bots and sell them to businesses, and the Google Review Campaign tool.</p>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <div class="step-num discord">3</div>
+        <h2>Join the Discord</h2>
+      </div>
+      <p>Click the Discord link on your dashboard or head to <a href="https://discord.gg/HStNMpCAH5">discord.gg/HStNMpCAH5</a> to join the community. Once you're in the server type <span class="command">!verify</span> in any channel. The bot will send you a DM asking for your email. Reply with the email you used on Whop and you'll automatically get the Soldi Paid Member role. This unlocks all the private channels, strategy calls, and live picks.</p>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <div class="step-num">4</div>
+        <h2>Setting Up the Polymarket Whale Tracker</h2>
+      </div>
+      <p>This is one of the most powerful tools we have. In Discord type <span class="command">!whales</span> to see the default whale wallets we're already tracking for you. If you want to add your own, type <span class="command">!track</span> followed by the wallet address. You'll get a DM alert every time a tracked wallet places a bet. Type <span class="command">!mytrackers</span> to see everything you're watching and <span class="command">!pnl</span> to check profit and loss stats across all tracked wallets.</p>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <div class="step-num">5</div>
+        <h2>The Odds Screen</h2>
+      </div>
+      <p>From your dashboard click Open Odds Screen and enter your API key when it asks. This gives you real time odds across 10+ sportsbooks including FanDuel, DraftKings, Pinnacle, BetRivers, Caesars, BetOnline, Bookmaker, and more. You can switch between NBA, NFL, MLB, NHL, and MMA. Look for the highlighted edges where one book has way better odds than the rest.</p>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <div class="step-num">6</div>
+        <h2>Read the Guides</h2>
+      </div>
+      <p>We've put together detailed guides on everything you need. The betting guides walk you through sportsbook setup, unit sizing, priming, and using the devig tool. The AI websites guide shows you how to find leads, price your services, build sites, and scale. The ecom guide is a full 12 step blueprint from product research to Facebook ads. And the affiliate guide covers bank signup bonuses, cashback platforms, and crypto exchange offers.</p>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <div class="step-num">7</div>
+        <h2>Build and Sell AI Chatbots</h2>
+      </div>
+      <p>Head to the Chatbot Builder on your dashboard. Set up a business name, add the services and FAQs, pick a tone, and you'll get an embeddable widget you can install on any website. Members are selling these to local businesses for $500 to $2,000 upfront plus a monthly retainer fee for ongoing maintenance and updates.</p>
+    </div>
+
+    <div class="important-box">
+      <h3>Important</h3>
+      <p>Your Whop account is just for billing and managing your subscription. Everything else happens at <a href="https://trysoldi.com" style="color:#22c55e;text-decoration:none;font-weight:600;">trysoldi.com</a>. All your tools, guides, the odds screen, chatbot builder, and community access are there. If you ever need help type <span class="command">!commands</span> in Discord for a full walkthrough of the bot or submit a bug report from your dashboard.</p>
+    </div>
+
+    <div class="cta-box">
+      <a href="https://trysoldi.com" class="cta-btn">Go to Dashboard</a>
+      <a href="https://discord.gg/HStNMpCAH5" class="cta-btn discord-btn">Join Discord</a>
+      <p class="help-text">&copy; 2026 Soldi. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>
