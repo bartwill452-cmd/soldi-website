@@ -360,7 +360,7 @@ async function checkTrader(addr) {
 
   // Build the embed once
   const embed = createEmbed({
-    title: '\u{1F514} New Whale Bet Detected!',
+    title: '\u{1F514} New Profitable Bet Found!',
     description: `**${traderName}** placed a new bet${priceChange ? `\n${priceChange.formatted} since entry` : ''}`,
     color: COLORS.POLYMARKET,
     fields,
