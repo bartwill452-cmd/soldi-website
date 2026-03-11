@@ -376,7 +376,7 @@ button { cursor: pointer; font-family: inherit; }
 }
 
 /* ===== FEATURES ===== */
-.features { padding: 120px 0; }
+.features { padding: 120px 0 50px; }
 .section-label {
   font-size: 12px;
   font-weight: 700;
@@ -464,7 +464,7 @@ button { cursor: pointer; font-family: inherit; }
 }
 
 /* ===== TOOLS / BOTS ===== */
-.tools-section { padding: 120px 0; }
+.tools-section { padding: 50px 0 120px; }
 .tools-grid { display: flex; flex-direction: column; gap: 80px; }
 .tool-card {
   display: grid;
