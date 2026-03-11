@@ -492,17 +492,19 @@ button { cursor: pointer; font-family: inherit; }
 /* AI Tools Visual */
 .ai-tools-visual {
   display: flex;
-  gap: 16px;
+  gap: 12px;
   justify-content: center;
   padding: 20px;
+  flex-wrap: wrap;
 }
 .ai-tool-item {
   background: var(--bg-card);
   border: 1px solid var(--border-strong);
   border-radius: 16px;
-  padding: 24px 20px;
+  padding: 20px 16px;
   text-align: center;
   flex: 1;
+  min-width: 100px;
   transition: transform 0.3s, border-color 0.3s;
 }
 .ai-tool-item:hover {
