@@ -245,6 +245,7 @@ class DraftKingsSource(DataSource):
 
             # ── Phase 2: Deep pass — full sub-pages for all sports ──
             for sport_key in all_sports:
+                events = []  # type: List[OddsEvent]
                 try:
                     async with self._lock:
                         await self._ensure_browser()
@@ -264,23 +265,25 @@ class DraftKingsSource(DataSource):
                                 "DraftKings: 0 events for core sport %s, restarting browser and retrying",
                                 sport_key,
                             )
-                            await self._restart_browser()
-                            if is_tennis:
-                                events = await self._fetch_tennis(sport_key)
-                            else:
-                                events = await self._fetch_sport(url, sport_key)
-
-                        # Only update cache if we got data — don't replace good data with empty
-                        if events:
-                            self._cache[sport_key] = (events, time.time())
-                        else:
-                            # Touch timestamp so stale data stays served
-                            old = self._cache.get(sport_key)
-                            if old and old[0]:
-                                self._cache[sport_key] = (old[0], time.time())
-                    logger.info("DraftKings prefetch: %s complete (%d events)", sport_key, len(events))
+                            try:
+                                await self._restart_browser()
+                                if is_tennis:
+                                    events = await self._fetch_tennis(sport_key)
+                                else:
+                                    events = await self._fetch_sport(url, sport_key)
+                            except Exception as retry_err:
+                                logger.warning("DraftKings: retry for %s also failed: %s", sport_key, retry_err)
                 except Exception as e:
                     logger.warning("DraftKings prefetch %s failed: %s", sport_key, e)
+                finally:
+                    # ALWAYS preserve cache — never let good data go stale
+                    if events:
+                        self._cache[sport_key] = (events, time.time())
+                    else:
+                        old = self._cache.get(sport_key)
+                        if old and old[0]:
+                            self._cache[sport_key] = (old[0], time.time())
+                    logger.info("DraftKings prefetch: %s complete (%d events, cached=%d)", sport_key, len(events), len(self._cache.get(sport_key, ([], 0))[0]))
                 await asyncio.sleep(0.3)
             logger.info("DraftKings: Prefetch cycle #%d complete (%d sports)", cycle, len(all_sports))
             await asyncio.sleep(1)
