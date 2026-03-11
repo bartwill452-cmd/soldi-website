@@ -220,27 +220,28 @@ class DraftKingsSource(DataSource):
             cycle += 1
             t0 = time.time()
 
-            # ── Parallel blitz — 2 tabs at a time for core sports ──
-            # Opens 2 tabs simultaneously to avoid memory pressure.
-            # All 5 core sports done in ~3 batches × ~10s = ~30s total.
-            logger.info("DraftKings: Blitz cycle #%d — %d core sports", cycle, len(core_sports))
-            try:
-                async with self._lock:
-                    await self._ensure_browser()
-                    # Process core sports in pairs (2 tabs at a time)
-                    for i in range(0, len(core_sports), 2):
-                        batch = core_sports[i:i + 2]
-                        results = await self._parallel_capture(batch)
-                        for sport_key, events in results.items():
-                            if events:
-                                self._cache[sport_key] = (events, time.time())
-                            logger.info("DraftKings blitz: %s — %d events", sport_key, len(events))
-                elapsed = time.time() - t0
-                logger.info("DraftKings: Blitz complete in %.1fs", elapsed)
-            except Exception as e:
-                logger.warning("DraftKings blitz failed: %s", e)
-                import traceback
-                logger.warning("DraftKings blitz traceback: %s", traceback.format_exc())
+            # ── Quick pass — base game lines for core sports (sequential) ──
+            # Uses the single shared page to navigate each sport.
+            # ~15s per sport, all 5 done in ~90s. Cache data immediately.
+            logger.info("DraftKings: Quick pass cycle #%d — %d core sports", cycle, len(core_sports))
+            for sport_key in core_sports:
+                try:
+                    url = _DK_SPORT_URLS.get(sport_key)
+                    if url is None:
+                        continue
+                    async with self._lock:
+                        await self._ensure_browser()
+                        events = await self._navigate_and_capture(url, sport_key)
+                    if events:
+                        self._cache[sport_key] = (events, time.time())
+                    logger.info(
+                        "DraftKings quick: %s — %d events (%.1fs elapsed)",
+                        sport_key, len(events), time.time() - t0,
+                    )
+                except Exception as e:
+                    logger.warning("DraftKings quick %s failed: %s", sport_key, e)
+                await asyncio.sleep(0.3)
+            logger.info("DraftKings: Quick pass done in %.1fs", time.time() - t0)
 
             # ── Deep pass — full sub-pages for all sports (sequential) ──
             for sport_key in all_sports:
