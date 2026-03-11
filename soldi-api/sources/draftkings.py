@@ -193,7 +193,6 @@ class DraftKingsSource(DataSource):
         await asyncio.sleep(3)
         logger.info("DraftKings: Starting continuous background prefetch")
 
-        # Core sports scraped in parallel every cycle
         core_sports = [
             "basketball_nba",
             "basketball_ncaab",
@@ -219,27 +218,29 @@ class DraftKingsSource(DataSource):
         cycle = 0
         while True:
             cycle += 1
-
-            # ── Parallel blitz — all core sports at once in separate tabs ──
-            # Opens 5 tabs simultaneously, captures data in parallel.
-            # All 5 core sports get base lines in ~15-20 seconds total.
             t0 = time.time()
-            logger.info("DraftKings: Parallel blitz — %d core sports", len(core_sports))
+
+            # ── Parallel blitz — 2 tabs at a time for core sports ──
+            # Opens 2 tabs simultaneously to avoid memory pressure.
+            # All 5 core sports done in ~3 batches × ~10s = ~30s total.
+            logger.info("DraftKings: Blitz cycle #%d — %d core sports", cycle, len(core_sports))
             try:
                 async with self._lock:
                     await self._ensure_browser()
-                    results = await self._parallel_capture(core_sports)
-                for sport_key, events in results.items():
-                    if events:
-                        self._cache[sport_key] = (events, time.time())
-                    logger.info(
-                        "DraftKings blitz: %s — %d events",
-                        sport_key, len(events),
-                    )
+                    # Process core sports in pairs (2 tabs at a time)
+                    for i in range(0, len(core_sports), 2):
+                        batch = core_sports[i:i + 2]
+                        results = await self._parallel_capture(batch)
+                        for sport_key, events in results.items():
+                            if events:
+                                self._cache[sport_key] = (events, time.time())
+                            logger.info("DraftKings blitz: %s — %d events", sport_key, len(events))
                 elapsed = time.time() - t0
-                logger.info("DraftKings: Parallel blitz complete in %.1fs", elapsed)
+                logger.info("DraftKings: Blitz complete in %.1fs", elapsed)
             except Exception as e:
-                logger.warning("DraftKings parallel blitz failed: %s", e)
+                logger.warning("DraftKings blitz failed: %s", e)
+                import traceback
+                logger.warning("DraftKings blitz traceback: %s", traceback.format_exc())
 
             # ── Deep pass — full sub-pages for all sports (sequential) ──
             for sport_key in all_sports:
@@ -256,11 +257,10 @@ class DraftKingsSource(DataSource):
                                 continue
                             events = await self._fetch_sport(url, sport_key)
 
-                        # If we got 0 events for a core sport, the browser may be
-                        # degraded — restart it and retry once
+                        # If we got 0 events for a core sport, restart browser and retry
                         if not events and sport_key in core_sports:
                             logger.warning(
-                                "DraftKings: 0 events for core sport %s, restarting browser and retrying",
+                                "DraftKings: 0 events for core sport %s, restarting browser",
                                 sport_key,
                             )
                             try:
@@ -270,7 +270,7 @@ class DraftKingsSource(DataSource):
                                 else:
                                     events = await self._fetch_sport(url, sport_key)
                             except Exception as retry_err:
-                                logger.warning("DraftKings: retry for %s also failed: %s", sport_key, retry_err)
+                                logger.warning("DraftKings: retry %s failed: %s", sport_key, retry_err)
                 except Exception as e:
                     logger.warning("DraftKings prefetch %s failed: %s", sport_key, e)
                 finally:
@@ -281,9 +281,9 @@ class DraftKingsSource(DataSource):
                         old = self._cache.get(sport_key)
                         if old and old[0]:
                             self._cache[sport_key] = (old[0], time.time())
-                    logger.info("DraftKings prefetch: %s complete (%d events, cached=%d)", sport_key, len(events), len(self._cache.get(sport_key, ([], 0))[0]))
+                    logger.info("DraftKings deep: %s — %d events (cached=%d)", sport_key, len(events), len(self._cache.get(sport_key, ([], 0))[0]))
                 await asyncio.sleep(0.3)
-            logger.info("DraftKings: Prefetch cycle #%d complete (%d sports)", cycle, len(all_sports))
+            logger.info("DraftKings: Cycle #%d complete (%d sports)", cycle, len(all_sports))
             await asyncio.sleep(1)
 
     async def _parallel_capture(
