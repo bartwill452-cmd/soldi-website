@@ -256,7 +256,28 @@ class DraftKingsSource(DataSource):
                             if url is None:
                                 continue
                             events = await self._fetch_sport(url, sport_key)
-                        self._cache[sport_key] = (events, time.time())
+
+                        # If we got 0 events for a core sport, the browser may be
+                        # degraded — restart it and retry once
+                        if not events and sport_key in core_sports:
+                            logger.warning(
+                                "DraftKings: 0 events for core sport %s, restarting browser and retrying",
+                                sport_key,
+                            )
+                            await self._restart_browser()
+                            if is_tennis:
+                                events = await self._fetch_tennis(sport_key)
+                            else:
+                                events = await self._fetch_sport(url, sport_key)
+
+                        # Only update cache if we got data — don't replace good data with empty
+                        if events:
+                            self._cache[sport_key] = (events, time.time())
+                        else:
+                            # Touch timestamp so stale data stays served
+                            old = self._cache.get(sport_key)
+                            if old and old[0]:
+                                self._cache[sport_key] = (old[0], time.time())
                     logger.info("DraftKings prefetch: %s complete (%d events)", sport_key, len(events))
                 except Exception as e:
                     logger.warning("DraftKings prefetch %s failed: %s", sport_key, e)
@@ -1099,6 +1120,39 @@ class DraftKingsSource(DataSource):
                 by_id[ev.id] = ev
 
         return list(by_id.values())
+
+    # ── Browser Management ─────────────────────────────────────────────
+
+    async def _restart_browser(self) -> None:
+        """Close and relaunch the Playwright browser to clear degraded state."""
+        logger.info("DraftKings: Restarting browser...")
+        try:
+            if self._page:
+                await self._page.close()
+        except Exception:
+            pass
+        try:
+            if self._context:
+                await self._context.close()
+        except Exception:
+            pass
+        try:
+            if self._browser:
+                await self._browser.close()
+        except Exception:
+            pass
+        try:
+            if self._pw:
+                await self._pw.stop()
+        except Exception:
+            pass
+        self._page = None
+        self._context = None
+        self._browser = None
+        self._pw = None
+        await asyncio.sleep(1)
+        await self._ensure_browser()
+        logger.info("DraftKings: Browser restarted successfully")
 
     # ── Cleanup ───────────────────────────────────────────────────────
 
