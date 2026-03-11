@@ -76,7 +76,8 @@ const TARGET_ADDRESSES = [
 // ============================================
 const processedBets = new Set();
 const traderNameCache = {};
-const traderProfitCache = {};
+const traderProfitCache = {};   // { addr: { value, fetchedAt } }
+const PROFIT_CACHE_TTL = 10 * 60 * 1000; // re-fetch PnL every 10 minutes
 
 // ============================================
 // USER TRACKING (loaded from shared JSON file)
@@ -204,20 +205,28 @@ async function getProfileName(addr) {
 }
 
 async function getTraderProfit(addr) {
-  if (traderProfitCache[addr]) return traderProfitCache[addr];
+  const cached = traderProfitCache[addr];
+  if (cached && (Date.now() - cached.fetchedAt < PROFIT_CACHE_TTL)) return cached.value;
+  // If cached N/A, still retry after TTL
   try {
     const profile = await apiFetch(`${PROFILE_API}/public-profile`, { address: addr });
-    const pnl = parseFloat(profile.pnl || profile.profitLoss || profile.allTimePnl || profile.totalPnl);
+    // Use ?? so that 0 is a valid value (|| would skip 0)
+    const raw = profile.pnl ?? profile.profitLoss ?? profile.allTimePnl ?? profile.totalPnL ?? profile.totalPnl ?? null;
+    const pnl = raw !== null ? parseFloat(raw) : NaN;
     if (!isNaN(pnl)) {
-      const formatted = pnl >= 0 ? `+$${pnl.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : `-$${Math.abs(pnl).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
-      traderProfitCache[addr] = formatted;
+      const emoji = pnl >= 0 ? '🟢' : '🔴';
+      const formatted = pnl >= 0
+        ? `${emoji} +$${pnl.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+        : `${emoji} -$${Math.abs(pnl).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      traderProfitCache[addr] = { value: formatted, fetchedAt: Date.now() };
       return formatted;
     }
-    traderProfitCache[addr] = 'N/A';
-    return 'N/A';
+    traderProfitCache[addr] = { value: null, fetchedAt: Date.now() };
+    return null;
   } catch {
-    traderProfitCache[addr] = 'N/A';
-    return 'N/A';
+    // Don't permanently cache failures — allow retry after TTL
+    if (!cached) traderProfitCache[addr] = { value: null, fetchedAt: Date.now() };
+    return cached?.value ?? null;
   }
 }
 
@@ -326,7 +335,8 @@ async function checkTrader(addr) {
 
   // Build embed fields
   const fields = [
-    { name: '\u{1F464} Trader', value: `[${traderName}](${traderUrl}) (${traderProfit})\n\`${addr}\``, inline: false },
+    { name: '\u{1F464} Trader', value: `[${traderName}](${traderUrl})\n\`${addr}\``, inline: true },
+    { name: '\u{1F4B0} All-Time PnL', value: traderProfit || 'N/A', inline: true },
     { name: '\u{1F3AF} Market', value: (title || '').slice(0, 100), inline: false },
     { name: '\u{1F4CA} Outcome', value: outcome || '-', inline: true },
     { name: '\u{1F550} Trade Time', value: tradeTimeStr, inline: true },
