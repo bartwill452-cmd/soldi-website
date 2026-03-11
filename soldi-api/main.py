@@ -67,6 +67,19 @@ _REFRESH_PAUSE = 0
 
 
 
+def _log_memory_usage(label: str = "") -> None:
+    """Log current process RSS memory usage."""
+    import resource
+    rss_kb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    # macOS reports in bytes, Linux in KB
+    import platform
+    if platform.system() == "Darwin":
+        rss_mb = rss_kb / (1024 * 1024)
+    else:
+        rss_mb = rss_kb / 1024
+    logger.info("[Memory] %s RSS=%.0fMB", label, rss_mb)
+
+
 async def _background_refresh_loop() -> None:
     """Continuously refresh odds for ALL active sports in parallel.
 
@@ -108,6 +121,11 @@ async def _background_refresh_loop() -> None:
             "Refresh cycle #%d: %d/%d sports in %.1fs — next in %ds",
             cycle, refreshed, len(_ACTIVE_SPORTS), elapsed, _REFRESH_PAUSE,
         )
+
+        # Log memory every 10 cycles (~30-60 seconds) for OOM diagnostics
+        if cycle % 10 == 0:
+            _log_memory_usage(f"cycle#{cycle}")
+
         await asyncio.sleep(_REFRESH_PAUSE)
 
 
@@ -502,11 +520,15 @@ app.include_router(router)
 
 @app.get("/health")
 async def health():
+    import resource, platform
+    rss_kb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    rss_mb = rss_kb / (1024 * 1024) if platform.system() == "Darwin" else rss_kb / 1024
     return {
         "status": "ok",
         "version": "2.0.0",
         "sources": source_count if data_source else 0,
         "cache": cache.stats(),
+        "memory_rss_mb": round(rss_mb),
     }
 
 

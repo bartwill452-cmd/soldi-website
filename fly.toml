@@ -11,8 +11,21 @@ primary_region = 'iad'
   min_machines_running = 1
   processes = ['app']
 
+  # Health checks — Fly auto-restarts the machine when these fail
+  [[http_service.checks]]
+    grace_period = "60s"
+    interval = "15s"
+    method = "GET"
+    path = "/api/health"
+    timeout = "5s"
+
 [deploy]
   strategy = 'immediate'
+
+# Auto-restart machine on OOM or crash (max 5 restarts)
+[[restart]]
+  policy = "on-failure"
+  max_retries = 5
 
 [[vm]]
   memory = '4096'

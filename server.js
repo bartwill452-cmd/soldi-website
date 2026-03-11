@@ -948,7 +948,19 @@ app.get('/api/validate-key', (req, res) => {
 // GET /api/health - Service health check
 // ============================================
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', uptime: process.uptime(), timestamp: new Date().toISOString(), version: '2.1.0' });
+  const mem = process.memoryUsage();
+  res.json({
+    status: 'ok',
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+    version: '2.1.0',
+    memory: {
+      rss_mb: Math.round(mem.rss / 1048576),
+      heap_used_mb: Math.round(mem.heapUsed / 1048576),
+      heap_total_mb: Math.round(mem.heapTotal / 1048576),
+      external_mb: Math.round(mem.external / 1048576),
+    },
+  });
 });
 
 // GET /api/health/detailed - Proxy to SoldiAPI for per-scraper health data
@@ -4067,6 +4079,23 @@ app.post('/api/report', requireAuth, async (req, res) => {
 });
 
 // ============================================
+// MEMORY MONITOR — logs RSS every 5 minutes for OOM diagnostics
+// ============================================
+function startMemoryMonitor() {
+  setInterval(() => {
+    const mem = process.memoryUsage();
+    const rssMB = Math.round(mem.rss / 1048576);
+    const heapMB = Math.round(mem.heapUsed / 1048576);
+    console.log(`[Memory] RSS=${rssMB}MB Heap=${heapMB}MB`);
+    // Force GC if RSS exceeds 400MB (soft limit — hard limit is 512MB via --max-old-space-size)
+    if (global.gc && rssMB > 400) {
+      console.log('[Memory] RSS high — triggering GC');
+      global.gc();
+    }
+  }, 5 * 60 * 1000); // every 5 minutes
+}
+
+// ============================================
 // KEEP-ALIVE SELF-PING (prevents Render free tier spin-down)
 // ============================================
 function keepAlive() {
@@ -4084,4 +4113,5 @@ const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
   console.log(`Soldi server running on http://localhost:${PORT}`);
   keepAlive();
+  startMemoryMonitor();
 });
