@@ -4021,6 +4021,226 @@ setTimeout(() => {
   }, 6 * 60 * 60 * 1000); // 6 hours
 }, 45000);
 
+// ── Static guide supplements ────────────────────────────────────
+// Extra HTML appended to Google-Doc guides at serve-time.
+// Keeps the Google Doc as the single source of truth while letting
+// us add rich content that doesn't belong in a shared doc.
+const GUIDE_SUPPLEMENTS = {
+  'selling-ai-websites': `
+<hr style="margin:48px 0 32px;border:none;border-top:2px solid rgba(255,255,255,0.08)">
+<h2>Finding Customers on Facebook</h2>
+<p>The easiest way to find clients who need websites is to go where small businesses are already advertising their services without a website.</p>
+
+<h3>Facebook Marketplace</h3>
+<ul>
+  <li>Search your local area on Facebook Marketplace for service businesses (roofers, plumbers, landscapers, cleaners, movers, etc.)</li>
+  <li>Look for listings that only have a phone number and no website link</li>
+  <li>These businesses are actively trying to get customers but have no online presence</li>
+  <li>Message them directly: <em>"Hey, I saw your listing on Marketplace. I build websites for local businesses like yours &mdash; would you be interested in a free mockup?"</em></li>
+</ul>
+
+<h3>Facebook Groups (Local &amp; City-Dependent)</h3>
+<ul>
+  <li>Join local Facebook groups in your city: <strong>"[City] Small Business Owners"</strong>, <strong>"[City] Buy Sell Trade"</strong>, <strong>"[City] Home Services"</strong></li>
+  <li>Look for service providers posting their business (handyman, pressure washing, lawn care, etc.)</li>
+  <li>These are typically owner-operators who handle everything themselves &mdash; they don't have time to build a website</li>
+  <li>Engage with their posts first, then DM them about your service</li>
+  <li>Post value in the group: <em>"Free website audit for any local business &mdash; DM me your business name"</em></li>
+</ul>
+
+<h3>Why These Leads Convert</h3>
+<ul>
+  <li>They're already spending time marketing on Facebook &mdash; they understand the need for customers</li>
+  <li>They don't have a website, so the value proposition is obvious</li>
+  <li>Local/city-dependent businesses (plumbers, roofers, landscapers) rely on local customers finding them online</li>
+  <li>A $25-50/month website + hosting plan is an easy sell when they're already paying for ads</li>
+</ul>
+
+<hr style="margin:48px 0 32px;border:none;border-top:2px solid rgba(255,255,255,0.08)">
+<h2>AI Website Creation &mdash; Command Prompt (Copy &amp; Paste)</h2>
+<p>Use the prompt below in <strong>Claude</strong>, <strong>Lovable</strong>, or <strong>LandingSite.ai</strong> to generate a modern, professional website for a local business.</p>
+
+<h3>Universal Website Builder Prompt</h3>
+<p>Copy and paste this prompt into your AI builder:</p>
+<div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:20px;margin:16px 0;font-family:monospace;font-size:13px;line-height:1.7;white-space:pre-wrap;overflow-x:auto">Create a modern, high-converting website for a local service business.
+
+Business Information:
+Business Name: [BUSINESS NAME]
+Business Type: [ROOFING / PLUMBING / LANDSCAPING / ETC]
+Location: [CITY, STATE]
+
+Contact Information:
+Phone Number: [PHONE]
+Email: [EMAIL]
+Business Hours: [HOURS]
+Address: [ADDRESS]
+
+Services Offered:
+[List 3-6 main services]
+
+Website Requirements:
+
+Design
+- Modern, clean, professional design
+- Mobile responsive
+- Fast loading
+- SEO optimized structure
+- Clear call-to-actions
+
+Sections to Include:
+
+1. Hero Section
+- Strong headline
+- Short value proposition
+- "Get a Free Quote" button
+- Click-to-call phone button
+
+2. Services Section
+- Icons with service descriptions
+- Clear benefits of each service
+
+3. About Section
+- Business story
+- Experience and trust elements
+- Licensed/insured badges
+
+4. Testimonials
+- Generate 3-5 realistic testimonials
+
+5. Gallery
+- Example work photos or placeholders
+
+6. FAQ Section
+- Generate 5-7 common customer questions
+
+7. Contact Section
+- Contact form
+- Phone, Email
+- Google Maps integration
+
+8. Service Area Section
+- List surrounding cities served
+
+9. Footer
+- Business information
+- Social media links
+- Copyright
+- Quick navigation
+
+Color Scheme (choose for industry):
+- Blue = plumbing / HVAC
+- Green = landscaping
+- Red / black = roofing
+- Neutral professional tones
+
+Additional Features:
+- Mobile click-to-call button
+- Lead capture contact form
+- SEO friendly headings
+- Conversion optimized layout
+- Trust badges and social proof</div>
+
+<h3>Using Claude to Build the Backend</h3>
+<p>If you want Claude to generate the full codebase, paste this follow-up prompt after the first one:</p>
+<div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:20px;margin:16px 0;font-family:monospace;font-size:13px;line-height:1.7;white-space:pre-wrap;overflow-x:auto">Now generate the complete website code.
+
+Requirements:
+- Use React + Tailwind CSS
+- Create a modern responsive design
+- Include reusable components
+- Create a working contact form
+- Include a backend using Node.js and Express
+- Add API endpoint for form submissions
+- Structure the project cleanly
+
+Project Structure:
+/frontend
+  /components
+  /pages
+  /styles
+
+/backend
+  /server.js
+  /routes
+  /controllers
+
+The contact form should:
+- Collect name, email, phone, message
+- Send submissions to email or database
+
+Return the full code with instructions on how to run locally and deploy.</div>
+
+<h3>Using Lovable (Fastest Method)</h3>
+<ol>
+  <li>Go to <strong>Lovable</strong></li>
+  <li>Paste the Universal Website Builder Prompt above</li>
+  <li>Let the AI generate the site</li>
+  <li>Review the design</li>
+  <li>Click <strong>Export Code</strong> and download the project</li>
+</ol>
+<p>Lovable will generate the entire frontend automatically &mdash; no coding required.</p>
+
+<hr style="margin:48px 0 32px;border:none;border-top:2px solid rgba(255,255,255,0.08)">
+<h2>How to Deploy the Website</h2>
+<p>Once the site is generated, you need to host it online.</p>
+
+<h3>Recommended Hosting Platforms</h3>
+<ul>
+  <li><strong>Vercel</strong> &mdash; best for React/Next.js sites</li>
+  <li><strong>Netlify</strong> &mdash; great for static sites</li>
+  <li><strong>Cloudflare Pages</strong> &mdash; fast global CDN</li>
+</ul>
+
+<h3>Deployment Steps</h3>
+<ol>
+  <li>Create a free account on Vercel or Netlify</li>
+  <li>Upload the website files or connect your GitHub repo</li>
+  <li>Click <strong>Deploy</strong></li>
+  <li>Your site goes live instantly with a temporary URL like <code>businessname.vercel.app</code></li>
+</ol>
+
+<h3>Connecting the Client's Domain</h3>
+<p>Buy the domain from <strong>Namecheap</strong> or <strong>GoDaddy</strong>:</p>
+<ol>
+  <li>Purchase the domain (e.g., <code>businessname.com</code>)</li>
+  <li>Go to DNS settings in the domain registrar</li>
+  <li>Add the hosting provider's nameservers</li>
+  <li>Connect the domain inside Vercel/Netlify settings</li>
+</ol>
+<p>Result: <code>www.businessname.com</code> is now live for the client.</p>
+
+<hr style="margin:48px 0 32px;border:none;border-top:2px solid rgba(255,255,255,0.08)">
+<h2>What to Send the Client After Delivery</h2>
+<p>Send them:</p>
+<ul>
+  <li>Website link</li>
+  <li>Login credentials (if applicable)</li>
+  <li>Monthly maintenance plan details</li>
+  <li>Instructions for requesting updates</li>
+</ul>
+
+<h3>Example Client Message</h3>
+<div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:20px;margin:16px 0;font-size:14px;line-height:1.7">
+Your new website is now live!<br><br>
+Website: www.[businessname].com<br><br>
+If you ever need updates like adding photos, changing services, or updating contact info, just message me and I'll handle it.<br><br>
+Your hosting and maintenance plan keeps the site secure, updated, and running fast.
+</div>
+
+<hr style="margin:48px 0 32px;border:none;border-top:2px solid rgba(255,255,255,0.08)">
+<h2>Scaling to Recurring Revenue</h2>
+<p>Once you reach <strong>20 clients at $25/month</strong>, you're making <strong>$500/month in recurring revenue</strong> &mdash; and the websites require almost no maintenance.</p>
+
+<h3>Upsell Services</h3>
+<ul>
+  <li><strong>Local SEO</strong> &mdash; help them rank on Google Maps</li>
+  <li><strong>Google Review Automation</strong> &mdash; automated review request campaigns</li>
+  <li><strong>AI Chatbots</strong> &mdash; embed a support chatbot on their site (use the Soldi Chatbot Builder!)</li>
+  <li><strong>Lead Capture Systems</strong> &mdash; advanced forms, CRM integrations</li>
+</ul>
+`,
+};
+
 // GET /api/guides/:slug — returns guide content (JWT auth required)
 app.get('/api/guides/:slug', requireAuth, (req, res) => {
   const slug = req.params.slug;
@@ -4028,9 +4248,16 @@ app.get('/api/guides/:slug', requireAuth, (req, res) => {
   if (!cached) {
     return res.status(404).json({ error: 'Guide not found' });
   }
+
+  // Append any static supplement content for this guide
+  let html = cached.html || '';
+  if (GUIDE_SUPPLEMENTS[slug]) {
+    html += GUIDE_SUPPLEMENTS[slug];
+  }
+
   res.json({
     title: cached.title,
-    html: cached.html,
+    html,
     subGuides: cached.subGuides || [],
     fetchedAt: cached.fetchedAt,
   });

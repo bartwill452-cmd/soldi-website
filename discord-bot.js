@@ -227,6 +227,50 @@ client.on('messageCreate', async (message) => {
     return;
   }
 
+  // !commands — Comprehensive command walkthrough (works in guild + DMs)
+  if (message.content.toLowerCase() === '!commands') {
+    await sendEmbed(message.channel.id, {
+      title: 'Soldi Bot — All Commands',
+      description: 'Here\'s everything Soldi Bot can do. Most commands work in DMs — just message me directly!',
+      color: COLORS.GREEN,
+      fields: [
+        {
+          name: '🔐  Membership Verification',
+          value: '**`!verify`** — Verify your Whop membership to get the paid member role.\n' +
+                 '> Works in server channels or DMs. The bot will DM you and ask for your Whop email.\n' +
+                 '> Example: Type `!verify` in any channel, then check your DMs.',
+          inline: false,
+        },
+        {
+          name: '📊  Polymarket Whale Tracker',
+          value: '**`!track 0x...`** — Track a Polymarket wallet address (max 50).\n' +
+                 '> You\'ll get DM alerts when that wallet places a bet.\n' +
+                 '> Example: `!track 0xAbC123...` (send in DMs)\n\n' +
+                 '**`!untrack 0x...`** — Stop tracking a wallet address.\n' +
+                 '> Example: `!untrack 0xAbC123...` (send in DMs)\n\n' +
+                 '**`!mytrackers`** — See all the wallets you\'re currently tracking.\n\n' +
+                 '**`!whales`** — View the default list of whale wallets being tracked.',
+          inline: false,
+        },
+        {
+          name: '🩺  System Health',
+          value: '**`!status`** — Check the health of all Soldi services.\n' +
+                 '> Shows uptime for the website, odds engine, Discord bot, and more.\n' +
+                 '> Works in both server channels and DMs.',
+          inline: false,
+        },
+        {
+          name: '❓  Help',
+          value: '**`!help`** — Quick command list (DMs only).\n' +
+                 '**`!commands`** — This detailed walkthrough (works everywhere).',
+          inline: false,
+        },
+      ],
+      footer: { text: 'Soldi Bot • DM me to use tracker commands' },
+    });
+    return;
+  }
+
   // !status — Check health of all Soldi services (works in guild + DMs)
   if (message.content.toLowerCase() === '!status') {
     const statusMsg = await message.reply('🔍 Checking all services...');
