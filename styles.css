@@ -487,6 +487,49 @@ button { cursor: pointer; font-family: inherit; }
   margin-bottom: 16px;
 }
 .badge-purple { color: #a855f7; background: rgba(168, 85, 247, 0.1); border-color: rgba(168, 85, 247, 0.2); }
+.badge-cyan { color: #06b6d4; background: rgba(6, 182, 212, 0.1); border-color: rgba(6, 182, 212, 0.2); }
+
+/* AI Tools Visual */
+.ai-tools-visual {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  padding: 20px;
+}
+.ai-tool-item {
+  background: var(--bg-card);
+  border: 1px solid var(--border-strong);
+  border-radius: 16px;
+  padding: 24px 20px;
+  text-align: center;
+  flex: 1;
+  transition: transform 0.3s, border-color 0.3s;
+}
+.ai-tool-item:hover {
+  transform: translateY(-4px);
+  border-color: var(--border-stronger);
+}
+.ai-tool-icon {
+  width: 56px; height: 56px;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.04);
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 12px;
+}
+.ai-tool-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-heading);
+  margin-bottom: 4px;
+}
+.ai-tool-price {
+  font-size: 13px;
+  font-weight: 600;
+  color: #22c55e;
+}
+@media (max-width: 768px) {
+  .ai-tools-visual { flex-direction: column; gap: 12px; }
+}
 .tool-info h3 {
   font-size: 32px;
   font-weight: 800;
