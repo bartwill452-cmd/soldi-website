@@ -192,16 +192,16 @@ class DraftKingsSource(DataSource):
     async def _prefetch_all(self) -> None:
         await asyncio.sleep(3)
         logger.info("DraftKings: Starting continuous background prefetch")
-        # Prioritize simple sports (MMA/boxing = main page only) first,
-        # then heavier sports with sub-pages (props, periods)
-        all_sports = [
-            # Prioritize active sports first (these are in _ACTIVE_SPORTS)
+
+        # Core sports get base game lines first (quick pass), then deep scrape
+        core_sports = [
             "basketball_nba",
             "basketball_ncaab",
             "icehockey_nhl",
             "baseball_mlb",
             "mma_mixed_martial_arts",
-            # Then other sports
+        ]
+        extra_sports = [
             "boxing_boxing",
             "americanfootball_nfl",
             "americanfootball_ncaaf",
@@ -215,9 +215,35 @@ class DraftKingsSource(DataSource):
             "tennis_atp",
             "tennis_wta",
         ]
+        all_sports = core_sports + extra_sports
         cycle = 0
         while True:
             cycle += 1
+
+            # ── Phase 1: Quick pass — base game lines for ALL core sports ──
+            # Gets ML / Spread / Total for each sport in ~15s per sport.
+            # All 5 core sports have data within ~90 seconds.
+            if cycle == 1:
+                logger.info("DraftKings: Phase 1 — quick base-line pass for %d core sports", len(core_sports))
+            for sport_key in (core_sports if cycle == 1 else []):
+                try:
+                    url = _DK_SPORT_URLS.get(sport_key)
+                    if url is None:
+                        continue
+                    async with self._lock:
+                        await self._ensure_browser()
+                        events = await self._navigate_and_capture(url, sport_key)
+                    if events:
+                        self._cache[sport_key] = (events, time.time())
+                    logger.info(
+                        "DraftKings quick pass: %s — %d events (base lines)",
+                        sport_key, len(events),
+                    )
+                except Exception as e:
+                    logger.warning("DraftKings quick pass %s failed: %s", sport_key, e)
+                await asyncio.sleep(0.3)
+
+            # ── Phase 2: Deep pass — full sub-pages for all sports ──
             for sport_key in all_sports:
                 try:
                     async with self._lock:
@@ -234,7 +260,7 @@ class DraftKingsSource(DataSource):
                     logger.info("DraftKings prefetch: %s complete (%d events)", sport_key, len(events))
                 except Exception as e:
                     logger.warning("DraftKings prefetch %s failed: %s", sport_key, e)
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(0.3)
             logger.info("DraftKings: Prefetch cycle #%d complete (%d sports)", cycle, len(all_sports))
             await asyncio.sleep(1)
 
