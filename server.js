@@ -356,6 +356,18 @@ function flushAnalyticsSync() {
 process.on('SIGTERM', () => { flushAnalyticsSync(); process.exit(0); });
 process.on('SIGINT', () => { flushAnalyticsSync(); process.exit(0); });
 
+// Prevent silent crashes — log and restart via supervisord
+process.on('uncaughtException', (err) => {
+  console.error('[FATAL] Uncaught exception:', err.message, err.stack);
+  flushAnalyticsSync();
+  process.exit(1);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[FATAL] Unhandled rejection:', reason);
+  flushAnalyticsSync();
+  process.exit(1);
+});
+
 // Seed owner account on first run
 async function seedAdminAccount() {
   const admins = loadAdmins();
