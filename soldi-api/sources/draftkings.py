@@ -501,27 +501,41 @@ class DraftKingsSource(DataSource):
                 pass
 
         self._page.on("response", on_response)
+        is_combat = "mma" in sport_key or "boxing" in sport_key
+        # UFC page is heavy with lazy-loaded fight cards — needs longer timeouts
+        nav_timeout = 45000 if is_combat else 15000
+        data_timeout = 10.0 if is_combat else 4.0
         try:
-            await self._page.goto(url, timeout=15000, wait_until="domcontentloaded")
+            await self._page.goto(url, timeout=nav_timeout, wait_until="domcontentloaded")
             # Wait for first API response
             try:
-                await asyncio.wait_for(got_data.wait(), timeout=4.0)
+                await asyncio.wait_for(got_data.wait(), timeout=data_timeout)
             except asyncio.TimeoutError:
                 pass  # Move on — response may not arrive for empty pages
 
-            # For MMA/boxing, scroll page to trigger lazy-loaded fight cards
-            is_combat = "mma" in sport_key or "boxing" in sport_key
-            if is_combat and captured:
-                # Give time for additional responses after first one
-                await asyncio.sleep(1.5)
-                # Scroll down to trigger lazy loading of more fights
+            # For MMA/boxing, aggressively scroll to trigger all lazy-loaded fight cards
+            if is_combat:
+                if captured:
+                    # Give time for additional responses after first one
+                    await asyncio.sleep(2.0)
+                # Scroll to bottom to trigger lazy loading
                 try:
                     await self._page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
                     await asyncio.sleep(2.0)
-                    # Scroll a couple more times for pagination
-                    for _ in range(3):
-                        await self._page.evaluate("window.scrollBy(0, 800)")
+                    # Keep scrolling in chunks — DK loads fight cards in batches
+                    prev_count = len(captured)
+                    for scroll_round in range(8):
+                        await self._page.evaluate("window.scrollBy(0, 1000)")
+                        await asyncio.sleep(1.0)
+                        # Also scroll to absolute bottom each round
+                        await self._page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
                         await asyncio.sleep(0.8)
+                        # If we got new data from scrolling, reset wait
+                        if len(captured) > prev_count:
+                            prev_count = len(captured)
+                            logger.info("DraftKings MMA: scroll round %d triggered new data (%d captures)", scroll_round + 1, len(captured))
+                    # Final wait for any trailing responses
+                    await asyncio.sleep(1.5)
                 except Exception:
                     pass
             elif captured:
