@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Discord Bot Guide | Soldi</title>
+  <link rel="icon" type="image/png" href="/images/soldi-logo.png">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #050507;
+      color: #fff;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      line-height: 1.7;
+      min-height: 100vh;
+    }
+    .container {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 40px 24px 80px;
+    }
+    .logo-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 48px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .logo-icon {
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, #22c55e, #10b981);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      font-size: 20px;
+      color: #050507;
+    }
+    .logo-text { font-size: 20px; font-weight: 700; }
+    .back-link {
+      color: #22c55e;
+      text-decoration: none;
+      font-size: 14px;
+      margin-left: auto;
+    }
+    .back-link:hover { text-decoration: underline; }
+    h1 {
+      font-size: clamp(28px, 5vw, 40px);
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      margin-bottom: 8px;
+    }
+    h1 span { color: #5865F2; }
+    .subtitle {
+      color: #9ca3af;
+      font-size: 17px;
+      margin-bottom: 48px;
+    }
+
+    /* Section styles */
+    .section {
+      margin-bottom: 48px;
+    }
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+    .section-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+    .section-icon.verify { background: rgba(88, 101, 242, 0.15); }
+    .section-icon.tracker { background: rgba(34, 197, 94, 0.12); }
+    .section-icon.status { background: rgba(250, 204, 21, 0.12); }
+    .section-icon.help { background: rgba(96, 165, 250, 0.12); }
+    .section-icon.tips { background: rgba(244, 114, 182, 0.12); }
+    .section h2 {
+      font-size: 22px;
+      font-weight: 700;
+    }
+    .section p {
+      color: #d4d4d8;
+      font-size: 15px;
+      line-height: 1.8;
+    }
+    .section p + p { margin-top: 12px; }
+    .section a {
+      color: #22c55e;
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .section a:hover { text-decoration: underline; }
+
+    /* Command card */
+    .cmd-card {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 12px;
+      padding: 20px;
+      margin-top: 16px;
+      margin-bottom: 12px;
+    }
+    .cmd-card + .cmd-card { margin-top: 12px; }
+    .cmd-name {
+      display: inline-block;
+      background: rgba(88, 101, 242, 0.15);
+      border: 1px solid rgba(88, 101, 242, 0.25);
+      color: #818cf8;
+      font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
+      font-size: 15px;
+      padding: 4px 12px;
+      border-radius: 6px;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+    .cmd-name.green {
+      background: rgba(34, 197, 94, 0.1);
+      border-color: rgba(34, 197, 94, 0.2);
+      color: #22c55e;
+    }
+    .cmd-name.yellow {
+      background: rgba(250, 204, 21, 0.1);
+      border-color: rgba(250, 204, 21, 0.2);
+      color: #facc15;
+    }
+    .cmd-desc {
+      color: #a1a1aa;
+      font-size: 14px;
+      line-height: 1.7;
+    }
+    .cmd-desc strong { color: #d4d4d8; font-weight: 600; }
+    .cmd-example {
+      display: block;
+      margin-top: 8px;
+      background: rgba(0,0,0,0.3);
+      border: 1px solid rgba(255,255,255,0.04);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
+      font-size: 13px;
+      color: #71717a;
+    }
+    .cmd-example span { color: #22c55e; }
+    .cmd-where {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      margin-left: 8px;
+      vertical-align: middle;
+    }
+    .cmd-where.dm {
+      background: rgba(96, 165, 250, 0.12);
+      color: #60a5fa;
+    }
+    .cmd-where.anywhere {
+      background: rgba(34, 197, 94, 0.1);
+      color: #22c55e;
+    }
+    .cmd-where.server {
+      background: rgba(250, 204, 21, 0.1);
+      color: #facc15;
+    }
+
+    /* Quick ref table */
+    .quick-ref {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 16px;
+      font-size: 14px;
+    }
+    .quick-ref th {
+      text-align: left;
+      padding: 12px 16px;
+      background: rgba(255,255,255,0.04);
+      color: #a1a1aa;
+      font-weight: 600;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .quick-ref th:first-child { border-radius: 8px 0 0 0; }
+    .quick-ref th:last-child { border-radius: 0 8px 0 0; }
+    .quick-ref td {
+      padding: 10px 16px;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      color: #d4d4d8;
+    }
+    .quick-ref td:first-child {
+      font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
+      color: #818cf8;
+      font-weight: 600;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+    .quick-ref tr:last-child td { border-bottom: none; }
+    .quick-ref tr:hover td { background: rgba(255,255,255,0.02); }
+
+    /* Info boxes */
+    .info-box {
+      border-radius: 12px;
+      padding: 24px;
+      margin: 24px 0;
+    }
+    .info-box.discord {
+      background: rgba(88, 101, 242, 0.06);
+      border: 1px solid rgba(88, 101, 242, 0.15);
+    }
+    .info-box.green {
+      background: rgba(34, 197, 94, 0.06);
+      border: 1px solid rgba(34, 197, 94, 0.15);
+    }
+    .info-box.yellow {
+      background: rgba(250, 204, 21, 0.06);
+      border: 1px solid rgba(250, 204, 21, 0.15);
+    }
+    .info-box h3 {
+      font-size: 17px;
+      margin-bottom: 10px;
+    }
+    .info-box.discord h3 { color: #818cf8; }
+    .info-box.green h3 { color: #22c55e; }
+    .info-box.yellow h3 { color: #facc15; }
+    .info-box p {
+      color: #d4d4d8;
+      font-size: 15px;
+    }
+    .info-box ul {
+      color: #d4d4d8;
+      font-size: 15px;
+      padding-left: 20px;
+      margin-top: 8px;
+    }
+    .info-box li { margin-bottom: 4px; }
+
+    .command {
+      display: inline-block;
+      background: rgba(34, 197, 94, 0.1);
+      border: 1px solid rgba(34, 197, 94, 0.2);
+      color: #22c55e;
+      font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
+      font-size: 13px;
+      padding: 2px 8px;
+      border-radius: 5px;
+      font-weight: 600;
+    }
+
+    .divider {
+      height: 1px;
+      background: rgba(255,255,255,0.06);
+      margin: 48px 0;
+    }
+
+    .cta-box {
+      text-align: center;
+      margin-top: 48px;
+      padding-top: 32px;
+      border-top: 1px solid rgba(255,255,255,0.06);
+    }
+    .cta-btn {
+      display: inline-block;
+      padding: 14px 40px;
+      background: #5865F2;
+      color: #fff;
+      font-weight: 700;
+      border-radius: 10px;
+      text-decoration: none;
+      font-size: 16px;
+      transition: opacity 0.2s;
+    }
+    .cta-btn:hover { opacity: 0.9; }
+    .cta-btn.green {
+      background: linear-gradient(135deg, #22c55e, #10b981);
+      color: #050507;
+      margin-left: 12px;
+    }
+    .help-text {
+      color: #52525b;
+      font-size: 13px;
+      margin-top: 20px;
+    }
+    @media (max-width: 600px) {
+      .cta-btn { display: block; margin: 8px 0; }
+      .cta-btn.green { margin-left: 0; }
+      .quick-ref { font-size: 13px; }
+      .quick-ref th, .quick-ref td { padding: 8px 10px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="logo-bar">
+      <div class="logo-icon">S</div>
+      <span class="logo-text">Soldi</span>
+      <a href="https://trysoldi.com" class="back-link">Go to Dashboard</a>
+    </div>
+
+    <h1>Soldi <span>Discord Bot</span> Guide</h1>
+    <p class="subtitle">Everything the Soldi bot can do and how to use each command.</p>
+
+    <!-- Quick Reference -->
+    <div class="section">
+      <div class="section-header">
+        <div class="section-icon help">📋</div>
+        <h2>Quick Reference</h2>
+      </div>
+      <table class="quick-ref">
+        <thead>
+          <tr>
+            <th>Command</th>
+            <th>What It Does</th>
+            <th>Where</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>!verify</td><td>Link your Whop account and get the Paid Member role</td><td>Server</td></tr>
+          <tr><td>!track 0x...</td><td>Track a Polymarket wallet and get DM alerts</td><td>DMs</td></tr>
+          <tr><td>!untrack 0x...</td><td>Stop tracking a wallet</td><td>DMs</td></tr>
+          <tr><td>!mytrackers</td><td>List all wallets you're tracking</td><td>DMs</td></tr>
+          <tr><td>!whales</td><td>View the default whale wallets we track</td><td>DMs</td></tr>
+          <tr><td>!pnl</td><td>See profit/loss stats for all tracked wallets</td><td>DMs</td></tr>
+          <tr><td>!status</td><td>Check if all Soldi services are running</td><td>Anywhere</td></tr>
+          <tr><td>!commands</td><td>Show the full command list inside Discord</td><td>Anywhere</td></tr>
+          <tr><td>!help</td><td>Quick command list</td><td>DMs</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Verification -->
+    <div class="section">
+      <div class="section-header">
+        <div class="section-icon verify">🔐</div>
+        <h2>Membership Verification</h2>
+      </div>
+      <p>Before you can access private channels or use the tracker commands, you need to verify your Whop membership. This links your Discord account to your Soldi subscription.</p>
+
+      <div class="cmd-card">
+        <div class="cmd-name">!verify</div>
+        <span class="cmd-where server">Server Channel</span>
+        <p class="cmd-desc">
+          Type this in any channel in the Soldi Discord server. The bot will send you a DM asking for the <strong>email address you used on Whop</strong>. Reply with your email and the bot checks your membership status. If you have an active subscription, you'll automatically get the <strong>Soldi Paid Member</strong> role which unlocks all private channels.
+        </p>
+        <code class="cmd-example"><span>!verify</span><br>→ Bot DMs you: "Please reply with the email address you used to purchase your Whop membership."<br>→ You reply: your@email.com<br>→ Bot: "✅ Verified! You now have the Soldi Paid Member role."</code>
+      </div>
+
+      <div class="info-box discord">
+        <h3>Troubleshooting</h3>
+        <ul>
+          <li>Make sure your DMs are open for server members. Go to Discord Settings → Privacy & Safety → Allow direct messages from server members.</li>
+          <li>Use the exact email you signed up with on Whop.</li>
+          <li>Your verification link expires after 30 minutes. If it times out, just type <span class="command">!verify</span> again.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Polymarket Whale Tracker -->
+    <div class="section">
+      <div class="section-header">
+        <div class="section-icon tracker">📊</div>
+        <h2>Polymarket Whale Tracker</h2>
+      </div>
+      <p>The whale tracker is one of the most powerful tools in Soldi. It monitors Polymarket wallets in real time and sends you a DM every time a tracked wallet places a bet. You can track up to 50 custom wallets on top of the default whale list we already monitor for you.</p>
+      <p>All tracker commands are sent via <strong>DM to the Soldi bot</strong>. Just click on the bot's name and message it directly.</p>
+
+      <div class="cmd-card">
+        <div class="cmd-name green">!track 0x...</div>
+        <span class="cmd-where dm">DMs Only</span>
+        <p class="cmd-desc">
+          Add a Polymarket wallet address to your personal tracking list. You can track up to <strong>50 addresses</strong>. The bot will automatically look up the trader's name on Polymarket if they have a public profile. Once tracked, you'll get a DM alert every time that wallet places a bet — including the market, position, amount, and odds.
+        </p>
+        <code class="cmd-example"><span>!track 0xac44cb78be973ec7d91b69678c4bdfa7009afbd7</span><br>→ Bot: "✅ Now tracking TheWhaleKing — You'll receive DM alerts when this address places a bet."</code>
+      </div>
+
+      <div class="cmd-card">
+        <div class="cmd-name green">!untrack 0x...</div>
+        <span class="cmd-where dm">DMs Only</span>
+        <p class="cmd-desc">
+          Remove a wallet from your tracking list. Use the same address you used when you added it.
+        </p>
+        <code class="cmd-example"><span>!untrack 0xac44cb78be973ec7d91b69678c4bdfa7009afbd7</span><br>→ Bot: "Stopped tracking 0xac44cb...fbd7"</code>
+      </div>
+
+      <div class="cmd-card">
+        <div class="cmd-name green">!mytrackers</div>
+        <span class="cmd-where dm">DMs Only</span>
+        <p class="cmd-desc">
+          See all the wallets you're currently tracking. Shows each address with a number label and tells you which ones are also in the default whale list. Also shows how many of your 50 slots you've used.
+        </p>
+        <code class="cmd-example"><span>!mytrackers</span><br>→ 1. 0xac44cb...fbd7 (default whale)<br>→ 2. 0x6a72f6...3ee<br>→ 3/50 slots used</code>
+      </div>
+
+      <div class="cmd-card">
+        <div class="cmd-name green">!whales</div>
+        <span class="cmd-where dm">DMs Only</span>
+        <p class="cmd-desc">
+          View the full list of default whale wallets that Soldi tracks automatically. These are the biggest and most profitable Polymarket traders. Their bets are posted in the <strong>#polymarket-tracker-bot</strong> channel and you can also get DM alerts by adding them to your personal list.
+        </p>
+        <code class="cmd-example"><span>!whales</span><br>→ Default Whale Addresses (38 wallets tracked)</code>
+      </div>
+
+      <div class="cmd-card">
+        <div class="cmd-name green">!pnl</div>
+        <span class="cmd-where dm">DMs Only</span>
+        <p class="cmd-desc">
+          View the all-time profit and loss for every wallet you're tracking plus all default whales. The bot fetches live data from Polymarket and shows each wallet's total profit or loss sorted from most to least profitable. This is great for figuring out which whales are worth following.
+        </p>
+        <code class="cmd-example"><span>!pnl</span><br>→ Fetching PnL for 42 wallets...<br>→ 1. TheWhaleKing — +$1,245,320<br>→ 2. 0xd25c72...34d20 — +$892,100<br>→ ...</code>
+      </div>
+
+      <div class="info-box green">
+        <h3>How to Find Wallet Addresses</h3>
+        <p>Go to <a href="https://polymarket.com/leaderboard" style="color:#22c55e;font-weight:600;">polymarket.com/leaderboard</a> and click on any trader's profile. Their wallet address is in the URL or on their profile page. Copy the full <strong>0x...</strong> address and use it with the <span class="command">!track</span> command.</p>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- System Status -->
+    <div class="section">
+      <div class="section-header">
+        <div class="section-icon status">🩺</div>
+        <h2>System Status</h2>
+      </div>
+      <p>Check if everything is running smoothly at any time.</p>
+
+      <div class="cmd-card">
+        <div class="cmd-name yellow">!status</div>
+        <span class="cmd-where anywhere">Anywhere</span>
+        <p class="cmd-desc">
+          Runs a health check on all Soldi services and reports back with the status of each one. Shows uptime for the website server, the odds engine (including which sportsbooks and sports are active), the Discord bot, the Polymarket tracker, and the Twitter/X bot. If something's down, you'll see it here.
+        </p>
+        <code class="cmd-example"><span>!status</span><br>→ ✅ Website Server — Online, uptime: 14d 6h<br>→ ✅ SoldiAPI (Odds Engine) — 12 scrapers, 5 sports<br>→ ✅ Discord Bot — Online, uptime: 14d 6h<br>→ ✅ Polymarket Tracker — 8 users tracked<br>→ ✅ Twitter/X Bot — last activity 12m ago</code>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Help Commands -->
+    <div class="section">
+      <div class="section-header">
+        <div class="section-icon help">❓</div>
+        <h2>Help Commands</h2>
+      </div>
+
+      <div class="cmd-card">
+        <div class="cmd-name">!commands</div>
+        <span class="cmd-where anywhere">Anywhere</span>
+        <p class="cmd-desc">
+          Shows the full detailed command list directly inside Discord with descriptions and examples. Works in server channels and DMs.
+        </p>
+      </div>
+
+      <div class="cmd-card">
+        <div class="cmd-name">!help</div>
+        <span class="cmd-where dm">DMs Only</span>
+        <p class="cmd-desc">
+          Quick summary of all available commands. Shorter than <span class="command">!commands</span> but gets the job done if you just need a reminder.
+        </p>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Tips -->
+    <div class="section">
+      <div class="section-header">
+        <div class="section-icon tips">💡</div>
+        <h2>Tips & Best Practices</h2>
+      </div>
+
+      <div class="info-box yellow">
+        <h3>Get the Most Out of the Bot</h3>
+        <ul>
+          <li><strong>DM the bot for tracker commands.</strong> The tracking commands (<span class="command">!track</span>, <span class="command">!untrack</span>, <span class="command">!mytrackers</span>, <span class="command">!whales</span>, <span class="command">!pnl</span>) only work in DMs to keep the server channels clean.</li>
+          <li><strong>Check !pnl before tracking new wallets.</strong> Use the profit/loss data to find the most profitable whales and focus your tracking on them.</li>
+          <li><strong>Watch the #polymarket-tracker-bot channel.</strong> Default whale bets are posted there automatically so you don't miss anything even without DM alerts.</li>
+          <li><strong>Track wallets from the Polymarket leaderboard.</strong> The top traders on the leaderboard are consistently profitable — add their addresses and follow their moves.</li>
+          <li><strong>You have 50 slots.</strong> That's a lot of wallets. Start with the defaults and add anyone you spot making big plays.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="cta-box">
+      <a href="https://discord.gg/HStNMpCAH5" class="cta-btn">Join the Discord</a>
+      <a href="https://trysoldi.com" class="cta-btn green">Go to Dashboard</a>
+      <p class="help-text">&copy; 2026 Soldi. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>
