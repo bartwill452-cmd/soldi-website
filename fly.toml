@@ -29,6 +29,7 @@ primary_region = 'iad'
 
 [env]
   DISABLED_SCRAPERS = "stakeus,betmgm,hardrock,betonline,caesars,buckeye"
+  GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzSizb2PDpGoNGhompqyBttJzdbjq1KlthqDM9E8kDzDkDvnSerQbETkVswGS7esgmd/exec"
 
 [[vm]]
   memory = '4096'
