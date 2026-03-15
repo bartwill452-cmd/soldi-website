@@ -1075,10 +1075,10 @@ function buildWebinarConfirmationEmail(firstName) {
       <p style="font-size:16px;line-height:1.6;margin-bottom:20px;">You're locked in for <strong style="color:#00C853;">The 3 Income Engines</strong> — our free live training where we break down the exact systems Soldi members use to build $10K+/mo online.</p>
       <div style="background:#1A1A1A;border:1px solid #333;border-radius:12px;padding:20px;margin:24px 0;">
         <p style="margin:0 0 8px;color:#888;font-size:13px;">EVENT DETAILS</p>
-        <p style="margin:0 0 6px;font-size:15px;"><strong>Date:</strong> Sunday, March 15, 2026</p>
-        <p style="margin:0 0 6px;font-size:15px;"><strong>Time:</strong> 3:00 PM ET</p>
+        <p style="margin:0 0 6px;font-size:15px;"><strong>Date:</strong> Monday, March 16, 2026</p>
+        <p style="margin:0 0 6px;font-size:15px;"><strong>Time:</strong> 7:00 PM ET</p>
         <p style="margin:0 0 6px;font-size:15px;"><strong>Duration:</strong> ~60 minutes</p>
-        <p style="margin:0;font-size:15px;"><strong>Where:</strong> Online (link sent before the event)</p>
+        <p style="margin:0;font-size:15px;"><strong>Where:</strong> <a href="https://meet.google.com/poq-vewb-hhh" style="color:#00C853;">Google Meet</a> (click to join at event time)</p>
       </div>
       <p style="font-size:16px;line-height:1.6;margin-bottom:24px;">Here's what we'll cover:</p>
       <ul style="padding-left:20px;margin-bottom:24px;">
@@ -1088,9 +1088,11 @@ function buildWebinarConfirmationEmail(firstName) {
         <li style="font-size:15px;line-height:1.8;color:#ccc;">BONUS: Automated Bots scanning markets 24/7</li>
       </ul>
       <div style="text-align:center;margin:28px 0;">
-        <a href="https://calendar.google.com/calendar/render?action=TEMPLATE&text=Soldi+Webinar%3A+The+3+Income+Engines&dates=20260315T220000Z/20260315T231500Z&details=FREE+LIVE+TRAINING&location=Online+-+trysoldi.com" style="display:inline-block;background:#00C853;color:#000;padding:14px 32px;border-radius:10px;font-weight:800;font-size:16px;text-decoration:none;">Add to Calendar</a>
+        <a href="https://meet.google.com/poq-vewb-hhh" style="display:inline-block;background:#00C853;color:#000;padding:14px 32px;border-radius:10px;font-weight:800;font-size:16px;text-decoration:none;margin-bottom:12px;">Join Google Meet</a>
+        <br/>
+        <a href="https://calendar.google.com/calendar/render?action=TEMPLATE&text=Soldi+Webinar%3A+The+3+Income+Engines&dates=20260316T230000Z/20260317T000000Z&details=Join+via+Google+Meet%3A+https%3A%2F%2Fmeet.google.com%2Fpoq-vewb-hhh&location=Google+Meet" style="display:inline-block;background:transparent;color:#00C853;padding:10px 24px;border-radius:10px;font-weight:600;font-size:14px;text-decoration:none;border:1px solid #00C853;margin-top:8px;">Add to Calendar</a>
       </div>
-      <p style="font-size:14px;color:#888;line-height:1.6;">We'll send you a reminder before we go live. Make sure to show up — spots are limited and the replay won't be available forever.</p>
+      <p style="font-size:14px;color:#888;line-height:1.6;">Save the Google Meet link above — you'll use it to join the live session on Monday at 7 PM ET. This is a view-only presentation, so just sit back and learn!</p>
     </div>
     <div style="padding:16px 24px;text-align:center;border-top:1px solid #222;">
       <p style="margin:0;font-size:13px;color:#555;">&copy; 2026 Soldi | <a href="https://trysoldi.com" style="color:#00C853;text-decoration:none;">trysoldi.com</a></p>

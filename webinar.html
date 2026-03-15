@@ -755,7 +755,7 @@
 
   <div class="date-banner">
     <span class="cal-icon">&#128197;</span>
-    Sunday, March 15 &bull; 3:00 PM ET
+    Monday, March 16 &bull; 7:00 PM ET
   </div>
 
   <!-- COUNTDOWN -->
@@ -1016,7 +1016,7 @@
     <div class="success-screen" id="success-screen">
       <div class="success-icon-wrap">&#10003;</div>
       <h2>You're Registered!</h2>
-      <p>We'll text and email you the YouTube live stream link at 3:00 PM ET on Sunday. Keep an eye on your inbox and phone!</p>
+      <p>We'll text and email you the Google Meet link before the session on Monday. Keep an eye on your inbox and phone!</p>
       <div class="success-details">
         <div class="detail-row">
           <span class="detail-label">Event</span>
@@ -1024,18 +1024,18 @@
         </div>
         <div class="detail-row">
           <span class="detail-label">Date</span>
-          <span class="detail-value">Sunday, March 15</span>
+          <span class="detail-value">Monday, March 16</span>
         </div>
         <div class="detail-row">
           <span class="detail-label">Time</span>
-          <span class="detail-value">3:00 PM ET</span>
+          <span class="detail-value">7:00 PM ET</span>
         </div>
         <div class="detail-row">
           <span class="detail-label">Duration</span>
           <span class="detail-value">~60 minutes</span>
         </div>
       </div>
-      <a href="YOUTUBE_PREMIERE_LINK_HERE" target="_blank" class="submit-btn" style="text-decoration:none; margin-top:20px; max-width:320px; margin-left:auto; margin-right:auto;">&#9654; Watch the YouTube Premiere</a>
+      <a href="https://meet.google.com/poq-vewb-hhh" target="_blank" class="submit-btn" style="text-decoration:none; margin-top:20px; max-width:320px; margin-left:auto; margin-right:auto;">&#128249; Join the Google Meet</a>
       <button class="add-cal-btn" onclick="addToGoogleCal()">&#128197; Add to Google Calendar</button>
     </div>
   </div>
@@ -1294,8 +1294,8 @@
 <script>
   // ===== COUNTDOWN TIMER =====
   // Safari-safe date: use UTC directly (6PM ET = 10PM UTC during EDT)
-  // 3:00 PM ET = 19:00 UTC (EDT)
-  const webinarDate = new Date(Date.UTC(2026, 2, 15, 19, 0, 0)).getTime();
+  // 7:00 PM ET = 23:00 UTC (EDT)
+  const webinarDate = new Date(Date.UTC(2026, 2, 16, 23, 0, 0)).getTime();
 
   function updateCountdown() {
     const now = new Date().getTime();
@@ -1366,9 +1366,9 @@
   function addToGoogleCal() {
     const url = 'https://calendar.google.com/calendar/render?action=TEMPLATE' +
       '&text=' + encodeURIComponent('Soldi Webinar: The 3 Income Engines') +
-      '&dates=20260315T190000Z/20260315T201500Z' +
-      '&details=' + encodeURIComponent('FREE LIVE TRAINING: The 3 Income Engines — How Ordinary People Are Building $10K+/Mo Online in 2026\\n\\nJoin at: trysoldi.com') +
-      '&location=' + encodeURIComponent('Online - trysoldi.com');
+      '&dates=20260316T230000Z/20260317T000000Z' +
+      '&details=' + encodeURIComponent('FREE LIVE TRAINING: The 3 Income Engines\\n\\nJoin via Google Meet: https://meet.google.com/poq-vewb-hhh') +
+      '&location=' + encodeURIComponent('Google Meet - https://meet.google.com/poq-vewb-hhh');
     window.open(url, '_blank');
   }
 </script>
