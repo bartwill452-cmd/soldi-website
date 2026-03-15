@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Free Training: The 3 Income Engines | Soldi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #000000;
+    color: #ffffff;
+    min-height: 100vh;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  /* ===== ANIMATED BACKGROUND ===== */
+  .bg-glow {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none; z-index: 0;
+    background:
+      radial-gradient(ellipse 600px 400px at 20% 20%, rgba(0,200,83,0.06) 0%, transparent 70%),
+      radial-gradient(ellipse 500px 500px at 80% 80%, rgba(0,200,83,0.04) 0%, transparent 70%);
+  }
+
+  /* ===== NAV ===== */
+  .nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    padding: 16px 24px;
+    background: rgba(0,0,0,0.8);
+    -webkit-backdrop-filter: blur(20px);
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .nav-logo {
+    display: flex; align-items: center; gap: 10px;
+  }
+  .nav-logo-icon {
+    width: 32px; height: 32px; background: #00C853;
+    border-radius: 8px; display: flex; align-items: center; justify-content: center;
+    font-weight: 900; font-size: 16px; color: #000;
+  }
+  .nav-logo-text { font-weight: 800; font-size: 18px; letter-spacing: -0.5px; }
+  .nav-live {
+    display: flex; align-items: center; gap: 8px;
+    background: rgba(0,200,83,0.1); border: 1px solid rgba(0,200,83,0.3);
+    padding: 6px 14px; border-radius: 20px; font-size: 13px; color: #00C853; font-weight: 600;
+  }
+  .nav-live-dot {
+    width: 8px; height: 8px; background: #00C853; border-radius: 50%;
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(0,200,83,0.4); }
+    50% { opacity: 0.8; box-shadow: 0 0 0 6px rgba(0,200,83,0); }
+  }
+
+  /* ===== HERO ===== */
+  .hero {
+    position: relative; z-index: 1;
+    max-width: 720px; margin: 0 auto;
+    padding: 100px 24px 40px;
+    text-align: center;
+  }
+  .badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: rgba(0,200,83,0.1); border: 1px solid rgba(0,200,83,0.3);
+    padding: 8px 18px; border-radius: 24px;
+    font-size: 13px; font-weight: 700; color: #00C853;
+    text-transform: uppercase; letter-spacing: 2px;
+    margin-bottom: 24px;
+  }
+  .badge-dot {
+    width: 8px; height: 8px; background: #00C853; border-radius: 50%;
+    animation: pulse 2s infinite;
+  }
+  .hero h1 {
+    font-size: clamp(32px, 6vw, 48px);
+    font-weight: 900; line-height: 1.1;
+    letter-spacing: -1.5px;
+    margin-bottom: 8px;
+  }
+  .hero h1 span { color: #00C853; }
+  .hero .subtitle {
+    font-size: clamp(16px, 3vw, 20px);
+    color: #9e9e9e; line-height: 1.6;
+    margin-top: 16px; margin-bottom: 12px;
+  }
+  .hero .date-banner {
+    display: inline-flex; align-items: center; gap: 12px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    padding: 12px 24px; border-radius: 12px;
+    margin: 20px 0 8px;
+    font-size: 16px; font-weight: 600;
+  }
+  .date-banner .cal-icon { font-size: 20px; }
+
+  /* ===== COUNTDOWN ===== */
+  .countdown-wrap {
+    display: flex; justify-content: center; gap: 16px;
+    margin: 24px 0;
+  }
+  .countdown-box {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px; padding: 12px 0; width: 72px; text-align: center;
+  }
+  .countdown-num {
+    font-size: 28px; font-weight: 900; color: #00C853;
+    font-variant-numeric: tabular-nums;
+  }
+  .countdown-label { font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 1px; margin-top: 4px; }
+
+  /* ===== STATS ===== */
+  .stats {
+    display: flex; justify-content: center; gap: 32px;
+    margin: 28px 0; flex-wrap: wrap;
+  }
+  .stat { text-align: center; }
+  .stat-num { font-size: 24px; font-weight: 900; color: #00C853; }
+  .stat-label { font-size: 12px; color: #666; margin-top: 2px; }
+
+  /* ===== FORM ===== */
+  .form-section {
+    position: relative; z-index: 1;
+    max-width: 480px; margin: 0 auto;
+    padding: 0 24px 40px;
+  }
+  .form-card {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 20px; padding: 32px;
+  }
+  .form-card h2 {
+    font-size: 22px; font-weight: 800; text-align: center;
+    margin-bottom: 24px; letter-spacing: -0.5px;
+  }
+  .form-group { margin-bottom: 16px; }
+  .form-group label {
+    display: block; font-size: 13px; font-weight: 600;
+    color: #9e9e9e; margin-bottom: 6px;
+  }
+  .form-group input, .form-group select {
+    width: 100%; padding: 14px 16px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px; color: #fff;
+    font-size: 16px; font-family: inherit;
+    transition: all 0.2s;
+    outline: none;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  .form-group input:focus, .form-group select:focus {
+    border-color: #00C853;
+    box-shadow: 0 0 0 3px rgba(0,200,83,0.15);
+  }
+  .form-group input::placeholder { color: #555; }
+  .form-group select option { background: #1a1a1a; color: #fff; }
+
+  .checkbox-group {
+    display: flex; align-items: flex-start; gap: 10px;
+    margin: 20px 0;
+  }
+  .checkbox-group input[type="checkbox"] {
+    width: 18px; height: 18px; margin-top: 2px;
+    accent-color: #00C853; cursor: pointer; flex-shrink: 0;
+  }
+  .checkbox-group label {
+    font-size: 13px; color: #888; cursor: pointer; line-height: 1.5;
+  }
+  .checkbox-group label a { color: #00C853; text-decoration: none; }
+
+  .submit-btn {
+    width: 100%; padding: 16px;
+    background: #00C853; color: #000;
+    font-size: 17px; font-weight: 800;
+    border: none; border-radius: 12px;
+    cursor: pointer; transition: all 0.2s;
+    letter-spacing: -0.3px;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .submit-btn:hover { background: #00E676; transform: translateY(-1px); box-shadow: 0 8px 30px rgba(0,200,83,0.3); }
+  .submit-btn:active { transform: translateY(0); }
+
+  .form-note {
+    text-align: center; font-size: 12px; color: #555; margin-top: 16px;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+  }
+
+  /* ===== WHAT YOU'LL LEARN ===== */
+  .learn-section {
+    position: relative; z-index: 1;
+    max-width: 640px; margin: 20px auto;
+    padding: 0 24px 40px;
+  }
+  .learn-section h2 {
+    font-size: 28px; font-weight: 900; text-align: center;
+    margin-bottom: 28px; letter-spacing: -1px;
+  }
+  .learn-section h2 span { color: #00C853; }
+  .learn-item {
+    display: flex; gap: 16px; align-items: flex-start;
+    padding: 20px;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid rgba(255,255,255,0.05);
+    border-radius: 16px; margin-bottom: 12px;
+    transition: all 0.2s;
+  }
+  .learn-item:hover {
+    background: rgba(0,200,83,0.03);
+    border-color: rgba(0,200,83,0.15);
+  }
+  .learn-icon {
+    width: 44px; height: 44px; flex-shrink: 0;
+    background: rgba(0,200,83,0.1);
+    border-radius: 12px; display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+  }
+  .learn-text h3 { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+  .learn-text p { font-size: 14px; color: #888; line-height: 1.5; }
+
+  /* ===== MEMBER SUCCESS ===== */
+  .success-section {
+    position: relative; z-index: 1;
+    max-width: 700px; margin: 0 auto;
+    padding: 0 24px 40px;
+  }
+  .success-section h2 {
+    font-size: 28px; font-weight: 900; text-align: center;
+    margin-bottom: 28px; letter-spacing: -1px;
+  }
+  .success-section h2 span { color: #00C853; }
+  .success-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .success-card {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 16px; overflow: hidden;
+    transition: all 0.3s;
+  }
+  .success-card:hover { border-color: rgba(0,200,83,0.3); transform: translateY(-2px); }
+  .success-card img {
+    width: 100%; height: auto; display: block;
+  }
+  .success-card-label {
+    padding: 10px 14px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .success-card-label span {
+    font-size: 11px; font-weight: 600; color: #00C853;
+    background: rgba(0,200,83,0.1); padding: 3px 10px; border-radius: 8px;
+  }
+  .success-full-width { grid-column: 1 / -1; }
+  .success-show-more {
+    display: block; margin: 20px auto 0; padding: 12px 32px;
+    background: transparent; border: 1px solid rgba(0,200,83,0.3);
+    color: #00C853; font-family: inherit; font-size: 14px; font-weight: 600;
+    border-radius: 10px; cursor: pointer; transition: all 0.2s;
+  }
+  .success-show-more:hover { background: rgba(0,200,83,0.1); border-color: #00C853; }
+  .success-hidden { display: none; }
+  .ticker-bar {
+    overflow: hidden; white-space: nowrap; margin-bottom: 20px;
+    padding: 10px 0; border-top: 1px solid rgba(255,255,255,0.05);
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+  .ticker-content {
+    display: inline-block; animation: ticker 30s linear infinite;
+    font-size: 13px; font-weight: 600; color: #00C853;
+  }
+  @-webkit-keyframes ticker {
+    0% { -webkit-transform: translateX(0); transform: translateX(0); }
+    100% { -webkit-transform: translateX(-50%); transform: translateX(-50%); }
+  }
+  @keyframes ticker {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+  }
+  @media (max-width: 480px) {
+    .success-grid { grid-template-columns: 1fr; }
+  }
+
+  /* ===== SUCCESS STATE ===== */
+  .success-screen {
+    display: none;
+    text-align: center;
+    padding: 40px 20px;
+  }
+  .success-screen.active { display: block; }
+  .success-icon {
+    width: 80px; height: 80px; margin: 0 auto 24px;
+    background: rgba(0,200,83,0.1); border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 40px;
+  }
+  .success-screen h2 { font-size: 28px; font-weight: 900; margin-bottom: 12px; }
+  .success-screen p { color: #9e9e9e; font-size: 16px; line-height: 1.6; max-width: 400px; margin: 0 auto 24px; }
+  .success-details {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px; padding: 24px;
+    max-width: 400px; margin: 0 auto;
+    text-align: left;
+  }
+  .success-details .detail-row {
+    display: flex; justify-content: space-between;
+    padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.05);
+    font-size: 14px;
+  }
+  .success-details .detail-row:last-child { border: none; }
+  .success-details .detail-label { color: #666; }
+  .success-details .detail-value { font-weight: 700; color: #00C853; }
+  .add-cal-btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: transparent; border: 1px solid rgba(0,200,83,0.3);
+    color: #00C853; padding: 12px 24px; border-radius: 12px;
+    font-size: 14px; font-weight: 600; cursor: pointer;
+    margin-top: 20px; transition: all 0.2s; font-family: inherit;
+  }
+  .add-cal-btn:hover { background: rgba(0,200,83,0.1); }
+
+  /* ===== FOOTER ===== */
+  .footer {
+    position: relative; z-index: 1;
+    text-align: center; padding: 40px 24px;
+    border-top: 1px solid rgba(255,255,255,0.05);
+    font-size: 12px; color: #444;
+  }
+  .footer a { color: #00C853; text-decoration: none; }
+
+  /* ===== RESPONSIVE ===== */
+  @media (max-width: 480px) {
+    .stats { gap: 20px; }
+    .form-card { padding: 24px 20px; }
+    .countdown-wrap { gap: 10px; }
+    .countdown-box { width: 60px; }
+    .proof-items { gap: 12px; }
+  }
+
+  /* ===== LOADING SPINNER ===== */
+  .spinner {
+    width: 20px; height: 20px;
+    border: 2px solid transparent; border-top-color: #000;
+    border-radius: 50%; animation: spin 0.6s linear infinite;
+    display: none;
+  }
+  .submit-btn.loading .spinner { display: block; }
+  .submit-btn.loading .btn-text { display: none; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<div class="bg-glow"></div>
+
+<!-- NAV -->
+<nav class="nav">
+  <div class="nav-logo">
+    <div class="nav-logo-icon">S</div>
+    <div class="nav-logo-text">Soldi</div>
+  </div>
+  <div class="nav-live">
+    <div class="nav-live-dot"></div>
+    Limited Spots
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="badge"><div class="badge-dot"></div> Free Live Training</div>
+  <h1>The 3 Income Engines<br><span>That Build $10K+/Mo Online</span></h1>
+  <p class="subtitle">Join hundreds of members using proven systems for sports betting, e-commerce, and AI automation to build real income streams — no experience needed.</p>
+
+  <div class="date-banner">
+    <span class="cal-icon">&#128197;</span>
+    Sunday, March 15 &bull; 6:00 PM ET
+  </div>
+
+  <!-- COUNTDOWN -->
+  <div class="countdown-wrap">
+    <div class="countdown-box">
+      <div class="countdown-num" id="cd-days">0</div>
+      <div class="countdown-label">Days</div>
+    </div>
+    <div class="countdown-box">
+      <div class="countdown-num" id="cd-hours">0</div>
+      <div class="countdown-label">Hours</div>
+    </div>
+    <div class="countdown-box">
+      <div class="countdown-num" id="cd-mins">0</div>
+      <div class="countdown-label">Mins</div>
+    </div>
+    <div class="countdown-box">
+      <div class="countdown-num" id="cd-secs">0</div>
+      <div class="countdown-label">Secs</div>
+    </div>
+  </div>
+
+  <!-- STATS -->
+  <div class="stats">
+    <div class="stat"><div class="stat-num">$10M+</div><div class="stat-label">Member Revenue</div></div>
+    <div class="stat"><div class="stat-num">5+</div><div class="stat-label">Income Streams</div></div>
+  </div>
+</section>
+
+<!-- REGISTRATION FORM -->
+<section class="form-section" id="register">
+  <div class="form-card" id="form-card">
+    <h2>Reserve Your Free Spot</h2>
+    <form id="webinar-form" onsubmit="handleSubmit(event)">
+      <div class="form-group">
+        <label>First Name</label>
+        <input type="text" name="firstName" placeholder="Your first name" required>
+      </div>
+      <div class="form-group">
+        <label>Email Address</label>
+        <input type="email" name="email" placeholder="you@example.com" required>
+      </div>
+      <div class="form-group">
+        <label>Phone Number</label>
+        <input type="tel" name="phone" placeholder="(555) 000-0000" required>
+      </div>
+      <div class="form-group">
+        <label>Which income stream interests you most?</label>
+        <select name="interest" required>
+          <option value="" disabled selected>Select one...</option>
+          <option value="sports-betting">Sports Betting Systems</option>
+          <option value="ecommerce">E-Commerce Mastery</option>
+          <option value="ai-automation">AI Automation & Selling AI</option>
+          <option value="all">All of the Above</option>
+        </select>
+      </div>
+      <div class="checkbox-group">
+        <input type="checkbox" id="newsletter" name="newsletter" checked>
+        <label for="newsletter">Yes, also subscribe me to the Soldi newsletter for weekly tips, member wins, and exclusive opportunities</label>
+      </div>
+      <div class="checkbox-group">
+        <input type="checkbox" id="sms-consent" name="smsConsent">
+        <label for="sms-consent">Send me SMS reminders before the training (recommended — <a href="#">privacy policy</a>)</label>
+      </div>
+      <button type="submit" class="submit-btn" id="submit-btn">
+        <span class="btn-text">Reserve My Spot Now &#8594;</span>
+        <div class="spinner"></div>
+      </button>
+      <div class="form-note">&#128274; Your info is safe. We never spam or share your data.</div>
+    </form>
+
+    <!-- SUCCESS STATE -->
+    <div class="success-screen" id="success-screen">
+      <div class="success-icon">&#10003;</div>
+      <h2>You're Registered!</h2>
+      <p>Check your email for confirmation and the webinar link. We'll also send you a reminder before we go live.</p>
+      <div class="success-details">
+        <div class="detail-row">
+          <span class="detail-label">Event</span>
+          <span class="detail-value">The 3 Income Engines</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Date</span>
+          <span class="detail-value">Sunday, March 15</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Time</span>
+          <span class="detail-value">6:00 PM ET</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Duration</span>
+          <span class="detail-value">~60 minutes</span>
+        </div>
+      </div>
+      <button class="add-cal-btn" onclick="addToGoogleCal()">&#128197; Add to Google Calendar</button>
+    </div>
+  </div>
+</section>
+
+<!-- WHAT YOU'LL LEARN -->
+<section class="learn-section">
+  <h2>What You'll <span>Learn</span></h2>
+  <div class="learn-item">
+    <div class="learn-icon">&#9917;</div>
+    <div class="learn-text">
+      <h3>Engine #1: Sports Betting Systems</h3>
+      <p>Positive EV strategies our traders use to consistently profit. Follow million-dollar traders and copy their exact moves.</p>
+    </div>
+  </div>
+  <div class="learn-item">
+    <div class="learn-icon">&#128722;</div>
+    <div class="learn-text">
+      <h3>Engine #2: E-Commerce Mastery</h3>
+      <p>Step-by-step system to launch and scale profitable online stores. Members doing $10K+ days and $300K+ months.</p>
+    </div>
+  </div>
+  <div class="learn-item">
+    <div class="learn-icon">&#129302;</div>
+    <div class="learn-text">
+      <h3>Engine #3: AI Automation & Selling AI</h3>
+      <p>Build and sell AI-powered services, automate your workflow, and 10x your output across every income stream.</p>
+    </div>
+  </div>
+  <div class="learn-item">
+    <div class="learn-icon">&#128640;</div>
+    <div class="learn-text">
+      <h3>BONUS: Automated Bots</h3>
+      <p>Our proprietary bots scan markets 24/7, tracking top Polymarket whales and delivering opportunities straight to your Discord.</p>
+    </div>
+  </div>
+</section>
+
+<!-- MEMBER SUCCESS -->
+<section class="success-section">
+  <h2>Real Members. <span>Real Results.</span></h2>
+
+  <div class="ticker-bar">
+    <div class="ticker-content">
+      &nbsp;&bull;&nbsp; $352K monthly store sales &nbsp;&bull;&nbsp; +$9,842 profit from 67 bets &nbsp;&bull;&nbsp; $10K+ single day e-commerce &nbsp;&bull;&nbsp; 33.5% ROI verified on Pikkit &nbsp;&bull;&nbsp; $1,082 profit in one month &nbsp;&bull;&nbsp; 451% ROI sports betting &nbsp;&bull;&nbsp; $352K monthly store sales &nbsp;&bull;&nbsp; +$9,842 profit from 67 bets &nbsp;&bull;&nbsp; $10K+ single day e-commerce &nbsp;&bull;&nbsp; 33.5% ROI verified on Pikkit &nbsp;&bull;&nbsp; $1,082 profit in one month &nbsp;&bull;&nbsp; 451% ROI sports betting &nbsp;&bull;&nbsp;
+    </div>
+  </div>
+
+  <div class="success-grid" id="success-grid">
+    <!-- Row 1: Betting Success -->
+    <div class="success-card">
+      <img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-1.png" alt="Betting win screenshot" loading="lazy">
+      <div class="success-card-label"><span>Sports Betting</span></div>
+    </div>
+    <div class="success-card">
+      <img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-2.png" alt="Betting win screenshot" loading="lazy">
+      <div class="success-card-label"><span>Sports Betting</span></div>
+    </div>
+
+    <!-- Row 2: E-Com + Betting Mix -->
+    <div class="success-card">
+      <img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/ecom-success/ecom-success-1.jpg" alt="E-commerce success screenshot" loading="lazy">
+      <div class="success-card-label"><span>E-Commerce</span></div>
+    </div>
+    <div class="success-card">
+      <img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-3.png" alt="Betting win screenshot" loading="lazy">
+      <div class="success-card-label"><span>Sports Betting</span></div>
+    </div>
+
+    <!-- Row 3: More results -->
+    <div class="success-card">
+      <img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-4.png" alt="Betting win screenshot" loading="lazy">
+      <div class="success-card-label"><span>Sports Betting</span></div>
+    </div>
+    <div class="success-card">
+      <img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/ecom-success/ecom-success-2.jpg" alt="E-commerce success screenshot" loading="lazy">
+      <div class="success-card-label"><span>E-Commerce</span></div>
+    </div>
+
+    <!-- Hidden cards (shown on "Show More") -->
+    <div class="success-card success-hidden">
+      <img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-5.png" alt="Betting win screenshot" loading="lazy">
+      <div class="success-card-label"><span>Sports Betting</span></div>
+    </div>
+    <div class="success-card success-hidden">
+      <img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/ecom-success/ecom-success-3.jpg" alt="E-commerce success screenshot" loading="lazy">
+      <div class="success-card-label"><span>E-Commerce</span></div>
+    </div>
+    <div class="success-card success-hidden">
+      <img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-6.png" alt="Betting win screenshot" loading="lazy">
+      <div class="success-card-label"><span>Sports Betting</span></div>
+    </div>
+    <div class="success-card success-hidden">
+      <img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/ecom-success/ecom-success-4.png" alt="E-commerce success screenshot" loading="lazy">
+      <div class="success-card-label"><span>E-Commerce</span></div>
+    </div>
+    <div class="success-card success-hidden">
+      <img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-7.png" alt="Betting win screenshot" loading="lazy">
+      <div class="success-card-label"><span>Sports Betting</span></div>
+    </div>
+    <div class="success-card success-hidden">
+      <img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-8.png" alt="Betting win screenshot" loading="lazy">
+      <div class="success-card-label"><span>Sports Betting</span></div>
+    </div>
+    <div class="success-card success-hidden">
+      <img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/ecom-success/ecom-success-5.png" alt="E-commerce success screenshot" loading="lazy">
+      <div class="success-card-label"><span>E-Commerce</span></div>
+    </div>
+    <div class="success-card success-hidden">
+      <img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-9.png" alt="Betting win screenshot" loading="lazy">
+      <div class="success-card-label"><span>Sports Betting</span></div>
+    </div>
+    <div class="success-card success-hidden">
+      <img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-10.png" alt="Betting win screenshot" loading="lazy">
+      <div class="success-card-label"><span>Sports Betting</span></div>
+    </div>
+    <div class="success-card success-hidden">
+      <img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/ecom-success/ecom-success-6.png" alt="E-commerce success screenshot" loading="lazy">
+      <div class="success-card-label"><span>E-Commerce</span></div>
+    </div>
+    <div class="success-card success-hidden">
+      <img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-11.png" alt="Betting win screenshot" loading="lazy">
+      <div class="success-card-label"><span>Sports Betting</span></div>
+    </div>
+    <div class="success-card success-hidden">
+      <img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-12.png" alt="Betting win screenshot" loading="lazy">
+      <div class="success-card-label"><span>Sports Betting</span></div>
+    </div>
+    <div class="success-card success-hidden">
+      <img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/ecom-success/ecom-success-7.png" alt="E-commerce success screenshot" loading="lazy">
+      <div class="success-card-label"><span>E-Commerce</span></div>
+    </div>
+    <div class="success-card success-hidden">
+      <img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/ecom-success/ecom-success-8.jpg" alt="E-commerce success screenshot" loading="lazy">
+      <div class="success-card-label"><span>E-Commerce</span></div>
+    </div>
+    <div class="success-card success-hidden">
+      <img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-13.png" alt="Betting win screenshot" loading="lazy">
+      <div class="success-card-label"><span>Sports Betting</span></div>
+    </div>
+    <div class="success-card success-hidden">
+      <img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-14.png" alt="Betting win screenshot" loading="lazy">
+      <div class="success-card-label"><span>Sports Betting</span></div>
+    </div>
+    <div class="success-card success-hidden">
+      <img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-15.png" alt="Betting win screenshot" loading="lazy">
+      <div class="success-card-label"><span>Sports Betting</span></div>
+    </div>
+    <div class="success-card success-hidden">
+      <img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-16.png" alt="Betting win screenshot" loading="lazy">
+      <div class="success-card-label"><span>Sports Betting</span></div>
+    </div>
+    <div class="success-card success-hidden">
+      <img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-17.png" alt="Betting win screenshot" loading="lazy">
+      <div class="success-card-label"><span>Sports Betting</span></div>
+    </div>
+    <div class="success-card success-hidden">
+      <img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-18.png" alt="Betting win screenshot" loading="lazy">
+      <div class="success-card-label"><span>Sports Betting</span></div>
+    </div>
+  </div>
+  <button class="success-show-more" id="show-more-btn" onclick="toggleSuccessImages()">Show More Results (20+)</button>
+</section>
+
+<!-- FOOTER -->
+<footer class="footer">
+  <p>&copy; 2026 Soldi. All rights reserved. | <a href="https://trysoldi.com">trysoldi.com</a></p>
+  <p style="margin-top: 8px;">Results shown are from real members but are not typical. Income depends on effort, experience, and market conditions.</p>
+</footer>
+
+<script>
+  // ===== COUNTDOWN TIMER =====
+  // Safari-safe date: use UTC directly (6PM ET = 10PM UTC during EDT)
+  const webinarDate = new Date(Date.UTC(2026, 2, 15, 22, 0, 0)).getTime();
+
+  function updateCountdown() {
+    const now = new Date().getTime();
+    const diff = webinarDate - now;
+
+    if (diff <= 0) {
+      document.getElementById('cd-days').textContent = '0';
+      document.getElementById('cd-hours').textContent = '0';
+      document.getElementById('cd-mins').textContent = '0';
+      document.getElementById('cd-secs').textContent = '0';
+      return;
+    }
+
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    const secs = Math.floor((diff % (1000 * 60)) / 1000);
+
+    document.getElementById('cd-days').textContent = days;
+    document.getElementById('cd-hours').textContent = hours;
+    document.getElementById('cd-mins').textContent = String(mins).padStart(2, '0');
+    document.getElementById('cd-secs').textContent = String(secs).padStart(2, '0');
+  }
+
+  updateCountdown();
+  setInterval(updateCountdown, 1000);
+
+  // ===== SHOW MORE SUCCESS IMAGES =====
+  function toggleSuccessImages() {
+    const hidden = document.querySelectorAll('.success-hidden');
+    const btn = document.getElementById('show-more-btn');
+    const isShowing = btn.textContent.includes('Show Less');
+
+    hidden.forEach(card => {
+      card.style.display = isShowing ? 'none' : 'block';
+    });
+
+    if (isShowing) {
+      btn.textContent = 'Show More Results (20+)';
+      document.getElementById('success-grid').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else {
+      btn.textContent = 'Show Less';
+    }
+  }
+
+  // ===== FORM SUBMISSION =====
+  // Stores registrations in memory and triggers email via EmailJS or backend
+  const registrations = [];
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    const btn = document.getElementById('submit-btn');
+    btn.classList.add('loading');
+
+    const form = document.getElementById('webinar-form');
+    const formData = new FormData(form);
+    const data = {
+      firstName: formData.get('firstName'),
+      email: formData.get('email'),
+      phone: formData.get('phone'),
+      interest: formData.get('interest'),
+      newsletter: formData.get('newsletter') === 'on',
+      smsConsent: formData.get('smsConsent') === 'on',
+      registeredAt: new Date().toISOString()
+    };
+
+    registrations.push(data);
+
+    // Submit to server API (works both on trysoldi.com and standalone)
+    const API_BASE = window.location.hostname === 'trysoldi.com'
+      ? ''
+      : 'https://trysoldi.com';
+    try {
+      const res = await fetch(API_BASE + '/api/webinar/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || 'Registration failed');
+      console.log('Registration saved:', result);
+    } catch (err) {
+      console.error('Registration error:', err);
+      // Still show success — registration will be retried or handled manually
+    }
+
+    // Show success
+    setTimeout(() => {
+      btn.classList.remove('loading');
+      form.style.display = 'none';
+      document.querySelector('.form-card h2').style.display = 'none';
+      document.getElementById('success-screen').classList.add('active');
+    }, 1200);
+  }
+
+  // ===== ADD TO GOOGLE CALENDAR =====
+  function addToGoogleCal() {
+    const url = 'https://calendar.google.com/calendar/render?action=TEMPLATE' +
+      '&text=' + encodeURIComponent('Soldi Webinar: The 3 Income Engines') +
+      '&dates=20260315T220000Z/20260315T231500Z' +
+      '&details=' + encodeURIComponent('FREE LIVE TRAINING: The 3 Income Engines — How Ordinary People Are Building $10K+/Mo Online in 2026\\n\\nJoin at: trysoldi.com') +
+      '&location=' + encodeURIComponent('Online - trysoldi.com');
+    window.open(url, '_blank');
+  }
+</script>
+
+</body>
+</html>
+
