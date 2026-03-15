@@ -101,7 +101,7 @@ _BOOK_TITLE_MAP: Dict[str, str] = {
 }
 
 # We only care about these specific SBR books
-_TARGET_BOOKS = frozenset(["draftkings", "caesars", "betmgm"])
+_TARGET_BOOKS = frozenset(["draftkings", "caesars"])
 
 _NEXT_DATA_RE = re.compile(
     r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', re.DOTALL
@@ -114,7 +114,7 @@ class SBRSource(DataSource):
     """
     Scrapes odds from SportsbookReview.com via their Next.js SSR pages.
 
-    This provides DraftKings, Caesars, and BetMGM odds for 4 major sports
+    This provides DraftKings and Caesars odds for 4 major sports
     (NBA, NCAAB, NHL, MLB) with full-game and period markets.
     """
 

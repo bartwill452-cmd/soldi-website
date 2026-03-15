@@ -265,7 +265,7 @@ async def lifespan(app: FastAPI):
         sources.append(NovigSource())
 
     if is_enabled("sbr"):
-        logger.info("Initializing SBR scraper (DraftKings, Caesars, BetMGM)")
+        logger.info("Initializing SBR scraper (DraftKings, Caesars)")
         sources.append(SBRSource())
 
     stakeus = None
