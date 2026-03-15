@@ -1695,7 +1695,8 @@ async function fetchOddsEvents(sport) {
   const cached = getOddsCache(cacheKey);
   if (cached) return { events: cached, cached: true };
 
-  const url = `${SOLDI_API_URL}/api/v1/sports/${sport}/odds?regions=us&markets=h2h,spreads,totals&oddsFormat=american`;
+  const bookKeys = ODDS_SPORTSBOOKS.map(b => b.key).join(',');
+  const url = `${SOLDI_API_URL}/api/v1/sports/${sport}/odds?regions=us,us2,eu,au&markets=h2h,spreads,totals&oddsFormat=american&bookmakers=${bookKeys}`;
   const headers = { 'Authorization': `Bearer ${SOLDI_API_KEY}` };
   const apiRes = await fetch(url, { headers, signal: AbortSignal.timeout(15000) });
   if (!apiRes.ok) {
