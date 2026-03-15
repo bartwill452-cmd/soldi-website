@@ -44,19 +44,21 @@ if (!BREVO_API_KEY && !resend && !mailTransporter) {
 }
 
 // Unified email sender: tries Brevo (HTTP) > Resend (HTTP) > Gmail SMTP
-async function sendEmail({ to, subject, html }) {
+async function sendEmail({ to, subject, html, text }) {
   // 1. Brevo / Sendinblue (HTTP — works everywhere, sends to any email)
   if (BREVO_API_KEY) {
     try {
+      const emailPayload = {
+        sender: { name: 'Soldi', email: SENDER_EMAIL },
+        to: [{ email: to }],
+        subject,
+        htmlContent: html
+      };
+      if (text) emailPayload.textContent = text;
       const brevoRes = await fetch('https://api.brevo.com/v3/smtp/email', {
         method: 'POST',
         headers: { 'accept': 'application/json', 'content-type': 'application/json', 'api-key': BREVO_API_KEY },
-        body: JSON.stringify({
-          sender: { name: 'Soldi', email: SENDER_EMAIL },
-          to: [{ email: to }],
-          subject,
-          htmlContent: html
-        })
+        body: JSON.stringify(emailPayload)
       });
       if (!brevoRes.ok) {
         const errBody = await brevoRes.text().catch(() => '');
@@ -1074,12 +1076,13 @@ app.post('/api/webinar/send-marketing', async (req, res) => {
   if (!emails || !Array.isArray(emails) || emails.length === 0) {
     return res.status(400).json({ error: 'Provide an array of emails in the request body' });
   }
-  const subject = '[LIVE Monday] The 3 Income Engines — Free Training by Soldi';
+  const subject = 'You\'re invited: Live training this Monday at 7 PM ET';
   const html = buildMarketingEmail();
+  const textContent = buildMarketingEmailPlainText();
   const results = [];
   for (const email of emails) {
     try {
-      const r = await sendEmail({ to: email.trim(), subject, html });
+      const r = await sendEmail({ to: email.trim(), subject, html, text: textContent });
       results.push({ email, status: 'sent', provider: r.provider });
       console.log(`[Marketing] Sent to ${email}`);
     } catch (e) {
@@ -1092,69 +1095,147 @@ app.post('/api/webinar/send-marketing', async (req, res) => {
 
 // Marketing newsletter email template
 function buildMarketingEmail() {
-  return `<div style="max-width:600px;margin:0 auto;background:#0a0a0a;font-family:'Inter',Arial,Helvetica,sans-serif;">
-  <div style="background:linear-gradient(135deg,#00C853 0%,#00E676 50%,#69F0AE 100%);padding:40px 24px;text-align:center;">
-    <p style="margin:0 0 8px;font-size:13px;font-weight:700;color:#000;text-transform:uppercase;letter-spacing:2px;">FREE LIVE TRAINING</p>
-    <h1 style="margin:0 0 8px;font-size:32px;font-weight:900;color:#000;line-height:1.2;">The 3 Income Engines</h1>
-    <p style="margin:0;font-size:16px;color:rgba(0,0,0,0.7);font-weight:600;">How Ordinary People Are Building $10K+/Mo Online in 2026</p>
-  </div>
-  <div style="background:#111;padding:16px 24px;text-align:center;border-bottom:1px solid #222;">
-    <table width="100%" cellpadding="0" cellspacing="0" style="max-width:400px;margin:0 auto;">
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Soldi Live Training</title></head>
+<body style="margin:0;padding:0;background-color:#f4f4f4;font-family:Arial,Helvetica,sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;">
+<tr><td align="center" style="padding:20px 0;">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background-color:#ffffff;border-radius:8px;overflow:hidden;">
+
+  <!-- Header -->
+  <tr><td style="background-color:#00C853;padding:32px 24px;text-align:center;">
+    <p style="margin:0 0 6px;font-size:12px;font-weight:700;color:#000;letter-spacing:1.5px;">SOLDI</p>
+    <h1 style="margin:0 0 6px;font-size:26px;font-weight:800;color:#000;line-height:1.3;">The 3 Income Engines</h1>
+    <p style="margin:0;font-size:15px;color:rgba(0,0,0,0.65);font-weight:500;">Live training session this Monday</p>
+  </td></tr>
+
+  <!-- Event Details -->
+  <tr><td style="background-color:#f9f9f9;padding:16px 24px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
       <tr>
-        <td style="text-align:center;padding:0 12px;"><p style="margin:0;font-size:11px;color:#888;text-transform:uppercase;letter-spacing:1px;">DATE</p><p style="margin:4px 0 0;font-size:15px;color:#fff;font-weight:700;">Mon, March 16</p></td>
-        <td style="text-align:center;padding:0 12px;border-left:1px solid #333;border-right:1px solid #333;"><p style="margin:0;font-size:11px;color:#888;text-transform:uppercase;letter-spacing:1px;">TIME</p><p style="margin:4px 0 0;font-size:15px;color:#fff;font-weight:700;">7:00 PM ET</p></td>
-        <td style="text-align:center;padding:0 12px;"><p style="margin:0;font-size:11px;color:#888;text-transform:uppercase;letter-spacing:1px;">WHERE</p><p style="margin:4px 0 0;font-size:15px;color:#00C853;font-weight:700;">Google Meet</p></td>
+        <td style="text-align:center;padding:4px 8px;"><p style="margin:0;font-size:11px;color:#888;">Date</p><p style="margin:2px 0 0;font-size:14px;color:#333;font-weight:700;">Mon, March 16</p></td>
+        <td style="text-align:center;padding:4px 8px;border-left:1px solid #ddd;border-right:1px solid #ddd;"><p style="margin:0;font-size:11px;color:#888;">Time</p><p style="margin:2px 0 0;font-size:14px;color:#333;font-weight:700;">7:00 PM ET</p></td>
+        <td style="text-align:center;padding:4px 8px;"><p style="margin:0;font-size:11px;color:#888;">Where</p><p style="margin:2px 0 0;font-size:14px;color:#00C853;font-weight:700;">Google Meet</p></td>
       </tr>
     </table>
-  </div>
-  <div style="padding:32px 24px;">
-    <p style="font-size:16px;line-height:1.7;color:#ddd;margin:0 0 20px;">We're going live this <strong style="color:#fff;">Monday at 7 PM ET</strong> with a brand new training session — and you're invited.</p>
-    <p style="font-size:16px;line-height:1.7;color:#ddd;margin:0 0 28px;">In just 60 minutes, we'll reveal the <strong style="color:#00C853;">3 income engines</strong> our members are using right now to generate consistent income online — no experience required.</p>
-    <div style="margin:0 0 28px;">
-      <div style="background:#1A1A1A;border:1px solid #2a2a2a;border-radius:12px;padding:20px;margin-bottom:12px;">
-        <table cellpadding="0" cellspacing="0" width="100%"><tr>
-          <td style="width:48px;vertical-align:top;"><div style="width:44px;height:44px;background:#0D3320;border-radius:10px;text-align:center;line-height:44px;font-size:22px;">&#9917;</div></td>
-          <td style="padding-left:14px;vertical-align:top;"><p style="margin:0 0 4px;font-size:15px;font-weight:800;color:#00C853;">ENGINE 1: Sports Betting Systems</p><p style="margin:0;font-size:14px;color:#999;line-height:1.5;">Follow million-dollar traders with automated alerts. Our members are seeing 20-40% monthly returns.</p></td>
-        </tr></table>
-      </div>
-      <div style="background:#1A1A1A;border:1px solid #2a2a2a;border-radius:12px;padding:20px;margin-bottom:12px;">
-        <table cellpadding="0" cellspacing="0" width="100%"><tr>
-          <td style="width:48px;vertical-align:top;"><div style="width:44px;height:44px;background:#0D2033;border-radius:10px;text-align:center;line-height:44px;font-size:22px;">&#128202;</div></td>
-          <td style="padding-left:14px;vertical-align:top;"><p style="margin:0 0 4px;font-size:15px;font-weight:800;color:#4FC3F7;">ENGINE 2: Crypto &amp; Stock Plays</p><p style="margin:0;font-size:14px;color:#999;line-height:1.5;">Real-time signals, AI-powered analysis, and proven strategies for market gains.</p></td>
-        </tr></table>
-      </div>
-      <div style="background:#1A1A1A;border:1px solid #2a2a2a;border-radius:12px;padding:20px;margin-bottom:12px;">
-        <table cellpadding="0" cellspacing="0" width="100%"><tr>
-          <td style="width:48px;vertical-align:top;"><div style="width:44px;height:44px;background:#1A1A0D;border-radius:10px;text-align:center;line-height:44px;font-size:22px;">&#129302;</div></td>
-          <td style="padding-left:14px;vertical-align:top;"><p style="margin:0 0 4px;font-size:15px;font-weight:800;color:#FFD54F;">ENGINE 3: AI Automation</p><p style="margin:0;font-size:14px;color:#999;line-height:1.5;">Build and sell AI-powered services. Our bots scan markets 24/7 so you don't have to.</p></td>
-        </tr></table>
-      </div>
-    </div>
-    <div style="background:#111;border-left:3px solid #00C853;padding:16px 20px;border-radius:0 8px 8px 0;margin-bottom:28px;">
-      <p style="margin:0;font-size:14px;color:#ccc;line-height:1.6;font-style:italic;">"I joined Soldi 3 months ago and I've already made back my investment 10x. The sports betting signals alone are worth it."</p>
-      <p style="margin:8px 0 0;font-size:13px;color:#00C853;font-weight:700;">— Soldi Member</p>
-    </div>
-    <div style="text-align:center;margin:32px 0;">
-      <a href="https://trysoldi.com/webinar.html" style="display:inline-block;background:#00C853;color:#000;padding:16px 40px;border-radius:12px;font-weight:900;font-size:18px;text-decoration:none;letter-spacing:0.5px;">SAVE YOUR SPOT NOW</a>
-      <p style="margin:12px 0 0;font-size:13px;color:#666;">100% Free — Limited Spots Available</p>
-    </div>
-    <div style="background:#1A1A1A;border:1px solid #2a2a2a;border-radius:12px;padding:20px;margin-bottom:24px;">
-      <p style="margin:0 0 12px;font-size:14px;font-weight:800;color:#fff;text-transform:uppercase;letter-spacing:1px;">What you'll get:</p>
-      <table cellpadding="0" cellspacing="0" width="100%">
-        <tr><td style="padding:6px 0;font-size:14px;color:#ccc;">&#10003; Live walkthrough of all 3 income engines</td></tr>
-        <tr><td style="padding:6px 0;font-size:14px;color:#ccc;">&#10003; Real member results and case studies</td></tr>
-        <tr><td style="padding:6px 0;font-size:14px;color:#ccc;">&#10003; Exclusive signup bonus for live attendees</td></tr>
-        <tr><td style="padding:6px 0;font-size:14px;color:#ccc;">&#10003; Q&amp;A session at the end</td></tr>
-      </table>
-    </div>
-    <p style="font-size:14px;color:#888;line-height:1.6;text-align:center;">Don't miss this. We only do these trainings a few times a year, and the replay won't be available forever.</p>
-  </div>
-  <div style="padding:20px 24px;text-align:center;border-top:1px solid #222;">
-    <p style="margin:0 0 4px;font-size:13px;color:#555;">&copy; 2026 Soldi. All rights reserved.</p>
-    <p style="margin:0;font-size:13px;"><a href="https://trysoldi.com" style="color:#00C853;text-decoration:none;">trysoldi.com</a></p>
-    <p style="margin:8px 0 0;font-size:11px;color:#444;">Results shown are from real members but are not typical. Income depends on effort, experience, and market conditions.</p>
-  </div>
-</div>`;
+  </td></tr>
+
+  <!-- Body -->
+  <tr><td style="padding:28px 24px;">
+    <p style="font-size:15px;line-height:1.7;color:#444;margin:0 0 16px;">Hey there,</p>
+    <p style="font-size:15px;line-height:1.7;color:#444;margin:0 0 16px;">We're hosting a live training session this <strong>Monday at 7 PM ET</strong> and you're invited.</p>
+    <p style="font-size:15px;line-height:1.7;color:#444;margin:0 0 24px;">In about 60 minutes, we'll walk through the <strong>3 income engines</strong> our community members are using to build consistent online income — covering sports analytics, market strategies, and AI automation.</p>
+
+    <!-- Engine Cards -->
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+      <tr><td style="background-color:#f5faf7;border:1px solid #e0e0e0;border-radius:8px;padding:16px;margin-bottom:8px;">
+        <p style="margin:0 0 4px;font-size:14px;font-weight:700;color:#00C853;">Engine 1: Sports Analytics</p>
+        <p style="margin:0;font-size:13px;color:#666;line-height:1.5;">Data-driven alerts and strategies from experienced analysts in our community.</p>
+      </td></tr>
+      <tr><td style="height:8px;"></td></tr>
+      <tr><td style="background-color:#f5f8fa;border:1px solid #e0e0e0;border-radius:8px;padding:16px;">
+        <p style="margin:0 0 4px;font-size:14px;font-weight:700;color:#1E88E5;">Engine 2: Market Strategies</p>
+        <p style="margin:0;font-size:13px;color:#666;line-height:1.5;">Real-time signals and analysis for crypto and stock opportunities.</p>
+      </td></tr>
+      <tr><td style="height:8px;"></td></tr>
+      <tr><td style="background-color:#fffdf5;border:1px solid #e0e0e0;border-radius:8px;padding:16px;">
+        <p style="margin:0 0 4px;font-size:14px;font-weight:700;color:#F9A825;">Engine 3: AI Automation</p>
+        <p style="margin:0;font-size:13px;color:#666;line-height:1.5;">Learn how to build and sell AI-powered services and automated tools.</p>
+      </td></tr>
+    </table>
+
+    <!-- Testimonial -->
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+      <tr><td style="background-color:#f9f9f9;border-left:3px solid #00C853;padding:14px 16px;border-radius:0 6px 6px 0;">
+        <p style="margin:0;font-size:13px;color:#555;line-height:1.6;font-style:italic;">"The training sessions are packed with value. I learned more in one hour than weeks of trying on my own."</p>
+        <p style="margin:6px 0 0;font-size:12px;color:#00C853;font-weight:700;">— Soldi Community Member</p>
+      </td></tr>
+    </table>
+
+    <!-- CTA Button -->
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+      <tr><td align="center" style="padding:8px 0 24px;">
+        <a href="https://trysoldi.com/webinar.html" style="display:inline-block;background-color:#00C853;color:#ffffff;padding:14px 36px;border-radius:8px;font-weight:700;font-size:16px;text-decoration:none;">Register for the Training</a>
+      </td></tr>
+    </table>
+
+    <!-- Direct Join Link -->
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
+      <tr><td style="background-color:#f0faf4;border:1px solid #c8e6c9;border-radius:8px;padding:16px;text-align:center;">
+        <p style="margin:0 0 6px;font-size:13px;color:#666;">Already registered? Join directly on Monday:</p>
+        <a href="https://meet.google.com/poq-vewb-hhh" style="font-size:15px;color:#00C853;font-weight:700;text-decoration:none;">meet.google.com/poq-vewb-hhh</a>
+      </td></tr>
+    </table>
+
+    <!-- What's Included -->
+    <p style="font-size:14px;font-weight:700;color:#333;margin:0 0 8px;">What we'll cover:</p>
+    <p style="font-size:13px;color:#666;line-height:1.8;margin:0 0 4px;">&#10003; Live walkthrough of all 3 income engines</p>
+    <p style="font-size:13px;color:#666;line-height:1.8;margin:0 0 4px;">&#10003; Real member results and case studies</p>
+    <p style="font-size:13px;color:#666;line-height:1.8;margin:0 0 4px;">&#10003; Bonus resources for live attendees</p>
+    <p style="font-size:13px;color:#666;line-height:1.8;margin:0 0 20px;">&#10003; Q&amp;A session at the end</p>
+
+    <p style="font-size:13px;color:#999;line-height:1.6;text-align:center;">We only run these sessions a few times a year, so we'd love to see you there.</p>
+  </td></tr>
+
+  <!-- Footer -->
+  <tr><td style="padding:20px 24px;text-align:center;border-top:1px solid #eee;background-color:#fafafa;">
+    <p style="margin:0 0 4px;font-size:12px;color:#999;">&copy; 2026 Soldi. All rights reserved.</p>
+    <p style="margin:0 0 8px;font-size:12px;"><a href="https://trysoldi.com" style="color:#00C853;text-decoration:none;">trysoldi.com</a></p>
+    <p style="margin:0 0 8px;font-size:11px;color:#bbb;">Soldi HQ, United States</p>
+    <p style="margin:0;font-size:11px;color:#bbb;">Results vary by individual. Past performance does not guarantee future results.</p>
+    <p style="margin:8px 0 0;font-size:11px;"><a href="https://trysoldi.com/unsubscribe" style="color:#999;text-decoration:underline;">Unsubscribe</a></p>
+  </td></tr>
+
+</table>
+</td></tr>
+</table>
+</body>
+</html>`;
+}
+
+// Plain text version of marketing email (improves deliverability)
+function buildMarketingEmailPlainText() {
+  return `SOLDI - The 3 Income Engines
+Live Training Session
+
+Date: Monday, March 16, 2026
+Time: 7:00 PM ET
+Where: Google Meet
+
+Hey there,
+
+We're hosting a live training session this Monday at 7 PM ET and you're invited.
+
+In about 60 minutes, we'll walk through the 3 income engines our community members are using to build consistent online income.
+
+ENGINE 1: Sports Analytics
+Data-driven alerts and strategies from experienced analysts in our community.
+
+ENGINE 2: Market Strategies
+Real-time signals and analysis for crypto and stock opportunities.
+
+ENGINE 3: AI Automation
+Learn how to build and sell AI-powered services and automated tools.
+
+Register here: https://trysoldi.com/webinar.html
+
+Already registered? Join directly on Monday:
+https://meet.google.com/poq-vewb-hhh
+
+What we'll cover:
+- Live walkthrough of all 3 income engines
+- Real member results and case studies
+- Bonus resources for live attendees
+- Q&A session at the end
+
+We only run these sessions a few times a year, so we'd love to see you there.
+
+---
+(c) 2026 Soldi. All rights reserved.
+trysoldi.com | Soldi HQ, United States
+Results vary by individual. Past performance does not guarantee future results.
+Unsubscribe: https://trysoldi.com/unsubscribe`;
 }
 
 // Webinar confirmation email template
