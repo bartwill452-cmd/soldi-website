@@ -27,6 +27,9 @@ primary_region = 'iad'
   policy = "on-failure"
   max_retries = 5
 
+[env]
+  DISABLED_SCRAPERS = "stakeus,betmgm,hardrock,betonline,caesars,buckeye"
+
 [[vm]]
   memory = '4096'
   cpu_kind = 'shared'

@@ -59,7 +59,7 @@ class FanDuelSource(DataSource):
 
     def __init__(self):
         self._client = httpx.AsyncClient(
-            timeout=15.0,
+            timeout=10.0,
             headers={
                 "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
                 "Accept": "application/json",
@@ -135,10 +135,10 @@ class FanDuelSource(DataSource):
             # API calls.  Allow generous timeout so all sub-markets are captured.
             try:
                 await asyncio.wait_for(
-                    self._enrich_all(events, id_map, sport_key), timeout=30.0,
+                    self._enrich_all(events, id_map, sport_key), timeout=12.0,
                 )
             except asyncio.TimeoutError:
-                logger.info(f"FanDuel: enrichment timed out (30s) for {sport_key}, returning base markets")
+                logger.info(f"FanDuel: enrichment timed out (12s) for {sport_key}, returning base markets")
 
             return events, {"x-requests-remaining": "unlimited"}
 
