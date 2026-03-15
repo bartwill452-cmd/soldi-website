@@ -82,7 +82,7 @@ class FanDuelSource(DataSource):
         """
         loop = asyncio.get_running_loop()
         if self._sem_obj is None or self._sem_loop is not loop:
-            self._sem_obj = asyncio.Semaphore(8)
+            self._sem_obj = asyncio.Semaphore(20)
             self._sem_loop = loop
         return self._sem_obj
 
@@ -121,8 +121,11 @@ class FanDuelSource(DataSource):
                 params["page"] = "SPORT"
                 params["eventTypeId"] = str(event_type_id)
 
-            async with self._api_sem:
-                response = await self._client.get(BASE_URL, params=params)
+            # Initial fetch does NOT go through the semaphore — only enrichment
+            # does.  The semaphore prevents enrichment from flooding the API when
+            # all 5 sports refresh concurrently, but the initial fetch is just
+            # one call per sport and must not be blocked by enrichment traffic.
+            response = await self._client.get(BASE_URL, params=params)
             response.raise_for_status()
             data = response.json()
 
