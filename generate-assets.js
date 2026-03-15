@@ -570,10 +570,10 @@ async function renderSuccessCollage(images) {
 
   ctx.fillStyle = greenGrad(ctx, W / 2 + 150, footY - 26, 120, 36);
   ctx.font = '800 32px sans-serif';
-  ctx.fillText('$349.99', W / 2 + 220, footY);
+  ctx.fillText('$49.99', W / 2 + 220, footY);
   ctx.fillStyle = '#71717a';
   ctx.font = '500 13px sans-serif';
-  ctx.fillText('+ $19.99/mo', W / 2 + 220, footY + 20);
+  ctx.fillText('/month', W / 2 + 220, footY + 20);
 
   drawAccentLine(ctx, W, H);
   return canvas.toBuffer('image/png');

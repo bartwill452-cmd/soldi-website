@@ -197,7 +197,7 @@ function renderFrame(ctx, cols, elapsed) {
   ctx.fill();
   ctx.fillStyle = '#050507';
   ctx.font = '800 23px sans-serif';
-  ctx.fillText('Join Soldi | $349.99 + $19.99/mo  →', W / 2, btnY2 + 38);
+  ctx.fillText('Join Soldi | $49.99/mo  →', W / 2, btnY2 + 38);
 
   // === ACCENT LINE ===
   ctx.fillStyle = greenGrad(ctx, 0, H - 4, W, 4);

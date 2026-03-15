@@ -150,7 +150,7 @@ function renderOGImage() {
   const stats = [
     { num: '$10M+', label: 'Member Revenue' },
     { num: '5+', label: 'Income Streams' },
-    { num: '$349.99', label: '+ $19.99/mo' },
+    { num: '$49.99', label: '/month' },
   ];
   const statGap = 200;
   const startX = W / 2 - statGap;
