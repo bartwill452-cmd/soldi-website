@@ -540,7 +540,7 @@ app.post('/api/send-verification', async (req, res) => {
             return res.status(403).json({
               error: 'inactive_membership',
               message: `Membership status: ${match.status}`,
-              purchaseUrl: 'https://whop.com/checkout/plan_Q93fIRTfIo5g7/'
+              purchaseUrl: 'https://whop.com/checkout/plan_BOEx9lveGo3yO/'
             });
           }
           found = true;
@@ -554,7 +554,7 @@ app.post('/api/send-verification', async (req, res) => {
         return res.status(404).json({
           error: 'no_membership',
           message: 'No membership found for this email',
-          purchaseUrl: 'https://whop.com/checkout/plan_Q93fIRTfIo5g7/'
+          purchaseUrl: 'https://whop.com/checkout/plan_BOEx9lveGo3yO/'
         });
       }
     } catch (err) {
@@ -792,7 +792,7 @@ app.post('/api/verify-membership', async (req, res) => {
       return res.status(404).json({
         error: 'no_membership',
         message: 'No membership found for this email',
-        purchaseUrl: 'https://whop.com/checkout/plan_Q93fIRTfIo5g7/'
+        purchaseUrl: 'https://whop.com/checkout/plan_BOEx9lveGo3yO/'
       });
     }
 
@@ -804,7 +804,7 @@ app.post('/api/verify-membership', async (req, res) => {
         error: 'inactive_membership',
         message: `Membership status: ${found.status}`,
         status: found.status,
-        purchaseUrl: 'https://whop.com/checkout/plan_Q93fIRTfIo5g7/'
+        purchaseUrl: 'https://whop.com/checkout/plan_BOEx9lveGo3yO/'
       });
     }
 
@@ -3368,7 +3368,7 @@ app.post('/api/submissions', async (req, res) => {
   <!-- CTA -->
   <div style="text-align:center;margin:32px 0;">
     <p style="color:#9ca3af;font-size:14px;">Ready to unlock everything? Get full access to all income streams, tools, and 1-on-1 support:</p>
-    <a href="https://whop.com/checkout/plan_Q93fIRTfIo5g7/" style="display:inline-block;background:#22c55e;color:#000;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:700;font-size:16px;margin-top:12px;">Activate Full Membership</a>
+    <a href="https://whop.com/checkout/plan_BOEx9lveGo3yO/" style="display:inline-block;background:#22c55e;color:#000;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:700;font-size:16px;margin-top:12px;">Activate Full Membership</a>
   </div>
 
   <hr style="border:none;border-top:1px solid #1e293b;margin:32px 0;">
