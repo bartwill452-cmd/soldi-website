@@ -274,6 +274,7 @@ async def lifespan(app: FastAPI):
         stakeus = StakeUSSource()
         sources.append(stakeus)
 
+    hardrock = None
     if is_enabled("hardrock"):
         logger.info("Initializing Hard Rock Bet scraper")
         hardrock = HardRockBetSource()
@@ -377,6 +378,8 @@ async def lifespan(app: FastAPI):
         betus.start_prefetch()
     if stakeus is not None:
         stakeus.start_prefetch()
+    if hardrock is not None:
+        hardrock.start_prefetch()
 
     # Initialize line history database
     line_history.init_db(settings.line_history_db)

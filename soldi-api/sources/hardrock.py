@@ -474,6 +474,12 @@ class HardRockBetSource(DataSource):
         "sec-fetch-site": "same-site",
     }
 
+    # Core sports to prefetch on startup (matches main.py active sports)
+    _PREFETCH_SPORTS = [
+        "basketball_nba", "basketball_ncaab", "icehockey_nhl",
+        "baseball_mlb", "mma_mixed_martial_arts",
+    ]
+
     def __init__(self):
         self._cf_cookies: Dict[str, str] = {}
         self._cf_cookies_expires: float = 0
@@ -487,6 +493,63 @@ class HardRockBetSource(DataSource):
         self._tree_fetched = False
         # Cache for event IDs: canonical_event_id → hr_event_id
         self._event_ids: Dict[str, str] = {}
+        # Prefetch cache: sport_key → (events, timestamp)
+        self._cache: Dict[str, Tuple[List, float]] = {}
+        self._prefetch_task = None
+
+    def start_prefetch(self) -> None:
+        """Start background prefetch to keep odds warm."""
+        self._prefetch_task = asyncio.ensure_future(self._prefetch_all())
+
+    async def _prefetch_all(self) -> None:
+        """Background loop: eagerly fetch event tree + all sports on startup, then keep warm."""
+        await asyncio.sleep(1)  # Minimal stagger
+        logger.info("HardRock: Starting eager background prefetch")
+
+        # Eagerly init client + event tree on first cycle
+        cycle = 0
+        while True:
+            cycle += 1
+            try:
+                if not await self._ensure_client():
+                    logger.warning("HardRock prefetch: no client, retrying in 10s")
+                    await asyncio.sleep(10)
+                    continue
+
+                await self._fetch_event_tree()
+
+                cycle_total = 0
+                for sport_key in self._PREFETCH_SPORTS:
+                    comp_ids = self._comp_ids.get(sport_key, [])
+                    if not comp_ids:
+                        continue
+                    market_types = _MARKET_TYPES.get(sport_key, [])
+                    try:
+                        all_events = []
+                        for i in range(0, len(comp_ids), 10):
+                            batch = comp_ids[i : i + 10]
+                            events = await self._fetch_competition_events(batch, market_types)
+                            all_events.extend(events)
+
+                        from sources.sport_mapping import get_sport_title
+                        parsed = []
+                        sport_title = get_sport_title(sport_key)
+                        for event_data in all_events:
+                            event = self._parse_event(event_data, sport_key, sport_title)
+                            if event:
+                                parsed.append(event)
+
+                        self._cache[sport_key] = (parsed, time.time())
+                        cycle_total += len(parsed)
+                        logger.info("HardRock prefetch: %d events for %s", len(parsed), sport_key)
+                    except Exception as e:
+                        logger.warning("HardRock prefetch %s failed: %s", sport_key, e)
+
+                logger.info("HardRock: Prefetch cycle #%d complete (%d total events)", cycle, cycle_total)
+            except Exception as e:
+                logger.warning("HardRock prefetch error: %s", e)
+
+            await asyncio.sleep(10)  # Refresh every ~10s
 
     def _create_client(self) -> httpx.AsyncClient:
         """Create an httpx client with current CF cookies (or none for direct mode)."""
@@ -742,12 +805,22 @@ class HardRockBetSource(DataSource):
         if bookmakers and "hardrock" not in bookmakers:
             return [], {"x-requests-remaining": "unlimited"}
 
-        # Ensure client is ready (direct mode or CF cookie mode)
+        # Serve from prefetch cache if available and fresh (< 30s)
+        cached = self._cache.get(sport_key)
+        if cached:
+            events, ts = cached
+            age = time.time() - ts
+            if age < 30:  # Serve cached data up to 30s old
+                return events, {"x-requests-remaining": "unlimited"}
+
+        # Fallback: fetch live (for non-prefetched sports or stale cache)
         if not await self._ensure_client():
+            # Still return stale cache if available
+            if cached:
+                return cached[0], {"x-requests-remaining": "unlimited"}
             logger.warning("HardRock: skipping %s — no client available", sport_key)
             return [], {"x-requests-remaining": "unlimited"}
 
-        # Discover competitions if not yet done
         await self._fetch_event_tree()
 
         comp_ids = self._comp_ids.get(sport_key, [])
@@ -757,17 +830,13 @@ class HardRockBetSource(DataSource):
         market_types = _MARKET_TYPES.get(sport_key, [])
 
         try:
-            # Fetch events for all competitions in this sport
             all_events = []
-
-            # Batch competitions together (API supports multiple compId values)
             batch_size = 10
             for i in range(0, len(comp_ids), batch_size):
                 batch = comp_ids[i : i + batch_size]
                 events = await self._fetch_competition_events(batch, market_types)
                 all_events.extend(events)
 
-            # Parse events
             parsed = []
             sport_title = get_sport_title(sport_key)
             for event_data in all_events:
@@ -775,10 +844,15 @@ class HardRockBetSource(DataSource):
                 if event:
                     parsed.append(event)
 
+            # Update cache
+            self._cache[sport_key] = (parsed, time.time())
             logger.info(f"HardRock: {len(parsed)} events for {sport_key}")
             return parsed, {"x-requests-remaining": "unlimited"}
 
         except Exception as e:
+            # Return stale cache on error
+            if cached:
+                return cached[0], {"x-requests-remaining": "unlimited"}
             logger.warning(f"HardRock failed for {sport_key}: {e}")
             return [], {"x-requests-remaining": "unlimited"}
 
