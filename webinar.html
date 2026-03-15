@@ -130,6 +130,168 @@
   .stat-num { font-size: 24px; font-weight: 900; color: #00C853; }
   .stat-label { font-size: 12px; color: #666; margin-top: 2px; }
 
+  /* ===== ODDS SCREEN SHOWCASE ===== */
+  .odds-showcase {
+    position: relative; z-index: 1;
+    max-width: 1100px; margin: 0 auto;
+    padding: 0 24px 50px;
+  }
+  .odds-showcase-header {
+    text-align: center; margin-bottom: 28px;
+  }
+  .odds-showcase-header h2 {
+    font-size: clamp(22px, 4vw, 32px); font-weight: 900;
+    letter-spacing: -1px; margin-bottom: 8px;
+  }
+  .odds-showcase-header h2 span { color: #00C853; }
+  .odds-showcase-header p {
+    font-size: 15px; color: #888; max-width: 580px; margin: 0 auto; line-height: 1.5;
+  }
+  .odds-frame {
+    background: #0D1117;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 20px 80px rgba(0,200,83,0.08), 0 0 0 1px rgba(255,255,255,0.03);
+  }
+  .odds-toolbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 20px;
+    background: rgba(255,255,255,0.03);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .odds-toolbar-left {
+    display: flex; align-items: center; gap: 12px;
+  }
+  .odds-toolbar-sport {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 14px; font-weight: 700; color: #fff;
+  }
+  .odds-toolbar-sport svg { width: 18px; height: 18px; }
+  .odds-toolbar-tabs {
+    display: flex; gap: 2px;
+  }
+  .odds-tab {
+    padding: 5px 14px; border-radius: 8px;
+    font-size: 12px; font-weight: 600; color: #666;
+    background: transparent; cursor: pointer;
+  }
+  .odds-tab.active {
+    background: rgba(0,200,83,0.15); color: #00C853;
+  }
+  .odds-toolbar-right {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 11px; color: #555;
+  }
+  .odds-live-dot {
+    width: 6px; height: 6px; background: #00C853; border-radius: 50%;
+    animation: pulse 2s infinite;
+  }
+
+  /* Odds Table */
+  .odds-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .odds-table {
+    width: 100%; border-collapse: collapse;
+    font-size: 12px; min-width: 900px;
+  }
+  .odds-table thead th {
+    padding: 10px 6px;
+    text-align: center; font-weight: 700;
+    color: #555; font-size: 10px;
+    text-transform: uppercase; letter-spacing: 0.5px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    white-space: nowrap;
+  }
+  .odds-table thead th:first-child {
+    text-align: left; padding-left: 16px; min-width: 200px;
+  }
+  .odds-table tbody tr {
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+    transition: background 0.15s;
+  }
+  .odds-table tbody tr:hover {
+    background: rgba(255,255,255,0.02);
+  }
+  .odds-table tbody td {
+    padding: 10px 6px; text-align: center;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .odds-table tbody td:first-child {
+    text-align: left; padding-left: 16px;
+  }
+  .matchup-cell {
+    display: flex; flex-direction: column; gap: 2px;
+  }
+  .matchup-team {
+    font-weight: 600; color: #e0e0e0; font-size: 12px;
+    line-height: 1.4;
+  }
+  .matchup-time {
+    font-size: 10px; color: #555; margin-top: 1px;
+  }
+  .odds-val {
+    font-weight: 600; color: #ccc; font-size: 12px;
+  }
+  .odds-val.plus { color: #00C853; }
+  .odds-val.ev-highlight {
+    background: rgba(0,200,83,0.12);
+    color: #00E676;
+    padding: 2px 6px; border-radius: 4px;
+    font-weight: 700;
+  }
+  .odds-val.dash { color: #333; }
+  .book-logo-th {
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+  }
+  .book-logo-th img {
+    width: 22px; height: 22px; border-radius: 4px;
+    object-fit: contain;
+  }
+
+  .odds-footer {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 20px;
+    background: rgba(255,255,255,0.02);
+    border-top: 1px solid rgba(255,255,255,0.05);
+  }
+  .odds-footer-left { font-size: 11px; color: #444; }
+  .odds-footer-cta {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 16px; border-radius: 8px;
+    background: #00C853; color: #000;
+    font-size: 12px; font-weight: 700;
+    text-decoration: none; transition: all 0.2s;
+  }
+  .odds-footer-cta:hover { background: #00E676; }
+
+  /* Floating annotation badges */
+  .odds-annotation {
+    position: absolute; padding: 6px 12px;
+    border-radius: 8px; font-size: 11px; font-weight: 700;
+    white-space: nowrap; pointer-events: none;
+    animation: float 3s ease-in-out infinite;
+  }
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-6px); }
+  }
+  .odds-annotation-1 {
+    top: -18px; right: 40px;
+    background: rgba(0,200,83,0.15); color: #00C853;
+    border: 1px solid rgba(0,200,83,0.3);
+    animation-delay: 0s;
+  }
+  .odds-annotation-2 {
+    top: -18px; left: 40px;
+    background: rgba(255,180,0,0.15); color: #FFB400;
+    border: 1px solid rgba(255,180,0,0.3);
+    animation-delay: 1.5s;
+  }
+
   /* ===== FORM ===== */
   .form-section {
     position: relative; z-index: 1;
@@ -230,96 +392,151 @@
   .learn-text h3 { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
   .learn-text p { font-size: 14px; color: #888; line-height: 1.5; }
 
-  /* ===== MEMBER SUCCESS ===== */
+  /* ===== MEMBER SUCCESS — HORIZONTAL CAROUSEL ===== */
   .success-section {
     position: relative; z-index: 1;
     max-width: 100%; margin: 0 auto;
-    padding: 0 0 40px;
+    padding: 0 0 50px;
     overflow: hidden;
   }
   .success-section h2 {
     font-size: 28px; font-weight: 900; text-align: center;
-    margin-bottom: 8px; letter-spacing: -1px;
+    margin-bottom: 28px; letter-spacing: -1px;
     padding: 0 24px;
   }
   .success-section h2 span { color: #00C853; }
-  .success-category {
-    margin-bottom: 24px;
-  }
-  .category-title {
-    text-align: center; font-size: 16px; font-weight: 700;
-    color: #9e9e9e; margin-bottom: 14px;
-    display: flex; align-items: center; justify-content: center; gap: 8px;
-  }
-  .category-title .cat-icon {
-    color: #00C853; font-size: 18px;
-  }
-  .marquee-wrapper {
-    overflow: clip;
-    position: relative;
-    padding: 10px 0;
-    -webkit-mask-image: linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%);
-    mask-image: linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%);
-  }
-  .marquee-track {
-    display: flex;
-    gap: 16px;
-    animation: marquee 50s linear infinite;
-    width: max-content;
-  }
-  .marquee-track.reverse {
-    animation: marquee-reverse 50s linear infinite;
-  }
-  .marquee-item {
-    flex-shrink: 0;
-    width: 260px;
-    border-radius: 14px;
-    overflow: hidden;
-    background: rgba(255,255,255,0.03);
-    border: 1px solid rgba(255,255,255,0.06);
-    transition: border-color 0.3s;
-  }
-  .marquee-item:hover {
-    border-color: rgba(0,200,83,0.3);
-  }
-  .marquee-item img {
-    width: 100%; height: auto; display: block;
-  }
-  @-webkit-keyframes marquee {
-    0% { -webkit-transform: translateX(0); transform: translateX(0); }
-    100% { -webkit-transform: translateX(-50%); transform: translateX(-50%); }
-  }
-  @keyframes marquee {
-    0% { transform: translateX(0); }
-    100% { transform: translateX(-50%); }
-  }
-  @-webkit-keyframes marquee-reverse {
-    0% { -webkit-transform: translateX(-50%); transform: translateX(-50%); }
-    100% { -webkit-transform: translateX(0); transform: translateX(0); }
-  }
-  @keyframes marquee-reverse {
-    0% { transform: translateX(-50%); }
-    100% { transform: translateX(0); }
-  }
+
   .ticker-bar {
-    overflow: hidden; white-space: nowrap; margin-bottom: 20px;
+    overflow: hidden; white-space: nowrap; margin-bottom: 24px;
     padding: 10px 0; border-top: 1px solid rgba(255,255,255,0.05);
     border-bottom: 1px solid rgba(255,255,255,0.05);
   }
   .ticker-content {
-    display: inline-block; animation: ticker-text 30s linear infinite;
+    display: inline-block; animation: ticker 30s linear infinite;
     font-size: 13px; font-weight: 600; color: #00C853;
   }
-  @-webkit-keyframes ticker-text {
+  @-webkit-keyframes ticker {
     0% { -webkit-transform: translateX(0); transform: translateX(0); }
     100% { -webkit-transform: translateX(-50%); transform: translateX(-50%); }
   }
-  @keyframes ticker-text {
+  @keyframes ticker {
     0% { transform: translateX(0); }
     100% { transform: translateX(-50%); }
   }
-  @media (max-width: 480px) {
-    .marquee-item { width: 200px; }
+
+  /* Carousel track — infinite horizontal scroll */
+  .success-carousel-wrap {
+    overflow: hidden;
+    width: 100%;
+    mask-image: linear-gradient(to right, transparent, black 5%, black 95%, transparent);
+    -webkit-mask-image: linear-gradient(to right, transparent, black 5%, black 95%, transparent);
+  }
+  .success-carousel {
+    display: flex;
+    gap: 16px;
+    animation: scrollCarousel 45s linear infinite;
+    width: max-content;
+  }
+  .success-carousel:hover {
+    animation-play-state: paused;
+  }
+  @keyframes scrollCarousel {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+  }
+
+  .success-card {
+    flex-shrink: 0;
+    width: 260px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 16px; overflow: hidden;
+    transition: all 0.3s;
+  }
+  .success-card:hover { border-color: rgba(0,200,83,0.3); transform: translateY(-2px); }
+  .success-card img {
+    width: 100%; height: 200px; object-fit: cover; object-position: center center; display: block;
+  }
+  .success-card-label {
+    padding: 10px 14px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .success-card-label span {
+    font-size: 11px; font-weight: 600; color: #00C853;
+    background: rgba(0,200,83,0.1); padding: 3px 10px; border-radius: 8px;
+  }
+
+  /* ===== AI GUIDES SECTION ===== */
+  .ai-section {
+    position: relative; z-index: 1;
+    max-width: 800px; margin: 0 auto;
+    padding: 0 24px 50px;
+  }
+  .ai-section-header {
+    text-align: center; margin-bottom: 32px;
+  }
+  .ai-section-header h2 {
+    font-size: clamp(22px, 4vw, 32px); font-weight: 900;
+    letter-spacing: -1px; margin-bottom: 8px;
+  }
+  .ai-section-header h2 span { color: #00C853; }
+  .ai-section-header p {
+    font-size: 15px; color: #888; max-width: 580px; margin: 0 auto; line-height: 1.5;
+  }
+
+  .ai-roadmap {
+    display: flex; flex-direction: column; gap: 16px;
+  }
+  .ai-phase {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 16px; padding: 24px;
+    transition: all 0.2s;
+  }
+  .ai-phase:hover {
+    border-color: rgba(0,200,83,0.2);
+    background: rgba(0,200,83,0.02);
+  }
+  .ai-phase-header {
+    display: flex; align-items: center; gap: 14px;
+    margin-bottom: 12px;
+  }
+  .ai-phase-num {
+    width: 36px; height: 36px; flex-shrink: 0;
+    background: rgba(0,200,83,0.12); border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px; font-weight: 900; color: #00C853;
+  }
+  .ai-phase-title {
+    font-size: 17px; font-weight: 800; letter-spacing: -0.3px;
+  }
+  .ai-phase-desc {
+    font-size: 14px; color: #999; line-height: 1.6; margin-bottom: 12px;
+  }
+  .ai-phase-tags {
+    display: flex; flex-wrap: wrap; gap: 8px;
+  }
+  .ai-tag {
+    padding: 4px 12px; border-radius: 8px;
+    font-size: 11px; font-weight: 600;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.06);
+    color: #bbb;
+  }
+  .ai-tag.video {
+    background: rgba(255,68,68,0.1);
+    border-color: rgba(255,68,68,0.25);
+    color: #ff6b6b;
+  }
+  .ai-tag.guide {
+    background: rgba(0,200,83,0.08);
+    border-color: rgba(0,200,83,0.2);
+    color: #00C853;
+  }
+  .ai-tag.template {
+    background: rgba(99,102,241,0.1);
+    border-color: rgba(99,102,241,0.25);
+    color: #a78bfa;
   }
 
   /* ===== SUCCESS STATE ===== */
@@ -329,7 +546,7 @@
     padding: 40px 20px;
   }
   .success-screen.active { display: block; }
-  .success-icon {
+  .success-icon-wrap {
     width: 80px; height: 80px; margin: 0 auto 24px;
     background: rgba(0,200,83,0.1); border-radius: 50%;
     display: flex; align-items: center; justify-content: center;
@@ -361,6 +578,127 @@
   }
   .add-cal-btn:hover { background: rgba(0,200,83,0.1); }
 
+  /* ===== CTA BANNER (between sections) ===== */
+  .cta-banner {
+    position: relative; z-index: 1;
+    max-width: 640px; margin: 10px auto 40px;
+    padding: 0 24px;
+  }
+  .cta-banner-inner {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 20px;
+    background: linear-gradient(135deg, rgba(0,200,83,0.12), rgba(0,200,83,0.04));
+    border: 1px solid rgba(0,200,83,0.2);
+    border-radius: 16px; padding: 20px 28px;
+  }
+  .cta-banner-text { font-size: 15px; font-weight: 700; }
+  .cta-banner-text span { color: #00C853; }
+  .cta-banner-btn {
+    flex-shrink: 0;
+    padding: 10px 24px; border-radius: 10px;
+    background: #00C853; color: #000;
+    font-size: 14px; font-weight: 800;
+    text-decoration: none; transition: all 0.2s;
+    white-space: nowrap;
+  }
+  .cta-banner-btn:hover { background: #00E676; transform: translateY(-1px); }
+  @media (max-width: 520px) {
+    .cta-banner-inner { flex-direction: column; text-align: center; }
+  }
+
+  /* ===== COMING SOON BADGE ===== */
+  .coming-soon-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(255,180,0,0.12); border: 1px solid rgba(255,180,0,0.3);
+    padding: 5px 14px; border-radius: 20px;
+    font-size: 12px; font-weight: 700; color: #FFB400;
+    text-transform: uppercase; letter-spacing: 1px;
+    margin-left: 8px; vertical-align: middle;
+  }
+
+  /* ===== BOT SHOWCASE ===== */
+  .bot-showcase {
+    position: relative; z-index: 1;
+    max-width: 800px; margin: 0 auto;
+    padding: 0 24px 50px;
+  }
+  .bot-showcase-header {
+    text-align: center; margin-bottom: 32px;
+  }
+  .bot-showcase-header h2 {
+    font-size: clamp(22px, 4vw, 32px); font-weight: 900;
+    letter-spacing: -1px; margin-bottom: 8px;
+  }
+  .bot-showcase-header h2 span { color: #00C853; }
+  .bot-showcase-header p {
+    font-size: 15px; color: #888; max-width: 580px; margin: 0 auto; line-height: 1.5;
+  }
+
+  .bot-card {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 20px; padding: 32px;
+    margin-bottom: 24px;
+  }
+  .bot-card-header {
+    display: flex; align-items: center; gap: 14px;
+    margin-bottom: 20px;
+  }
+  .bot-card-icon {
+    width: 52px; height: 52px; flex-shrink: 0;
+    border-radius: 14px; display: flex; align-items: center; justify-content: center;
+    font-size: 26px;
+  }
+  .bot-card-icon.polymarket { background: rgba(99,102,241,0.15); }
+  .bot-card-icon.discord { background: rgba(88,101,242,0.15); }
+  .bot-card-title h3 {
+    font-size: 20px; font-weight: 800; letter-spacing: -0.5px;
+  }
+  .bot-card-title p {
+    font-size: 13px; color: #888; margin-top: 2px;
+  }
+
+  /* Fake terminal / bot preview */
+  .bot-terminal {
+    background: #0D1117;
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px; padding: 20px;
+    font-family: 'Courier New', monospace;
+    font-size: 13px; line-height: 1.7;
+    color: #9e9e9e;
+    margin-bottom: 20px;
+    overflow-x: auto;
+  }
+  .bot-terminal .cmd { color: #00C853; font-weight: 700; }
+  .bot-terminal .output { color: #ccc; }
+  .bot-terminal .highlight { color: #FFB400; font-weight: 600; }
+  .bot-terminal .dim { color: #555; }
+  .bot-terminal .purple { color: #a78bfa; }
+
+  .bot-features {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+  }
+  @media (max-width: 520px) {
+    .bot-features { grid-template-columns: 1fr; }
+  }
+  .bot-feature {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 14px;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid rgba(255,255,255,0.04);
+    border-radius: 12px;
+  }
+  .bot-feature-check {
+    width: 22px; height: 22px; flex-shrink: 0;
+    background: rgba(0,200,83,0.12);
+    border-radius: 6px; display: flex; align-items: center; justify-content: center;
+    color: #00C853; font-size: 12px; font-weight: 900;
+  }
+  .bot-feature-text {
+    font-size: 13px; color: #ccc; line-height: 1.4;
+  }
+  .bot-feature-text strong { color: #fff; font-weight: 700; }
+
   /* ===== FOOTER ===== */
   .footer {
     position: relative; z-index: 1;
@@ -376,7 +714,6 @@
     .form-card { padding: 24px 20px; }
     .countdown-wrap { gap: 10px; }
     .countdown-box { width: 60px; }
-    .proof-items { gap: 12px; }
   }
 
   /* ===== LOADING SPINNER ===== */
@@ -397,13 +734,16 @@
 
 <!-- NAV -->
 <nav class="nav">
-  <div class="nav-logo">
+  <a href="/" class="nav-logo" style="text-decoration:none; color:#fff;">
     <div class="nav-logo-icon">S</div>
     <div class="nav-logo-text">Soldi</div>
-  </div>
-  <div class="nav-live">
-    <div class="nav-live-dot"></div>
-    Limited Spots
+  </a>
+  <div style="display:flex; align-items:center; gap:12px;">
+    <div class="nav-live">
+      <div class="nav-live-dot"></div>
+      Limited Spots
+    </div>
+    <a href="#register" style="padding:8px 18px; background:#00C853; color:#000; font-size:13px; font-weight:700; border-radius:10px; text-decoration:none; white-space:nowrap;">Register Free</a>
   </div>
 </nav>
 
@@ -411,11 +751,11 @@
 <section class="hero">
   <div class="badge"><div class="badge-dot"></div> Free Live Training</div>
   <h1>The 3 Income Engines<br><span>That Build $10K+/Mo Online</span></h1>
-  <p class="subtitle">Join hundreds of members using proven systems for sports betting, e-commerce, and AI automation to build real income streams — no experience needed.</p>
+  <p class="subtitle">Join hundreds of members for this exclusive YouTube Premiere — learn proven systems for sports betting, e-commerce, and AI automation to build real income streams.</p>
 
   <div class="date-banner">
     <span class="cal-icon">&#128197;</span>
-    Sunday, March 15 &bull; 6:00 PM ET
+    Sunday, March 15 &bull; 3:00 PM ET
   </div>
 
   <!-- COUNTDOWN -->
@@ -441,7 +781,192 @@
   <!-- STATS -->
   <div class="stats">
     <div class="stat"><div class="stat-num">$10M+</div><div class="stat-label">Member Revenue</div></div>
-    <div class="stat"><div class="stat-num">5+</div><div class="stat-label">Income Streams</div></div>
+    <div class="stat"><div class="stat-num">12</div><div class="stat-label">Sportsbooks Tracked</div></div>
+    <div class="stat"><div class="stat-num">24/7</div><div class="stat-label">Automated Scanning</div></div>
+  </div>
+</section>
+
+<!-- ===== ODDS SCREEN SHOWCASE ===== -->
+<section class="odds-showcase">
+  <div class="odds-showcase-header">
+    <h2>The <span>Odds Screen</span> <span class="coming-soon-badge">Launching Next Week</span></h2>
+    <p>Real-time odds from 12 sportsbooks compared side-by-side. Our system highlights +EV bets so you always know where the edge is. Be the first to access it.</p>
+  </div>
+
+  <div style="position:relative;">
+    <div class="odds-annotation odds-annotation-1">+EV Detected</div>
+    <div class="odds-annotation odds-annotation-2">Best Line Found</div>
+
+    <div class="odds-frame">
+      <!-- Toolbar -->
+      <div class="odds-toolbar">
+        <div class="odds-toolbar-left">
+          <div class="odds-toolbar-sport">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#00C853" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20M2 12h20"/></svg>
+            NBA Basketball
+          </div>
+          <div class="odds-toolbar-tabs">
+            <div class="odds-tab active">ML</div>
+            <div class="odds-tab">Spread</div>
+            <div class="odds-tab">Total</div>
+          </div>
+        </div>
+        <div class="odds-toolbar-right">
+          <div class="odds-live-dot"></div>
+          Live &bull; 18 events
+        </div>
+      </div>
+
+      <!-- Table -->
+      <div class="odds-table-wrap">
+        <table class="odds-table">
+          <thead>
+            <tr>
+              <th>Matchup</th>
+              <th>FanDuel</th>
+              <th>DraftKings</th>
+              <th>BetRivers</th>
+              <th>Pinnacle</th>
+              <th>Caesars</th>
+              <th>BetOnline</th>
+              <th>ESPNBet</th>
+              <th>Fanatics</th>
+              <th>Novig</th>
+              <th>Fliff</th>
+              <th>+EV</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <div class="matchup-cell">
+                  <span class="matchup-team">BOS Celtics</span>
+                  <span class="matchup-team">MIL Bucks</span>
+                  <span class="matchup-time">7:00 PM ET</span>
+                </div>
+              </td>
+              <td><span class="odds-val">-165</span><br><span class="odds-val plus">+138</span></td>
+              <td><span class="odds-val">-160</span><br><span class="odds-val plus">+135</span></td>
+              <td><span class="odds-val">-162</span><br><span class="odds-val plus">+136</span></td>
+              <td><span class="odds-val">-158</span><br><span class="odds-val plus">+140</span></td>
+              <td><span class="odds-val">-165</span><br><span class="odds-val plus">+135</span></td>
+              <td><span class="odds-val">-160</span><br><span class="odds-val plus">+140</span></td>
+              <td><span class="odds-val">-163</span><br><span class="odds-val plus">+137</span></td>
+              <td><span class="odds-val">-162</span><br><span class="odds-val plus">+136</span></td>
+              <td><span class="odds-val">-157</span><br><span class="odds-val plus ev-highlight">+142</span></td>
+              <td><span class="odds-val">-160</span><br><span class="odds-val plus">+135</span></td>
+              <td><span class="odds-val ev-highlight">YES</span></td>
+            </tr>
+            <tr>
+              <td>
+                <div class="matchup-cell">
+                  <span class="matchup-team">PHX Suns</span>
+                  <span class="matchup-team">LAL Lakers</span>
+                  <span class="matchup-time">7:30 PM ET</span>
+                </div>
+              </td>
+              <td><span class="odds-val plus">+130</span><br><span class="odds-val">-155</span></td>
+              <td><span class="odds-val plus">+128</span><br><span class="odds-val">-152</span></td>
+              <td><span class="odds-val plus">+132</span><br><span class="odds-val">-158</span></td>
+              <td><span class="odds-val plus">+134</span><br><span class="odds-val">-150</span></td>
+              <td><span class="odds-val plus">+130</span><br><span class="odds-val">-155</span></td>
+              <td><span class="odds-val plus">+128</span><br><span class="odds-val">-152</span></td>
+              <td><span class="odds-val plus">+126</span><br><span class="odds-val">-150</span></td>
+              <td><span class="odds-val plus">+130</span><br><span class="odds-val">-155</span></td>
+              <td><span class="odds-val plus ev-highlight">+138</span><br><span class="odds-val">-148</span></td>
+              <td><span class="odds-val plus">+130</span><br><span class="odds-val">-155</span></td>
+              <td><span class="odds-val ev-highlight">YES</span></td>
+            </tr>
+            <tr>
+              <td>
+                <div class="matchup-cell">
+                  <span class="matchup-team">DAL Mavericks</span>
+                  <span class="matchup-team">DEN Nuggets</span>
+                  <span class="matchup-time">8:00 PM ET</span>
+                </div>
+              </td>
+              <td><span class="odds-val plus">+145</span><br><span class="odds-val">-172</span></td>
+              <td><span class="odds-val plus">+142</span><br><span class="odds-val">-170</span></td>
+              <td><span class="odds-val plus">+148</span><br><span class="odds-val">-175</span></td>
+              <td><span class="odds-val plus">+150</span><br><span class="odds-val">-168</span></td>
+              <td><span class="odds-val plus">+140</span><br><span class="odds-val">-170</span></td>
+              <td><span class="odds-val plus">+145</span><br><span class="odds-val">-172</span></td>
+              <td><span class="odds-val plus">+142</span><br><span class="odds-val">-170</span></td>
+              <td><span class="odds-val plus">+140</span><br><span class="odds-val">-165</span></td>
+              <td><span class="odds-val plus">+148</span><br><span class="odds-val">-168</span></td>
+              <td><span class="odds-val plus">+145</span><br><span class="odds-val">-172</span></td>
+              <td><span class="odds-val dash">—</span></td>
+            </tr>
+            <tr>
+              <td>
+                <div class="matchup-cell">
+                  <span class="matchup-team">NYK Knicks</span>
+                  <span class="matchup-team">MIA Heat</span>
+                  <span class="matchup-time">8:00 PM ET</span>
+                </div>
+              </td>
+              <td><span class="odds-val">-185</span><br><span class="odds-val plus">+155</span></td>
+              <td><span class="odds-val">-180</span><br><span class="odds-val plus">+150</span></td>
+              <td><span class="odds-val">-182</span><br><span class="odds-val plus">+152</span></td>
+              <td><span class="odds-val">-178</span><br><span class="odds-val plus">+158</span></td>
+              <td><span class="odds-val">-185</span><br><span class="odds-val plus">+150</span></td>
+              <td><span class="odds-val">-180</span><br><span class="odds-val plus">+155</span></td>
+              <td><span class="odds-val">-182</span><br><span class="odds-val plus">+148</span></td>
+              <td><span class="odds-val">-180</span><br><span class="odds-val plus">+152</span></td>
+              <td><span class="odds-val">-176</span><br><span class="odds-val plus ev-highlight">+160</span></td>
+              <td><span class="odds-val">-180</span><br><span class="odds-val plus">+150</span></td>
+              <td><span class="odds-val ev-highlight">YES</span></td>
+            </tr>
+            <tr>
+              <td>
+                <div class="matchup-cell">
+                  <span class="matchup-team">GSW Warriors</span>
+                  <span class="matchup-team">MIN T-Wolves</span>
+                  <span class="matchup-time">9:00 PM ET</span>
+                </div>
+              </td>
+              <td><span class="odds-val plus">+175</span><br><span class="odds-val">-210</span></td>
+              <td><span class="odds-val plus">+170</span><br><span class="odds-val">-205</span></td>
+              <td><span class="odds-val plus">+172</span><br><span class="odds-val">-208</span></td>
+              <td><span class="odds-val plus">+178</span><br><span class="odds-val">-200</span></td>
+              <td><span class="odds-val plus">+168</span><br><span class="odds-val">-205</span></td>
+              <td><span class="odds-val plus">+175</span><br><span class="odds-val">-210</span></td>
+              <td><span class="odds-val plus">+170</span><br><span class="odds-val">-205</span></td>
+              <td><span class="odds-val plus">+172</span><br><span class="odds-val">-208</span></td>
+              <td><span class="odds-val plus">+176</span><br><span class="odds-val">-198</span></td>
+              <td><span class="odds-val plus">+170</span><br><span class="odds-val">-205</span></td>
+              <td><span class="odds-val dash">—</span></td>
+            </tr>
+            <tr>
+              <td>
+                <div class="matchup-cell">
+                  <span class="matchup-team">CLE Cavaliers</span>
+                  <span class="matchup-team">PHI 76ers</span>
+                  <span class="matchup-time">9:30 PM ET</span>
+                </div>
+              </td>
+              <td><span class="odds-val">-220</span><br><span class="odds-val plus">+180</span></td>
+              <td><span class="odds-val">-215</span><br><span class="odds-val plus">+178</span></td>
+              <td><span class="odds-val">-218</span><br><span class="odds-val plus">+180</span></td>
+              <td><span class="odds-val">-210</span><br><span class="odds-val plus">+185</span></td>
+              <td><span class="odds-val">-220</span><br><span class="odds-val plus">+175</span></td>
+              <td><span class="odds-val">-215</span><br><span class="odds-val plus">+180</span></td>
+              <td><span class="odds-val">-218</span><br><span class="odds-val plus">+176</span></td>
+              <td><span class="odds-val">-215</span><br><span class="odds-val plus">+178</span></td>
+              <td><span class="odds-val">-208</span><br><span class="odds-val plus ev-highlight">+188</span></td>
+              <td><span class="odds-val">-215</span><br><span class="odds-val plus">+178</span></td>
+              <td><span class="odds-val ev-highlight">YES</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Footer -->
+      <div class="odds-footer">
+        <span class="odds-footer-left">Showing 6 of 18 NBA events &bull; Updates every 5 seconds</span>
+        <a href="#register" class="odds-footer-cta">Get Full Access &#8594;</a>
+      </div>
+    </div>
   </div>
 </section>
 
@@ -477,8 +1002,8 @@
         <label for="newsletter">Yes, also subscribe me to the Soldi newsletter for weekly tips, member wins, and exclusive opportunities</label>
       </div>
       <div class="checkbox-group">
-        <input type="checkbox" id="sms-consent" name="smsConsent">
-        <label for="sms-consent">Send me SMS reminders before the training (recommended — <a href="#">privacy policy</a>)</label>
+        <input type="checkbox" id="sms-consent" name="smsConsent" checked>
+        <label for="sms-consent">Text me the live stream link + reminders before the training (recommended — <a href="#">privacy policy</a>)</label>
       </div>
       <button type="submit" class="submit-btn" id="submit-btn">
         <span class="btn-text">Reserve My Spot Now &#8594;</span>
@@ -489,9 +1014,9 @@
 
     <!-- SUCCESS STATE -->
     <div class="success-screen" id="success-screen">
-      <div class="success-icon">&#10003;</div>
+      <div class="success-icon-wrap">&#10003;</div>
       <h2>You're Registered!</h2>
-      <p>Check your email for confirmation and the webinar link. We'll also send you a reminder before we go live.</p>
+      <p>We'll text and email you the YouTube live stream link at 3:00 PM ET on Sunday. Keep an eye on your inbox and phone!</p>
       <div class="success-details">
         <div class="detail-row">
           <span class="detail-label">Event</span>
@@ -503,13 +1028,14 @@
         </div>
         <div class="detail-row">
           <span class="detail-label">Time</span>
-          <span class="detail-value">6:00 PM ET</span>
+          <span class="detail-value">3:00 PM ET</span>
         </div>
         <div class="detail-row">
           <span class="detail-label">Duration</span>
           <span class="detail-value">~60 minutes</span>
         </div>
       </div>
+      <a href="YOUTUBE_PREMIERE_LINK_HERE" target="_blank" class="submit-btn" style="text-decoration:none; margin-top:20px; max-width:320px; margin-left:auto; margin-right:auto;">&#9654; Watch the YouTube Premiere</a>
       <button class="add-cal-btn" onclick="addToGoogleCal()">&#128197; Add to Google Calendar</button>
     </div>
   </div>
@@ -548,7 +1074,164 @@
   </div>
 </section>
 
-<!-- MEMBER SUCCESS -->
+<!-- ===== AI AUTOMATION DEEP DIVE ===== -->
+<section class="ai-section">
+  <div class="ai-section-header">
+    <h2>Build a Fully Automated <span>AI Service Company</span></h2>
+    <p>Step-by-step guides, video walkthroughs, and ready-made templates to launch an AI automation agency from scratch — even if you've never written a line of code.</p>
+  </div>
+
+  <div class="ai-roadmap">
+    <div class="ai-phase">
+      <div class="ai-phase-header">
+        <div class="ai-phase-num">01</div>
+        <div class="ai-phase-title">Pick Your AI Service Niche</div>
+      </div>
+      <div class="ai-phase-desc">Learn which AI services businesses will actually pay $2K–$10K/mo for. We break down the top niches — AI chatbots, content automation, lead gen bots, appointment setters, and AI voice agents — with real pricing data and demand analysis so you choose a winner on day one.</div>
+      <div class="ai-phase-tags">
+        <span class="ai-tag video">Video Walkthrough</span>
+        <span class="ai-tag guide">Niche Scorecard</span>
+        <span class="ai-tag template">Pricing Template</span>
+      </div>
+    </div>
+
+    <div class="ai-phase">
+      <div class="ai-phase-header">
+        <div class="ai-phase-num">02</div>
+        <div class="ai-phase-title">Build Your First AI Product (No Code)</div>
+      </div>
+      <div class="ai-phase-desc">Follow along as we build a complete AI chatbot, AI appointment setter, and AI content engine live on screen using tools like Voiceflow, Make.com, and OpenAI. Each build comes with a video tutorial, step-by-step guide, and a clone-ready template you can white-label for clients.</div>
+      <div class="ai-phase-tags">
+        <span class="ai-tag video">3 Build Videos</span>
+        <span class="ai-tag guide">Setup Guide</span>
+        <span class="ai-tag template">Clone Templates</span>
+      </div>
+    </div>
+
+    <div class="ai-phase">
+      <div class="ai-phase-header">
+        <div class="ai-phase-num">03</div>
+        <div class="ai-phase-title">Client Acquisition System</div>
+      </div>
+      <div class="ai-phase-desc">The exact outreach scripts, cold email sequences, LinkedIn DM templates, and Loom audit strategy our members use to land their first paying client in under 14 days. Includes a video breakdown of a real outreach campaign that closed a $3,500/mo retainer.</div>
+      <div class="ai-phase-tags">
+        <span class="ai-tag video">Outreach Breakdown</span>
+        <span class="ai-tag guide">Script Library</span>
+        <span class="ai-tag template">Email Sequences</span>
+      </div>
+    </div>
+
+    <div class="ai-phase">
+      <div class="ai-phase-header">
+        <div class="ai-phase-num">04</div>
+        <div class="ai-phase-title">Automate Delivery & Scale to $10K/Mo</div>
+      </div>
+      <div class="ai-phase-desc">Once you have clients, automate everything. We show you how to build SOPs, onboarding flows, and fulfillment automations so you can manage 10+ clients without hiring. Video walkthroughs cover Make.com workflows, client dashboards, auto-reporting, and how to raise prices as you scale.</div>
+      <div class="ai-phase-tags">
+        <span class="ai-tag video">Scaling Video</span>
+        <span class="ai-tag guide">SOP Framework</span>
+        <span class="ai-tag template">Automation Flows</span>
+      </div>
+    </div>
+
+    <div class="ai-phase">
+      <div class="ai-phase-header">
+        <div class="ai-phase-num">05</div>
+        <div class="ai-phase-title">AI Voice Agents & Advanced Services</div>
+      </div>
+      <div class="ai-phase-desc">The highest-margin AI service right now: voice agents that answer phones, book appointments, and qualify leads 24/7. We walk through building one from scratch using Vapi + Make.com, then show how to pitch it to dentists, med spas, and real estate teams for $1,500–$5,000/mo each.</div>
+      <div class="ai-phase-tags">
+        <span class="ai-tag video">Live Build Video</span>
+        <span class="ai-tag guide">Pitch Deck</span>
+        <span class="ai-tag template">Voice Agent Template</span>
+      </div>
+    </div>
+
+    <div class="ai-phase">
+      <div class="ai-phase-header">
+        <div class="ai-phase-num">06</div>
+        <div class="ai-phase-title">Recurring Revenue & White-Label Playbook</div>
+      </div>
+      <div class="ai-phase-desc">Turn one-time builds into $2K–$10K/mo recurring revenue by offering maintenance, optimization, and white-labeled AI tools. Video guide covers how to structure retainers, upsell existing clients, and build a portfolio that generates income while you sleep.</div>
+      <div class="ai-phase-tags">
+        <span class="ai-tag video">Revenue Strategy</span>
+        <span class="ai-tag guide">Retainer Framework</span>
+        <span class="ai-tag template">Contract Templates</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== DISCORD BOT FEATURES ===== -->
+<section class="bot-showcase">
+  <div class="bot-showcase-header">
+    <h2>The Soldi <span>Polymarket Whale Bot</span></h2>
+    <p>Track the smartest money on Polymarket right from Discord. Add any wallet, remove it anytime, and get instant alerts when whales make moves.</p>
+  </div>
+
+  <div class="bot-card">
+    <div class="bot-card-header">
+      <div class="bot-card-icon discord">&#128051;</div>
+      <div class="bot-card-title">
+        <h3>Whale Wallet Tracker</h3>
+        <p>Real-time alerts when top traders make moves</p>
+      </div>
+    </div>
+
+    <div class="bot-terminal">
+      <div><span class="cmd">/add-wallet</span> <span class="highlight">0x8a3f...d2e1</span> <span class="dim">— "GCR Whale"</span></div>
+      <div><span class="output">&#10003; Wallet added. Now tracking <span class="highlight">GCR Whale</span></span></div>
+      <br>
+      <div><span class="purple">&#128680; WHALE ALERT</span></div>
+      <div><span class="output"><span class="highlight">GCR Whale</span> just bought <span class="highlight">$45,200</span> of <span class="cmd">YES</span> on "Will BTC hit $150K by June?"</span></div>
+      <div><span class="dim">Position: $127,400 total | Avg price: $0.62 | Current: $0.68</span></div>
+      <br>
+      <div><span class="cmd">/wallets</span></div>
+      <div><span class="output">Tracking 3 wallets:</span></div>
+      <div style="margin-top:4px;"><span class="dim">1.</span> <span class="highlight">GCR Whale</span> <span class="dim">— 0x8a3f...d2e1</span></div>
+      <div><span class="dim">&nbsp;&nbsp;&nbsp;P&L:</span> <span class="cmd">+$34,820</span> <span class="dim">(+27.4%)</span> <span class="dim">| 5 open positions</span></div>
+      <div style="margin-top:6px;"><span class="dim">2.</span> <span class="highlight">Poly Insider</span> <span class="dim">— 0x2b7c...a9f3</span></div>
+      <div><span class="dim">&nbsp;&nbsp;&nbsp;P&L:</span> <span class="cmd">+$12,150</span> <span class="dim">(+18.9%)</span> <span class="dim">| 3 open positions</span></div>
+      <div style="margin-top:6px;"><span class="dim">3.</span> <span class="highlight">Election Shark</span> <span class="dim">— 0xf1e4...b8c7</span></div>
+      <div><span class="dim">&nbsp;&nbsp;&nbsp;P&L:</span> <span style="color:#ff6b6b;font-weight:600;">-$4,200</span> <span class="dim">(-6.1%)</span> <span class="dim">| 2 open positions</span></div>
+      <br>
+      <div><span class="dim">&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;</span></div>
+      <div><span class="dim">Combined P&L:</span> <span class="cmd" style="font-size:14px;">+$42,770</span> <span class="dim">(+19.2% avg)</span></div>
+      <br>
+      <div><span class="cmd">/remove-wallet</span> <span class="highlight">Poly Insider</span></div>
+      <div><span class="output">&#10003; Wallet removed. No longer tracking <span class="highlight">Poly Insider</span></span></div>
+    </div>
+
+    <div class="bot-features">
+      <div class="bot-feature">
+        <div class="bot-feature-check">&#10003;</div>
+        <div class="bot-feature-text"><strong>Add any wallet</strong> — paste an address, give it a nickname, start tracking instantly</div>
+      </div>
+      <div class="bot-feature">
+        <div class="bot-feature-check">&#10003;</div>
+        <div class="bot-feature-text"><strong>Remove anytime</strong> — one command to stop tracking a wallet</div>
+      </div>
+      <div class="bot-feature">
+        <div class="bot-feature-check">&#10003;</div>
+        <div class="bot-feature-text"><strong>Instant whale alerts</strong> — get notified the moment a tracked wallet buys or sells</div>
+      </div>
+      <div class="bot-feature">
+        <div class="bot-feature-check">&#10003;</div>
+        <div class="bot-feature-text"><strong>Profit & Loss tracking</strong> — see each wallet's total P&L, % return, and combined performance</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- MID-PAGE CTA -->
+<div class="cta-banner">
+  <div class="cta-banner-inner">
+    <div class="cta-banner-text">Ready to see these tools <span>in action</span>?</div>
+    <a href="#register" class="cta-banner-btn">Register Free</a>
+  </div>
+</div>
+
+<!-- MEMBER SUCCESS — HORIZONTAL CAROUSEL -->
 <section class="success-section">
   <h2>Real Members. <span>Real Results.</span></h2>
 
@@ -558,75 +1241,46 @@
     </div>
   </div>
 
-  <!-- Sports Betting Marquee (scrolls left) -->
-  <div class="success-category">
-    <div class="category-title"><span class="cat-icon">&#9917;</span> Sports Betting Success</div>
-    <div class="marquee-wrapper">
-      <div class="marquee-track" id="betting-marquee">
-        <div class="marquee-item"><img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-1.png" alt="Betting Success" loading="lazy"></div>
-        <div class="marquee-item"><img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-2.png" alt="Betting Success" loading="lazy"></div>
-        <div class="marquee-item"><img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-3.png" alt="Betting Success" loading="lazy"></div>
-        <div class="marquee-item"><img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-4.png" alt="Betting Success" loading="lazy"></div>
-        <div class="marquee-item"><img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-5.png" alt="Betting Success" loading="lazy"></div>
-        <div class="marquee-item"><img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-6.png" alt="Betting Success" loading="lazy"></div>
-        <div class="marquee-item"><img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-7.png" alt="Betting Success" loading="lazy"></div>
-        <div class="marquee-item"><img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-8.png" alt="Betting Success" loading="lazy"></div>
-        <div class="marquee-item"><img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-9.png" alt="Betting Success" loading="lazy"></div>
-        <div class="marquee-item"><img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-10.png" alt="Betting Success" loading="lazy"></div>
-        <div class="marquee-item"><img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-11.png" alt="Betting Success" loading="lazy"></div>
-        <div class="marquee-item"><img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-12.png" alt="Betting Success" loading="lazy"></div>
-        <div class="marquee-item"><img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-13.png" alt="Betting Success" loading="lazy"></div>
-        <div class="marquee-item"><img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-14.png" alt="Betting Success" loading="lazy"></div>
-        <div class="marquee-item"><img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-15.png" alt="Betting Success" loading="lazy"></div>
-        <div class="marquee-item"><img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-16.png" alt="Betting Success" loading="lazy"></div>
-        <div class="marquee-item"><img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-17.png" alt="Betting Success" loading="lazy"></div>
-        <div class="marquee-item"><img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-18.png" alt="Betting Success" loading="lazy"></div>
-        <!-- Duplicated for seamless loop -->
-        <div class="marquee-item"><img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-1.png" alt="Betting Success" loading="lazy"></div>
-        <div class="marquee-item"><img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-2.png" alt="Betting Success" loading="lazy"></div>
-        <div class="marquee-item"><img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-3.png" alt="Betting Success" loading="lazy"></div>
-        <div class="marquee-item"><img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-4.png" alt="Betting Success" loading="lazy"></div>
-        <div class="marquee-item"><img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-5.png" alt="Betting Success" loading="lazy"></div>
-        <div class="marquee-item"><img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-6.png" alt="Betting Success" loading="lazy"></div>
-        <div class="marquee-item"><img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-7.png" alt="Betting Success" loading="lazy"></div>
-        <div class="marquee-item"><img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-8.png" alt="Betting Success" loading="lazy"></div>
-        <div class="marquee-item"><img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-9.png" alt="Betting Success" loading="lazy"></div>
-        <div class="marquee-item"><img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-10.png" alt="Betting Success" loading="lazy"></div>
-        <div class="marquee-item"><img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-11.png" alt="Betting Success" loading="lazy"></div>
-        <div class="marquee-item"><img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-12.png" alt="Betting Success" loading="lazy"></div>
-        <div class="marquee-item"><img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-13.png" alt="Betting Success" loading="lazy"></div>
-        <div class="marquee-item"><img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-14.png" alt="Betting Success" loading="lazy"></div>
-        <div class="marquee-item"><img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-15.png" alt="Betting Success" loading="lazy"></div>
-        <div class="marquee-item"><img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-16.png" alt="Betting Success" loading="lazy"></div>
-        <div class="marquee-item"><img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-17.png" alt="Betting Success" loading="lazy"></div>
-        <div class="marquee-item"><img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/betting-success/bet-success-18.png" alt="Betting Success" loading="lazy"></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- E-Commerce Marquee (scrolls right) -->
-  <div class="success-category">
-    <div class="category-title"><span class="cat-icon">&#128722;</span> E-Commerce Success</div>
-    <div class="marquee-wrapper">
-      <div class="marquee-track reverse" id="ecom-marquee">
-        <div class="marquee-item"><img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/ecom-success/ecom-success-1.jpg" alt="Ecom Success" loading="lazy"></div>
-        <div class="marquee-item"><img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/ecom-success/ecom-success-2.jpg" alt="Ecom Success" loading="lazy"></div>
-        <div class="marquee-item"><img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/ecom-success/ecom-success-3.jpg" alt="Ecom Success" loading="lazy"></div>
-        <div class="marquee-item"><img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/ecom-success/ecom-success-4.png" alt="Ecom Success" loading="lazy"></div>
-        <div class="marquee-item"><img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/ecom-success/ecom-success-5.png" alt="Ecom Success" loading="lazy"></div>
-        <div class="marquee-item"><img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/ecom-success/ecom-success-6.png" alt="Ecom Success" loading="lazy"></div>
-        <div class="marquee-item"><img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/ecom-success/ecom-success-7.png" alt="Ecom Success" loading="lazy"></div>
-        <div class="marquee-item"><img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/ecom-success/ecom-success-8.jpg" alt="Ecom Success" loading="lazy"></div>
-        <!-- Duplicated for seamless loop -->
-        <div class="marquee-item"><img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/ecom-success/ecom-success-1.jpg" alt="Ecom Success" loading="lazy"></div>
-        <div class="marquee-item"><img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/ecom-success/ecom-success-2.jpg" alt="Ecom Success" loading="lazy"></div>
-        <div class="marquee-item"><img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/ecom-success/ecom-success-3.jpg" alt="Ecom Success" loading="lazy"></div>
-        <div class="marquee-item"><img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/ecom-success/ecom-success-4.png" alt="Ecom Success" loading="lazy"></div>
-        <div class="marquee-item"><img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/ecom-success/ecom-success-5.png" alt="Ecom Success" loading="lazy"></div>
-        <div class="marquee-item"><img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/ecom-success/ecom-success-6.png" alt="Ecom Success" loading="lazy"></div>
-        <div class="marquee-item"><img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/ecom-success/ecom-success-7.png" alt="Ecom Success" loading="lazy"></div>
-        <div class="marquee-item"><img src="https://raw.githubusercontent.com/bartwill452-cmd/soldi-website/main/images/ecom-success/ecom-success-8.jpg" alt="Ecom Success" loading="lazy"></div>
-      </div>
+  <div class="success-carousel-wrap">
+    <div class="success-carousel" id="success-carousel">
+      <!-- Set 1 (originals) -->
+      <div class="success-card"><img src="images/betting-success/bet-success-1.png" alt="Betting win" loading="lazy"><div class="success-card-label"><span>Sports Betting</span></div></div>
+      <div class="success-card"><img src="images/ecom-success/ecom-success-1.jpg" alt="E-com win" loading="lazy"><div class="success-card-label"><span>E-Commerce</span></div></div>
+      <div class="success-card"><img src="images/betting-success/bet-success-2.png" alt="Betting win" loading="lazy"><div class="success-card-label"><span>Sports Betting</span></div></div>
+      <div class="success-card"><img src="images/ecom-success/ecom-success-2.jpg" alt="E-com win" loading="lazy"><div class="success-card-label"><span>E-Commerce</span></div></div>
+      <div class="success-card"><img src="images/betting-success/bet-success-3.png" alt="Betting win" loading="lazy"><div class="success-card-label"><span>Sports Betting</span></div></div>
+      <div class="success-card"><img src="images/betting-success/bet-success-4.png" alt="Betting win" loading="lazy"><div class="success-card-label"><span>Sports Betting</span></div></div>
+      <div class="success-card"><img src="images/ecom-success/ecom-success-3.jpg" alt="E-com win" loading="lazy"><div class="success-card-label"><span>E-Commerce</span></div></div>
+      <div class="success-card"><img src="images/betting-success/bet-success-5.png" alt="Betting win" loading="lazy"><div class="success-card-label"><span>Sports Betting</span></div></div>
+      <div class="success-card"><img src="images/ecom-success/ecom-success-4.png" alt="E-com win" loading="lazy"><div class="success-card-label"><span>E-Commerce</span></div></div>
+      <div class="success-card"><img src="images/betting-success/bet-success-6.png" alt="Betting win" loading="lazy"><div class="success-card-label"><span>Sports Betting</span></div></div>
+      <div class="success-card"><img src="images/betting-success/bet-success-7.png" alt="Betting win" loading="lazy"><div class="success-card-label"><span>Sports Betting</span></div></div>
+      <div class="success-card"><img src="images/ecom-success/ecom-success-5.png" alt="E-com win" loading="lazy"><div class="success-card-label"><span>E-Commerce</span></div></div>
+      <div class="success-card"><img src="images/betting-success/bet-success-8.png" alt="Betting win" loading="lazy"><div class="success-card-label"><span>Sports Betting</span></div></div>
+      <div class="success-card"><img src="images/ecom-success/ecom-success-6.png" alt="E-com win" loading="lazy"><div class="success-card-label"><span>E-Commerce</span></div></div>
+      <div class="success-card"><img src="images/betting-success/bet-success-9.png" alt="Betting win" loading="lazy"><div class="success-card-label"><span>Sports Betting</span></div></div>
+      <div class="success-card"><img src="images/betting-success/bet-success-10.png" alt="Betting win" loading="lazy"><div class="success-card-label"><span>Sports Betting</span></div></div>
+      <div class="success-card"><img src="images/ecom-success/ecom-success-7.png" alt="E-com win" loading="lazy"><div class="success-card-label"><span>E-Commerce</span></div></div>
+      <div class="success-card"><img src="images/ecom-success/ecom-success-8.jpg" alt="E-com win" loading="lazy"><div class="success-card-label"><span>E-Commerce</span></div></div>
+      <!-- Set 2 (duplicates for seamless loop) -->
+      <div class="success-card"><img src="images/betting-success/bet-success-1.png" alt="Betting win" loading="lazy"><div class="success-card-label"><span>Sports Betting</span></div></div>
+      <div class="success-card"><img src="images/ecom-success/ecom-success-1.jpg" alt="E-com win" loading="lazy"><div class="success-card-label"><span>E-Commerce</span></div></div>
+      <div class="success-card"><img src="images/betting-success/bet-success-2.png" alt="Betting win" loading="lazy"><div class="success-card-label"><span>Sports Betting</span></div></div>
+      <div class="success-card"><img src="images/ecom-success/ecom-success-2.jpg" alt="E-com win" loading="lazy"><div class="success-card-label"><span>E-Commerce</span></div></div>
+      <div class="success-card"><img src="images/betting-success/bet-success-3.png" alt="Betting win" loading="lazy"><div class="success-card-label"><span>Sports Betting</span></div></div>
+      <div class="success-card"><img src="images/betting-success/bet-success-4.png" alt="Betting win" loading="lazy"><div class="success-card-label"><span>Sports Betting</span></div></div>
+      <div class="success-card"><img src="images/ecom-success/ecom-success-3.jpg" alt="E-com win" loading="lazy"><div class="success-card-label"><span>E-Commerce</span></div></div>
+      <div class="success-card"><img src="images/betting-success/bet-success-5.png" alt="Betting win" loading="lazy"><div class="success-card-label"><span>Sports Betting</span></div></div>
+      <div class="success-card"><img src="images/ecom-success/ecom-success-4.png" alt="E-com win" loading="lazy"><div class="success-card-label"><span>E-Commerce</span></div></div>
+      <div class="success-card"><img src="images/betting-success/bet-success-6.png" alt="Betting win" loading="lazy"><div class="success-card-label"><span>Sports Betting</span></div></div>
+      <div class="success-card"><img src="images/betting-success/bet-success-7.png" alt="Betting win" loading="lazy"><div class="success-card-label"><span>Sports Betting</span></div></div>
+      <div class="success-card"><img src="images/ecom-success/ecom-success-5.png" alt="E-com win" loading="lazy"><div class="success-card-label"><span>E-Commerce</span></div></div>
+      <div class="success-card"><img src="images/betting-success/bet-success-8.png" alt="Betting win" loading="lazy"><div class="success-card-label"><span>Sports Betting</span></div></div>
+      <div class="success-card"><img src="images/ecom-success/ecom-success-6.png" alt="E-com win" loading="lazy"><div class="success-card-label"><span>E-Commerce</span></div></div>
+      <div class="success-card"><img src="images/betting-success/bet-success-9.png" alt="Betting win" loading="lazy"><div class="success-card-label"><span>Sports Betting</span></div></div>
+      <div class="success-card"><img src="images/betting-success/bet-success-10.png" alt="Betting win" loading="lazy"><div class="success-card-label"><span>Sports Betting</span></div></div>
+      <div class="success-card"><img src="images/ecom-success/ecom-success-7.png" alt="E-com win" loading="lazy"><div class="success-card-label"><span>E-Commerce</span></div></div>
+      <div class="success-card"><img src="images/ecom-success/ecom-success-8.jpg" alt="E-com win" loading="lazy"><div class="success-card-label"><span>E-Commerce</span></div></div>
     </div>
   </div>
 </section>
@@ -640,7 +1294,8 @@
 <script>
   // ===== COUNTDOWN TIMER =====
   // Safari-safe date: use UTC directly (6PM ET = 10PM UTC during EDT)
-  const webinarDate = new Date(Date.UTC(2026, 2, 15, 22, 0, 0)).getTime();
+  // 3:00 PM ET = 19:00 UTC (EDT)
+  const webinarDate = new Date(Date.UTC(2026, 2, 15, 19, 0, 0)).getTime();
 
   function updateCountdown() {
     const now = new Date().getTime();
@@ -669,7 +1324,6 @@
   setInterval(updateCountdown, 1000);
 
   // ===== FORM SUBMISSION =====
-  // Stores registrations in memory and triggers email via EmailJS or backend
   const registrations = [];
 
   async function handleSubmit(e) {
@@ -691,12 +1345,9 @@
 
     registrations.push(data);
 
-    // Submit to server API (works both on trysoldi.com and standalone)
-    const API_BASE = window.location.hostname === 'trysoldi.com'
-      ? ''
-      : 'https://trysoldi.com';
+    // Submit to server API
     try {
-      const res = await fetch(API_BASE + '/api/webinar/register', {
+      const res = await fetch('/api/webinar/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
@@ -706,7 +1357,7 @@
       console.log('Registration saved:', result);
     } catch (err) {
       console.error('Registration error:', err);
-      // Still show success — registration will be retried or handled manually
+      // Still show success — we saved locally and can retry
     }
 
     // Show success
@@ -722,7 +1373,7 @@
   function addToGoogleCal() {
     const url = 'https://calendar.google.com/calendar/render?action=TEMPLATE' +
       '&text=' + encodeURIComponent('Soldi Webinar: The 3 Income Engines') +
-      '&dates=20260315T220000Z/20260315T231500Z' +
+      '&dates=20260315T190000Z/20260315T201500Z' +
       '&details=' + encodeURIComponent('FREE LIVE TRAINING: The 3 Income Engines — How Ordinary People Are Building $10K+/Mo Online in 2026\\n\\nJoin at: trysoldi.com') +
       '&location=' + encodeURIComponent('Online - trysoldi.com');
     window.open(url, '_blank');
