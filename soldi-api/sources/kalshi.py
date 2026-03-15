@@ -29,6 +29,48 @@ logger = logging.getLogger(__name__)
 
 BASE_URL = "https://api.elections.kalshi.com/trade-api/v2"
 
+
+def _get_cents(mkt: dict, field: str) -> Optional[int]:
+    """Read a price field from a Kalshi market, handling both old and new API formats.
+
+    Old format: field is an int in cents (e.g., yes_ask=26)
+    New format: field + '_dollars' is a string in dollars (e.g., yes_ask_dollars="0.2600")
+
+    Returns the price in cents (int), or None if not available.
+    """
+    # Try old format first (int cents)
+    val = mkt.get(field)
+    if isinstance(val, (int, float)) and val > 0:
+        return int(val)
+    # Try new format: field_dollars (string in dollars)
+    dollars_str = mkt.get(f"{field}_dollars")
+    if dollars_str:
+        try:
+            dollars = float(dollars_str)
+            if dollars > 0:
+                return int(round(dollars * 100))
+        except (ValueError, TypeError):
+            pass
+    return None
+
+
+def _get_volume(mkt: dict) -> int:
+    """Read volume from a Kalshi market, handling both old and new API formats.
+
+    Old format: volume (int)
+    New format: volume_fp (string)
+    """
+    vol = mkt.get("volume")
+    if isinstance(vol, (int, float)) and vol > 0:
+        return int(vol)
+    vol_str = mkt.get("volume_fp")
+    if vol_str:
+        try:
+            return int(float(vol_str))
+        except (ValueError, TypeError):
+            pass
+    return 0
+
 MONTH_MAP = {
     "JAN": 1, "FEB": 2, "MAR": 3, "APR": 4, "MAY": 5, "JUN": 6,
     "JUL": 7, "AUG": 8, "SEP": 9, "OCT": 10, "NOV": 11, "DEC": 12,
@@ -426,8 +468,8 @@ class KalshiSource(DataSource):
                 "away": away_ticker,
             }
 
-        away_price = away_mkt.get("yes_ask")
-        home_price = home_mkt.get("yes_ask")
+        away_price = _get_cents(away_mkt, "yes_ask")
+        home_price = _get_cents(home_mkt, "yes_ask")
 
         if not away_price or not home_price:
             return None
@@ -454,7 +496,7 @@ class KalshiSource(DataSource):
 
         # Add draw outcome for soccer 3-way markets
         if draw_mkt:
-            draw_price = draw_mkt.get("yes_ask")
+            draw_price = _get_cents(draw_mkt, "yes_ask")
             if draw_price and 0 < draw_price < 100:
                 draw_odds = cents_to_american(draw_price)
                 h2h_outcomes.append(Outcome(name="Draw", price=draw_odds))
@@ -594,8 +636,8 @@ class KalshiSource(DataSource):
                 if mkt.get("status") != "active":
                     continue
                 tk = mkt.get("ticker", "")
-                ya = mkt.get("yes_ask")
-                vol = mkt.get("volume") or 0
+                ya = _get_cents(mkt, "yes_ask")
+                vol = _get_volume(mkt)
                 if tk and ya:
                     market_info.append((et, tk, ya, vol))
                     mkt_tickers.append(tk)
@@ -781,8 +823,8 @@ class KalshiSource(DataSource):
             if not home_mkt or not away_mkt:
                 continue
 
-            home_price = home_mkt.get("yes_ask")
-            away_price = away_mkt.get("yes_ask")
+            home_price = _get_cents(home_mkt, "yes_ask")
+            away_price = _get_cents(away_mkt, "yes_ask")
             if not home_price or not away_price:
                 continue
             if home_price <= 0 or home_price >= 100 or away_price <= 0 or away_price >= 100:
@@ -825,7 +867,7 @@ class KalshiSource(DataSource):
             for mkt in markets_data:
                 if mkt.get("status") != "active":
                     continue
-                yes_ask = mkt.get("yes_ask")
+                yes_ask = _get_cents(mkt, "yes_ask")
                 if not yes_ask or yes_ask <= 1 or yes_ask >= 99:
                     continue
                 dist = abs(yes_ask - 50)
@@ -851,7 +893,7 @@ class KalshiSource(DataSource):
     ) -> Optional[Market]:
         """Parse a single Kalshi spread market into a spreads Market."""
         ticker = market.get("ticker", "")
-        yes_ask = market.get("yes_ask")
+        yes_ask = _get_cents(market, "yes_ask")
         if not yes_ask:
             return None
 
@@ -895,7 +937,7 @@ class KalshiSource(DataSource):
 
         # Calculate American odds
         fav_odds = cents_to_american(yes_ask)
-        no_ask = market.get("no_ask")
+        no_ask = _get_cents(market, "no_ask")
         no_price = no_ask if no_ask and 0 < no_ask < 100 else max(1, min(99, 100 - yes_ask))
         other_odds = cents_to_american(no_price)
 
@@ -929,7 +971,7 @@ class KalshiSource(DataSource):
             for mkt in markets_data:
                 if mkt.get("status") != "active":
                     continue
-                yes_ask = mkt.get("yes_ask")
+                yes_ask = _get_cents(mkt, "yes_ask")
                 if not yes_ask or yes_ask <= 1 or yes_ask >= 99:
                     continue
                 dist = abs(yes_ask - 50)
@@ -949,7 +991,7 @@ class KalshiSource(DataSource):
     def _parse_total_from_market(self, market: dict, market_key: str = "totals") -> Optional[Market]:
         """Parse a single Kalshi total market into a totals Market."""
         ticker = market.get("ticker", "")
-        yes_ask = market.get("yes_ask")
+        yes_ask = _get_cents(market, "yes_ask")
         if not yes_ask:
             return None
 
@@ -974,7 +1016,7 @@ class KalshiSource(DataSource):
 
         # Yes = Over, No = Under
         over_odds = cents_to_american(yes_ask)
-        no_ask = market.get("no_ask")
+        no_ask = _get_cents(market, "no_ask")
         no_price = no_ask if no_ask and 0 < no_ask < 100 else max(1, min(99, 100 - yes_ask))
         under_odds = cents_to_american(no_price)
 

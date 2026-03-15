@@ -1382,7 +1382,6 @@ const ODDS_SPORTSBOOKS = [
   { key: 'draftkings', name: 'DraftKings', shortName: 'DK' },
   { key: 'fanduel', name: 'FanDuel', shortName: 'FD' },
   { key: 'betrivers', name: 'BetRivers', shortName: 'BR' },
-  { key: 'hardrock', name: 'Hard Rock Bet', shortName: 'HR' },
   { key: 'williamhill_us', name: 'Caesars', shortName: 'CZR' },
   { key: 'betonlineag', name: 'BetOnline', shortName: 'BOL' },
   { key: 'betus', name: 'BetUS', shortName: 'BUS' },
