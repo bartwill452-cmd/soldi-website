@@ -145,7 +145,7 @@ function cleanupExpiredCodes() {
 // ============================================
 // API KEY STORAGE (file-based)
 // ============================================
-const DATA_DIR = path.join(__dirname, 'data');
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const API_KEYS_FILE = path.join(DATA_DIR, 'api-keys.json');
 
 function loadApiKeys() {
@@ -947,7 +947,7 @@ app.get('/api/validate-key', (req, res) => {
 // ============================================
 // WEBINAR REGISTRATION
 // ============================================
-const WEBINAR_DATA_FILE = path.join(__dirname, 'data', 'webinar-registrations.json');
+const WEBINAR_DATA_FILE = path.join(DATA_DIR, 'webinar-registrations.json');
 
 // Load existing registrations
 function loadWebinarRegistrations() {
@@ -961,6 +961,7 @@ function loadWebinarRegistrations() {
 
 function saveWebinarRegistrations(registrations) {
   try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
     fs.writeFileSync(WEBINAR_DATA_FILE, JSON.stringify(registrations, null, 2));
   } catch (e) { console.error('[Webinar] Error saving registrations:', e.message); }
 }
@@ -1047,6 +1048,18 @@ app.post('/api/webinar/register', async (req, res) => {
 // GET /api/webinar/registrations - Admin: list all registrations
 app.get('/api/webinar/registrations', requireAdmin, (req, res) => {
   const registrations = loadWebinarRegistrations();
+  res.json({ count: registrations.length, registrations });
+});
+
+// GET /api/webinar/registrations/simple - Simple password-protected registration viewer
+app.get('/api/webinar/registrations/simple', (req, res) => {
+  const pw = req.query.pw;
+  const WEBINAR_ADMIN_PW = process.env.WEBINAR_ADMIN_PW || 'soldi2026';
+  if (pw !== WEBINAR_ADMIN_PW) {
+    return res.status(401).json({ error: 'Invalid password. Use ?pw=YOUR_PASSWORD' });
+  }
+  const registrations = loadWebinarRegistrations();
+  // Return as JSON for the admin dashboard
   res.json({ count: registrations.length, registrations });
 });
 
