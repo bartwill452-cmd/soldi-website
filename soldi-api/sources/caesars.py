@@ -87,8 +87,8 @@ _CZR_SPORT_SLUGS = {
     "boxing_boxing": "boxing/competitions/boxing",
 }
 
-_CACHE_TTL = 120  # seconds — prefetch loop takes ~80s to cycle all sports
-_STALE_TTL = 900  # seconds — serve stale data up to 15 minutes (prefetch cycle ~13min)
+_CACHE_TTL = 15  # seconds — refresh every 15s
+_STALE_TTL = 120  # seconds — serve stale data up to 2 minutes
 _JURISDICTION = "nj"
 
 
@@ -135,7 +135,7 @@ class CaesarsSource(DataSource):
         self._prefetch_task = asyncio.ensure_future(self._prefetch_all())
 
     async def _prefetch_all(self) -> None:
-        await asyncio.sleep(16)  # Stagger after BetMGM
+        await asyncio.sleep(2)  # Brief stagger
         logger.info("Caesars: Starting continuous background prefetch")
         all_sports = list(_CZR_SPORT_URLS.keys())
         cycle = 0

@@ -101,11 +101,11 @@ async def _background_refresh_loop() -> None:
         async def _refresh_with_timeout(sport_key: str) -> bool:
             try:
                 await asyncio.wait_for(
-                    _refresh_one_sport(sport_key), timeout=60.0,
+                    _refresh_one_sport(sport_key), timeout=30.0,
                 )
                 return True
             except asyncio.TimeoutError:
-                logger.warning("Refresh %s timed out (60s)", sport_key)
+                logger.warning("Refresh %s timed out (30s)", sport_key)
                 return False
             except Exception as exc:
                 logger.warning("Refresh %s error: %s", sport_key, exc)
@@ -168,7 +168,7 @@ async def _refresh_one_sport(sport_key: str) -> None:
 
 
 # Maximum age (seconds) to carry forward a bookmaker that went missing.
-_STALE_BOOK_TTL = 300  # 5 minutes
+_STALE_BOOK_TTL = 60  # 1 minute — faster refresh means shorter carry-forward
 
 
 def _merge_stale_bookmakers(

@@ -80,7 +80,7 @@ _FUTURES_KEYWORDS = frozenset([
 ])
 
 # Cache TTL: avoid fetching the same sport too often (seconds)
-_CACHE_TTL = 45  # seconds — prefetch loop keeps cache warm every ~15s
+_CACHE_TTL = 15  # seconds — refresh every 15s
 
 # Sports that support period markets (1st half / 1st quarter / 1st period / innings)
 _PERIOD_SPORTS = frozenset([
@@ -219,7 +219,7 @@ class BetOnlineSource(DataSource):
 
     async def _prefetch_all_http(self) -> None:
         """Background HTTP-only prefetch loop."""
-        await asyncio.sleep(5)
+        await asyncio.sleep(2)
         logger.info("BetOnline: Starting HTTP-only background prefetch")
         cycle = 0
         while True:
@@ -242,13 +242,13 @@ class BetOnlineSource(DataSource):
 
             # If 403 blocked, slow down retries
             if cycle_total == 0:
-                await asyncio.sleep(120)
+                await asyncio.sleep(30)
             else:
-                await asyncio.sleep(15)
+                await asyncio.sleep(5)
 
     async def _prefetch_all(self) -> None:
         """Background task: continuously warm up cache for all supported sports."""
-        await asyncio.sleep(8)  # Stagger browser launch
+        await asyncio.sleep(3)  # Brief stagger
         logger.info("BetOnline: Starting continuous background prefetch")
         cycle = 0
         while True:
@@ -294,7 +294,7 @@ class BetOnlineSource(DataSource):
                 "BetOnline: Prefetch cycle #%d complete (%d total events)",
                 cycle, cycle_total_events,
             )
-            await asyncio.sleep(15)  # Keep cache warm — 17 sports × 0.5s ≈ 9s + 15s pause
+            await asyncio.sleep(5)  # Keep cache warm — fast refresh
 
     async def _ensure_browser(self) -> None:
         """Launch Playwright browser with stealth mode to bypass Cloudflare."""

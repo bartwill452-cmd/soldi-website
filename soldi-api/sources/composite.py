@@ -735,11 +735,11 @@ class CompositeSource(DataSource):
                     source.get_odds(
                         sport_key, regions, markets, bookmakers, odds_format
                     ),
-                    timeout=45.0,
+                    timeout=20.0,
                 )
                 return result
             except asyncio.TimeoutError:
-                logger.warning(f"Source {name} timed out for {sport_key} (45s)")
+                logger.warning(f"Source {name} timed out for {sport_key} (20s)")
                 return None
             except Exception as e:
                 logger.warning(f"Source {name} failed for {sport_key}: {type(e).__name__}: {e}")

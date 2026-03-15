@@ -56,8 +56,8 @@ _SPORT_SLUGS: Dict[str, str] = {
     "tennis_wta": "tennis",
 }
 
-_CACHE_TTL = 90  # seconds
-_STALE_TTL = 600  # serve stale up to 10 min (prefetch cycles are long ~4-7 min)
+_CACHE_TTL = 15  # seconds — refresh every 15s
+_STALE_TTL = 120  # serve stale up to 2 min
 
 # JS to extract all game data from the DOM.
 # BetUS uses ASP.NET WebForms with server-rendered HTML.
@@ -185,7 +185,7 @@ class BetUSSource(DataSource):
         self._prefetch_task = asyncio.ensure_future(self._prefetch_all())
 
     async def _prefetch_all(self) -> None:
-        await asyncio.sleep(20)  # Stagger after other scrapers
+        await asyncio.sleep(3)  # Brief stagger
         logger.info("BetUS: Starting continuous background prefetch")
         cycle = 0
         while True:
@@ -234,7 +234,7 @@ class BetUSSource(DataSource):
                 except Exception as e:
                     logger.warning("BetUS prefetch error: %s", e)
             logger.info("BetUS: Prefetch cycle #%d complete", cycle)
-            await asyncio.sleep(30)
+            await asyncio.sleep(10)
 
     async def _ensure_browser(self) -> None:
         """Launch browser if needed.  Contexts/pages are created per-sport."""

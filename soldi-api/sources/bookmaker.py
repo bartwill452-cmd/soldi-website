@@ -26,7 +26,7 @@ from sources.sport_mapping import (
 logger = logging.getLogger(__name__)
 
 SITE_URL = "https://be.bookmaker.eu"
-_CACHE_TTL = 90  # seconds — prefetch loop keeps cache warm every ~45s
+_CACHE_TTL = 15  # seconds — refresh every 15s
 
 # Map Bookmaker sport-ID (idspt) to OddsScreen sport_key.
 _SPORT_ID_MAP = {
@@ -87,7 +87,7 @@ class BookmakerSource(DataSource):
 
     async def _prefetch_all(self):
         """Continuous warm-up: login and capture the full schedule in a loop."""
-        await asyncio.sleep(8)  # let other sources init first
+        await asyncio.sleep(2)  # brief stagger
         logger.info("Bookmaker: Starting continuous background prefetch")
         cycle = 0
         while True:
@@ -111,7 +111,7 @@ class BookmakerSource(DataSource):
                 logger.info("Bookmaker: Prefetch cycle #%d complete", cycle)
             except Exception as exc:
                 logger.warning("Bookmaker prefetch cycle #%d failed: %s", cycle, exc)
-            await asyncio.sleep(45)  # Bookmaker fetches all sports at once; keep cache warm
+            await asyncio.sleep(10)  # Fast refresh — fetches all sports at once
 
     # ── Browser lifecycle ───────────────────────────────────────────────────
 
