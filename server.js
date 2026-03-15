@@ -1063,6 +1063,100 @@ app.get('/api/webinar/registrations/simple', (req, res) => {
   res.json({ count: registrations.length, registrations });
 });
 
+// POST /api/webinar/send-marketing - Send marketing email from soldihq
+app.post('/api/webinar/send-marketing', async (req, res) => {
+  const pw = req.query.pw;
+  const WEBINAR_ADMIN_PW = process.env.WEBINAR_ADMIN_PW || 'soldi2026';
+  if (pw !== WEBINAR_ADMIN_PW) {
+    return res.status(401).json({ error: 'Invalid password' });
+  }
+  const { emails } = req.body; // array of email strings
+  if (!emails || !Array.isArray(emails) || emails.length === 0) {
+    return res.status(400).json({ error: 'Provide an array of emails in the request body' });
+  }
+  const subject = '[LIVE Monday] The 3 Income Engines — Free Training by Soldi';
+  const html = buildMarketingEmail();
+  const results = [];
+  for (const email of emails) {
+    try {
+      const r = await sendEmail({ to: email.trim(), subject, html });
+      results.push({ email, status: 'sent', provider: r.provider });
+      console.log(`[Marketing] Sent to ${email}`);
+    } catch (e) {
+      results.push({ email, status: 'failed', error: e.message });
+      console.error(`[Marketing] Failed for ${email}:`, e.message);
+    }
+  }
+  res.json({ sent: results.filter(r => r.status === 'sent').length, failed: results.filter(r => r.status === 'failed').length, results });
+});
+
+// Marketing newsletter email template
+function buildMarketingEmail() {
+  return `<div style="max-width:600px;margin:0 auto;background:#0a0a0a;font-family:'Inter',Arial,Helvetica,sans-serif;">
+  <div style="background:linear-gradient(135deg,#00C853 0%,#00E676 50%,#69F0AE 100%);padding:40px 24px;text-align:center;">
+    <p style="margin:0 0 8px;font-size:13px;font-weight:700;color:#000;text-transform:uppercase;letter-spacing:2px;">FREE LIVE TRAINING</p>
+    <h1 style="margin:0 0 8px;font-size:32px;font-weight:900;color:#000;line-height:1.2;">The 3 Income Engines</h1>
+    <p style="margin:0;font-size:16px;color:rgba(0,0,0,0.7);font-weight:600;">How Ordinary People Are Building $10K+/Mo Online in 2026</p>
+  </div>
+  <div style="background:#111;padding:16px 24px;text-align:center;border-bottom:1px solid #222;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="max-width:400px;margin:0 auto;">
+      <tr>
+        <td style="text-align:center;padding:0 12px;"><p style="margin:0;font-size:11px;color:#888;text-transform:uppercase;letter-spacing:1px;">DATE</p><p style="margin:4px 0 0;font-size:15px;color:#fff;font-weight:700;">Mon, March 16</p></td>
+        <td style="text-align:center;padding:0 12px;border-left:1px solid #333;border-right:1px solid #333;"><p style="margin:0;font-size:11px;color:#888;text-transform:uppercase;letter-spacing:1px;">TIME</p><p style="margin:4px 0 0;font-size:15px;color:#fff;font-weight:700;">7:00 PM ET</p></td>
+        <td style="text-align:center;padding:0 12px;"><p style="margin:0;font-size:11px;color:#888;text-transform:uppercase;letter-spacing:1px;">WHERE</p><p style="margin:4px 0 0;font-size:15px;color:#00C853;font-weight:700;">Google Meet</p></td>
+      </tr>
+    </table>
+  </div>
+  <div style="padding:32px 24px;">
+    <p style="font-size:16px;line-height:1.7;color:#ddd;margin:0 0 20px;">We're going live this <strong style="color:#fff;">Monday at 7 PM ET</strong> with a brand new training session — and you're invited.</p>
+    <p style="font-size:16px;line-height:1.7;color:#ddd;margin:0 0 28px;">In just 60 minutes, we'll reveal the <strong style="color:#00C853;">3 income engines</strong> our members are using right now to generate consistent income online — no experience required.</p>
+    <div style="margin:0 0 28px;">
+      <div style="background:#1A1A1A;border:1px solid #2a2a2a;border-radius:12px;padding:20px;margin-bottom:12px;">
+        <table cellpadding="0" cellspacing="0" width="100%"><tr>
+          <td style="width:48px;vertical-align:top;"><div style="width:44px;height:44px;background:#0D3320;border-radius:10px;text-align:center;line-height:44px;font-size:22px;">&#9917;</div></td>
+          <td style="padding-left:14px;vertical-align:top;"><p style="margin:0 0 4px;font-size:15px;font-weight:800;color:#00C853;">ENGINE 1: Sports Betting Systems</p><p style="margin:0;font-size:14px;color:#999;line-height:1.5;">Follow million-dollar traders with automated alerts. Our members are seeing 20-40% monthly returns.</p></td>
+        </tr></table>
+      </div>
+      <div style="background:#1A1A1A;border:1px solid #2a2a2a;border-radius:12px;padding:20px;margin-bottom:12px;">
+        <table cellpadding="0" cellspacing="0" width="100%"><tr>
+          <td style="width:48px;vertical-align:top;"><div style="width:44px;height:44px;background:#0D2033;border-radius:10px;text-align:center;line-height:44px;font-size:22px;">&#128202;</div></td>
+          <td style="padding-left:14px;vertical-align:top;"><p style="margin:0 0 4px;font-size:15px;font-weight:800;color:#4FC3F7;">ENGINE 2: Crypto &amp; Stock Plays</p><p style="margin:0;font-size:14px;color:#999;line-height:1.5;">Real-time signals, AI-powered analysis, and proven strategies for market gains.</p></td>
+        </tr></table>
+      </div>
+      <div style="background:#1A1A1A;border:1px solid #2a2a2a;border-radius:12px;padding:20px;margin-bottom:12px;">
+        <table cellpadding="0" cellspacing="0" width="100%"><tr>
+          <td style="width:48px;vertical-align:top;"><div style="width:44px;height:44px;background:#1A1A0D;border-radius:10px;text-align:center;line-height:44px;font-size:22px;">&#129302;</div></td>
+          <td style="padding-left:14px;vertical-align:top;"><p style="margin:0 0 4px;font-size:15px;font-weight:800;color:#FFD54F;">ENGINE 3: AI Automation</p><p style="margin:0;font-size:14px;color:#999;line-height:1.5;">Build and sell AI-powered services. Our bots scan markets 24/7 so you don't have to.</p></td>
+        </tr></table>
+      </div>
+    </div>
+    <div style="background:#111;border-left:3px solid #00C853;padding:16px 20px;border-radius:0 8px 8px 0;margin-bottom:28px;">
+      <p style="margin:0;font-size:14px;color:#ccc;line-height:1.6;font-style:italic;">"I joined Soldi 3 months ago and I've already made back my investment 10x. The sports betting signals alone are worth it."</p>
+      <p style="margin:8px 0 0;font-size:13px;color:#00C853;font-weight:700;">— Soldi Member</p>
+    </div>
+    <div style="text-align:center;margin:32px 0;">
+      <a href="https://trysoldi.com/webinar.html" style="display:inline-block;background:#00C853;color:#000;padding:16px 40px;border-radius:12px;font-weight:900;font-size:18px;text-decoration:none;letter-spacing:0.5px;">SAVE YOUR SPOT NOW</a>
+      <p style="margin:12px 0 0;font-size:13px;color:#666;">100% Free — Limited Spots Available</p>
+    </div>
+    <div style="background:#1A1A1A;border:1px solid #2a2a2a;border-radius:12px;padding:20px;margin-bottom:24px;">
+      <p style="margin:0 0 12px;font-size:14px;font-weight:800;color:#fff;text-transform:uppercase;letter-spacing:1px;">What you'll get:</p>
+      <table cellpadding="0" cellspacing="0" width="100%">
+        <tr><td style="padding:6px 0;font-size:14px;color:#ccc;">&#10003; Live walkthrough of all 3 income engines</td></tr>
+        <tr><td style="padding:6px 0;font-size:14px;color:#ccc;">&#10003; Real member results and case studies</td></tr>
+        <tr><td style="padding:6px 0;font-size:14px;color:#ccc;">&#10003; Exclusive signup bonus for live attendees</td></tr>
+        <tr><td style="padding:6px 0;font-size:14px;color:#ccc;">&#10003; Q&amp;A session at the end</td></tr>
+      </table>
+    </div>
+    <p style="font-size:14px;color:#888;line-height:1.6;text-align:center;">Don't miss this. We only do these trainings a few times a year, and the replay won't be available forever.</p>
+  </div>
+  <div style="padding:20px 24px;text-align:center;border-top:1px solid #222;">
+    <p style="margin:0 0 4px;font-size:13px;color:#555;">&copy; 2026 Soldi. All rights reserved.</p>
+    <p style="margin:0;font-size:13px;"><a href="https://trysoldi.com" style="color:#00C853;text-decoration:none;">trysoldi.com</a></p>
+    <p style="margin:8px 0 0;font-size:11px;color:#444;">Results shown are from real members but are not typical. Income depends on effort, experience, and market conditions.</p>
+  </div>
+</div>`;
+}
+
 // Webinar confirmation email template
 function buildWebinarConfirmationEmail(firstName) {
   return `
