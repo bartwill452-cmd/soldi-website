@@ -63,7 +63,7 @@ _ACTIVE_SPORTS: List[str] = [
 # Pause (seconds) AFTER each refresh cycle completes before starting the next.
 # Set to 0 for continuous refresh — new cycle starts immediately after previous
 # one finishes.  Individual per-source caches handle their own rate-limiting.
-_REFRESH_PAUSE = 0
+_REFRESH_PAUSE = 5
 
 
 
