@@ -411,6 +411,14 @@ class Bet105Source(DataSource):
     # ------------------------------------------------------------------
 
     async def _ensure_browser(self) -> None:
+        # Health check: if page exists, verify it's still alive
+        if self._page is not None:
+            try:
+                await self._page.evaluate("() => !!document")
+                return
+            except Exception as e:
+                logger.warning("Bet105: page is stale/dead (%s), restarting browser", e)
+                await self._close_browser()
         if self._page is not None:
             return
         try:

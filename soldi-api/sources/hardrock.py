@@ -519,7 +519,39 @@ class HardRockBetSource(DataSource):
             return await self._get_cloudflare_cookies()
 
     async def _get_cloudflare_cookies(self) -> bool:
-        """Use Playwright to get Cloudflare clearance cookies from the API domain."""
+        """Get Cloudflare clearance cookies — try cloudscraper first, then Playwright."""
+        # --- Attempt 1: cloudscraper (lightweight, no browser needed) ---
+        try:
+            import cloudscraper
+            scraper = cloudscraper.create_scraper(
+                browser={"browser": "chrome", "platform": "darwin", "desktop": True}
+            )
+            resp = scraper.get(SITE_URL + "/", timeout=20)
+            if resp.status_code == 200:
+                self._cf_cookies = dict(scraper.cookies)
+                self._cf_cookies_expires = time.time() + _CF_COOKIE_TTL
+                cf_names = list(self._cf_cookies.keys())
+                logger.info("HardRock: cloudscraper got %d cookies: %s", len(self._cf_cookies), cf_names[:10])
+                # Also hit the API domain to pick up its cookies
+                try:
+                    resp2 = scraper.get("https://api.hardrocksportsbook.com/java-graphql/graphql?type=event_tree", timeout=15)
+                    extra = dict(scraper.cookies)
+                    self._cf_cookies.update(extra)
+                except Exception:
+                    pass
+                if self._client:
+                    await self._client.aclose()
+                self._client = self._create_client()
+                self._init_done = True
+                return bool(self._cf_cookies)
+            else:
+                logger.info("HardRock: cloudscraper returned %d, trying Playwright", resp.status_code)
+        except ImportError:
+            logger.info("HardRock: cloudscraper not installed, trying Playwright")
+        except Exception as e:
+            logger.info("HardRock: cloudscraper failed (%s), trying Playwright", e)
+
+        # --- Attempt 2: Playwright CF bypass ---
         try:
             from playwright.async_api import async_playwright
         except ImportError:
@@ -548,17 +580,17 @@ class HardRockBetSource(DataSource):
                 logger.info("HardRock: launching browser for Cloudflare clearance...")
 
                 # Visit the main site first to establish cookies
-                await page.goto(SITE_URL + "/", wait_until="domcontentloaded", timeout=30000)
+                await page.goto(SITE_URL + "/", wait_until="networkidle", timeout=30000)
                 await page.wait_for_timeout(8000)
 
                 # Also visit the API domain to get cookies for it
                 try:
                     await page.goto(
                         "https://api.hardrocksportsbook.com/java-graphql/graphql?type=event_tree",
-                        wait_until="domcontentloaded",
+                        wait_until="networkidle",
                         timeout=15000,
                     )
-                    await page.wait_for_timeout(3000)
+                    await page.wait_for_timeout(5000)
                 except Exception:
                     pass  # API may return error page, that's fine — we just want cookies
 

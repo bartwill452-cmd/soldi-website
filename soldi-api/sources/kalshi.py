@@ -119,7 +119,9 @@ class KalshiSource(DataSource):
         elif self._api_key_id:
             # Fallback to simple bearer token
             headers["Authorization"] = f"Bearer {self._api_key_id}"
-            logger.info("Kalshi: using bearer token auth")
+            logger.info("Kalshi: using bearer token auth (key=%s...)", self._api_key_id[:12])
+        else:
+            logger.warning("Kalshi: NO API key configured — requests will be unauthenticated")
 
         self._client = httpx.AsyncClient(timeout=25.0, headers=headers)
         # Mapping: event_ticker → {"home": mkt_ticker, "away": mkt_ticker}
@@ -299,9 +301,14 @@ class KalshiSource(DataSource):
                     # Re-sign with fresh timestamp on retry
                     auth_headers = self._sign_request("GET", path)
                     continue
+                if response.status_code >= 400:
+                    logger.warning("Kalshi: %s returned %d for %s: %s",
+                                   url, response.status_code, series_ticker,
+                                   response.text[:200])
                 response.raise_for_status()
                 return response.json().get("events", [])
             # Final attempt failed with 429
+            logger.warning("Kalshi: exhausted retries (429) for %s", series_ticker)
             response.raise_for_status()
             return []
 

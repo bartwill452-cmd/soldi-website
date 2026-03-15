@@ -79,7 +79,10 @@ class BookmakerSource(DataSource):
     def start_prefetch(self):
         """Kick off background cache warming (call after event loop is up)."""
         if not self._username or not self._password:
+            logger.warning("Bookmaker: missing credentials (user=%s, pass=%s) — prefetch disabled",
+                           bool(self._username), bool(self._password))
             return
+        logger.info("Bookmaker: credentials present, starting prefetch")
         self._prefetch_task = asyncio.ensure_future(self._prefetch_all())
 
     async def _prefetch_all(self):
