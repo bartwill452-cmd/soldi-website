@@ -452,7 +452,11 @@ def _extract_line_from_selection_name(name: str) -> Optional[float]:
 
 
 class HardRockBetSource(DataSource):
-    """Fetches odds from Hard Rock Bet via their public GraphQL API."""
+    """Fetches odds from Hard Rock Bet via their public GraphQL API.
+
+    Tries direct HTTP access first (no Cloudflare bypass needed).
+    Falls back to Playwright-based Cloudflare cookie acquisition if direct fails.
+    """
 
     _HEADERS = {
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -462,6 +466,12 @@ class HardRockBetSource(DataSource):
         "Accept-Language": "en-US,en;q=0.9",
         "Referer": f"{SITE_URL}/",
         "Origin": SITE_URL,
+        "sec-ch-ua": '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": '"macOS"',
+        "sec-fetch-dest": "empty",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-site",
     }
 
     def __init__(self):
@@ -470,6 +480,8 @@ class HardRockBetSource(DataSource):
         self._client: Optional[httpx.AsyncClient] = None
         self._init_done = False
         self._cf_lock = asyncio.Lock()
+        self._direct_mode = True  # Try direct HTTP first (no Playwright)
+        self._direct_failed_count = 0
         # Discovered competition IDs: sport_key → [comp_id, ...]
         self._comp_ids: Dict[str, List[str]] = {}
         self._tree_fetched = False
@@ -477,12 +489,24 @@ class HardRockBetSource(DataSource):
         self._event_ids: Dict[str, str] = {}
 
     def _create_client(self) -> httpx.AsyncClient:
-        """Create an httpx client with current CF cookies."""
+        """Create an httpx client with current CF cookies (or none for direct mode)."""
         return httpx.AsyncClient(
             timeout=20.0,
             headers=self._HEADERS,
-            cookies=self._cf_cookies,
+            cookies=self._cf_cookies if self._cf_cookies else {},
+            follow_redirects=True,
         )
+
+    async def _ensure_client(self) -> bool:
+        """Ensure we have an httpx client ready. In direct mode, no CF cookies needed."""
+        if self._direct_mode:
+            if self._client is None:
+                self._client = self._create_client()
+                self._init_done = True
+                logger.info("HardRock: using direct HTTP mode (no Cloudflare bypass)")
+            return True
+        # Fallback: use CF cookie mode
+        return await self._ensure_cf_cookies()
 
     async def _ensure_cf_cookies(self) -> bool:
         """Ensure we have valid Cloudflare cookies, refreshing if needed."""
@@ -574,12 +598,12 @@ class HardRockBetSource(DataSource):
         if self._tree_fetched:
             return
 
-        # Ensure CF cookies before making requests
-        if not await self._ensure_cf_cookies():
-            logger.warning("HardRock: cannot fetch event tree without CF cookies")
+        # Ensure client is ready (direct or CF mode)
+        if not await self._ensure_client():
+            logger.warning("HardRock: cannot fetch event tree without client")
             return
 
-        for attempt in range(2):
+        for attempt in range(3):
             try:
                 resp = await self._client.post(
                     f"{GRAPHQL_URL}?type=event_tree",
@@ -594,11 +618,19 @@ class HardRockBetSource(DataSource):
                         },
                     },
                 )
-                if resp.status_code == 403 and attempt == 0:
-                    logger.info("HardRock: event_tree got 403, refreshing CF cookies...")
-                    self._cf_cookies_expires = 0
-                    if await self._ensure_cf_cookies():
-                        continue
+                if resp.status_code == 403:
+                    if self._direct_mode and attempt == 0:
+                        logger.info("HardRock: event_tree direct mode got 403, switching to Playwright CF...")
+                        self._direct_mode = False
+                        self._cf_cookies_expires = 0
+                        if await self._ensure_cf_cookies():
+                            continue
+                        return
+                    elif attempt < 2:
+                        logger.info("HardRock: event_tree got 403, refreshing CF cookies...")
+                        self._cf_cookies_expires = 0
+                        if await self._ensure_cf_cookies():
+                            continue
                     return
                 resp.raise_for_status()
                 data = resp.json()
@@ -678,9 +710,9 @@ class HardRockBetSource(DataSource):
         if bookmakers and "hardrock" not in bookmakers:
             return [], {"x-requests-remaining": "unlimited"}
 
-        # Ensure CF cookies are fresh
-        if not await self._ensure_cf_cookies():
-            logger.warning("HardRock: skipping %s — no CF cookies", sport_key)
+        # Ensure client is ready (direct mode or CF cookie mode)
+        if not await self._ensure_client():
+            logger.warning("HardRock: skipping %s — no client available", sport_key)
             return [], {"x-requests-remaining": "unlimited"}
 
         # Discover competitions if not yet done
@@ -740,26 +772,43 @@ class HardRockBetSource(DataSource):
         if market_types:
             variables["marketTypes"] = market_types
 
-        for attempt in range(2):
+        for attempt in range(3):
             try:
                 resp = await self._client.post(
                     GRAPHQL_URL,
                     json={"query": _EVENTS_QUERY, "variables": variables},
                 )
-                if resp.status_code == 403 and attempt == 0:
-                    logger.info("HardRock: got 403, refreshing CF cookies...")
-                    self._cf_cookies_expires = 0  # force refresh
-                    if await self._ensure_cf_cookies():
-                        continue
+                if resp.status_code == 403:
+                    if self._direct_mode and attempt == 0:
+                        # Direct mode failed — switch to Playwright CF mode
+                        logger.info("HardRock: direct mode got 403, switching to Playwright CF mode...")
+                        self._direct_mode = False
+                        self._direct_failed_count += 1
+                        self._cf_cookies_expires = 0
+                        if await self._ensure_cf_cookies():
+                            continue
+                        return []
+                    elif attempt < 2:
+                        logger.info("HardRock: got 403, refreshing CF cookies...")
+                        self._cf_cookies_expires = 0
+                        if await self._ensure_cf_cookies():
+                            continue
                     return []
                 resp.raise_for_status()
                 data = resp.json()
             except httpx.HTTPStatusError as e:
-                if e.response.status_code == 403 and attempt == 0:
-                    logger.info("HardRock: got 403, refreshing CF cookies...")
-                    self._cf_cookies_expires = 0
-                    if await self._ensure_cf_cookies():
-                        continue
+                if e.response.status_code == 403:
+                    if self._direct_mode and attempt == 0:
+                        logger.info("HardRock: direct mode got 403, switching to Playwright CF mode...")
+                        self._direct_mode = False
+                        self._cf_cookies_expires = 0
+                        if await self._ensure_cf_cookies():
+                            continue
+                    elif attempt < 2:
+                        logger.info("HardRock: got 403, refreshing CF cookies...")
+                        self._cf_cookies_expires = 0
+                        if await self._ensure_cf_cookies():
+                            continue
                 logger.warning(f"HardRock: events fetch failed for comps {comp_ids}: {e}")
                 return []
             except Exception as e:

@@ -965,8 +965,17 @@ function saveWebinarRegistrations(registrations) {
   } catch (e) { console.error('[Webinar] Error saving registrations:', e.message); }
 }
 
+// CORS preflight for webinar registration
+app.options('/api/webinar/register', (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.sendStatus(204);
+});
+
 // POST /api/webinar/register - Register for the webinar
 app.post('/api/webinar/register', async (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
   try {
     const { firstName, email, phone, interest, newsletter, smsConsent, registeredAt } = req.body;
 
@@ -1686,7 +1695,8 @@ async function fetchOddsEvents(sport) {
   const cached = getOddsCache(cacheKey);
   if (cached) return { events: cached, cached: true };
 
-  const url = `${SOLDI_API_URL}/api/v1/sports/${sport}/odds?regions=us&markets=h2h,spreads,totals&oddsFormat=american`;
+  const bookKeys = ODDS_SPORTSBOOKS.map(b => b.key).join(',');
+  const url = `${SOLDI_API_URL}/api/v1/sports/${sport}/odds?regions=us,us2,eu,au&markets=h2h,spreads,totals&oddsFormat=american&bookmakers=${bookKeys}`;
   const headers = { 'Authorization': `Bearer ${SOLDI_API_KEY}` };
   const apiRes = await fetch(url, { headers, signal: AbortSignal.timeout(15000) });
   if (!apiRes.ok) {
