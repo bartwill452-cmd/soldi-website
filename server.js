@@ -965,17 +965,8 @@ function saveWebinarRegistrations(registrations) {
   } catch (e) { console.error('[Webinar] Error saving registrations:', e.message); }
 }
 
-// CORS preflight for webinar registration
-app.options('/api/webinar/register', (req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  res.sendStatus(204);
-});
-
 // POST /api/webinar/register - Register for the webinar
 app.post('/api/webinar/register', async (req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
   try {
     const { firstName, email, phone, interest, newsletter, smsConsent, registeredAt } = req.body;
 
@@ -999,7 +990,7 @@ app.post('/api/webinar/register', async (req, res) => {
     try {
       await sendEmail({
         to: email,
-        subject: "You're In! The 3 Income Engines \u2014 Free Live Training",
+        subject: "You're In! The 3 Income Engines — Free Live Training",
         html: buildWebinarConfirmationEmail(firstName)
       });
       console.log(`[Webinar] Confirmation email sent to ${email}`);
@@ -1039,8 +1030,8 @@ function buildWebinarConfirmationEmail(firstName) {
       <h1 style="margin:0;color:#000;font-size:24px;font-weight:900;">You're Registered!</h1>
     </div>
     <div style="padding:32px 24px;">
-      <p style="font-size:16px;line-height:1.6;margin-bottom:20px;">Hey \${firstName},</p>
-      <p style="font-size:16px;line-height:1.6;margin-bottom:20px;">You're locked in for <strong style="color:#00C853;">The 3 Income Engines</strong> \u2014 our free live training where we break down the exact systems Soldi members use to build \$10K+/mo online.</p>
+      <p style="font-size:16px;line-height:1.6;margin-bottom:20px;">Hey ${firstName},</p>
+      <p style="font-size:16px;line-height:1.6;margin-bottom:20px;">You're locked in for <strong style="color:#00C853;">The 3 Income Engines</strong> — our free live training where we break down the exact systems Soldi members use to build $10K+/mo online.</p>
       <div style="background:#1A1A1A;border:1px solid #333;border-radius:12px;padding:20px;margin:24px 0;">
         <p style="margin:0 0 8px;color:#888;font-size:13px;">EVENT DETAILS</p>
         <p style="margin:0 0 6px;font-size:15px;"><strong>Date:</strong> Sunday, March 15, 2026</p>
@@ -1050,15 +1041,15 @@ function buildWebinarConfirmationEmail(firstName) {
       </div>
       <p style="font-size:16px;line-height:1.6;margin-bottom:24px;">Here's what we'll cover:</p>
       <ul style="padding-left:20px;margin-bottom:24px;">
-        <li style="font-size:15px;line-height:1.8;color:#ccc;">Sports Betting Systems \u2014 Follow million-dollar traders</li>
-        <li style="font-size:15px;line-height:1.8;color:#ccc;">E-Commerce Mastery \u2014 Members doing \$10K+ days</li>
-        <li style="font-size:15px;line-height:1.8;color:#ccc;">AI Automation \u2014 Build & sell AI-powered services</li>
+        <li style="font-size:15px;line-height:1.8;color:#ccc;">Sports Betting Systems — Follow million-dollar traders</li>
+        <li style="font-size:15px;line-height:1.8;color:#ccc;">E-Commerce Mastery — Members doing $10K+ days</li>
+        <li style="font-size:15px;line-height:1.8;color:#ccc;">AI Automation — Build & sell AI-powered services</li>
         <li style="font-size:15px;line-height:1.8;color:#ccc;">BONUS: Automated Bots scanning markets 24/7</li>
       </ul>
       <div style="text-align:center;margin:28px 0;">
         <a href="https://calendar.google.com/calendar/render?action=TEMPLATE&text=Soldi+Webinar%3A+The+3+Income+Engines&dates=20260315T220000Z/20260315T231500Z&details=FREE+LIVE+TRAINING&location=Online+-+trysoldi.com" style="display:inline-block;background:#00C853;color:#000;padding:14px 32px;border-radius:10px;font-weight:800;font-size:16px;text-decoration:none;">Add to Calendar</a>
       </div>
-      <p style="font-size:14px;color:#888;line-height:1.6;">We'll send you a reminder before we go live. Make sure to show up \u2014 spots are limited and the replay won't be available forever.</p>
+      <p style="font-size:14px;color:#888;line-height:1.6;">We'll send you a reminder before we go live. Make sure to show up — spots are limited and the replay won't be available forever.</p>
     </div>
     <div style="padding:16px 24px;text-align:center;border-top:1px solid #222;">
       <p style="margin:0;font-size:13px;color:#555;">&copy; 2026 Soldi | <a href="https://trysoldi.com" style="color:#00C853;text-decoration:none;">trysoldi.com</a></p>
@@ -1072,10 +1063,10 @@ function buildNewsletterWelcomeEmail(firstName) {
   <div style="max-width:600px;margin:0 auto;background:#0D0D0D;color:#fff;font-family:'Inter',Arial,sans-serif;border-radius:12px;overflow:hidden;">
     <div style="padding:32px 24px;">
       <h2 style="color:#00C853;margin:0 0 16px;">Welcome to the Soldi Newsletter</h2>
-      <p style="font-size:16px;line-height:1.6;">Hey \${firstName},</p>
+      <p style="font-size:16px;line-height:1.6;">Hey ${firstName},</p>
       <p style="font-size:16px;line-height:1.6;">You're now on the list. Every week, we send out our best plays, AI updates, e-commerce wins, and exclusive member-only content.</p>
-      <p style="font-size:16px;line-height:1.6;color:#888;">Stay tuned \u2014 the first one is coming soon.</p>
-      <p style="font-size:16px;line-height:1.6;margin-top:24px;">\u2014 The Soldi Team</p>
+      <p style="font-size:16px;line-height:1.6;color:#888;">Stay tuned — the first one is coming soon.</p>
+      <p style="font-size:16px;line-height:1.6;margin-top:24px;">— The Soldi Team</p>
     </div>
     <div style="padding:16px 24px;text-align:center;border-top:1px solid #222;">
       <p style="margin:0;font-size:13px;color:#555;">&copy; 2026 Soldi | <a href="https://trysoldi.com" style="color:#00C853;text-decoration:none;">trysoldi.com</a></p>
@@ -1695,8 +1686,7 @@ async function fetchOddsEvents(sport) {
   const cached = getOddsCache(cacheKey);
   if (cached) return { events: cached, cached: true };
 
-  const bookKeys = ODDS_SPORTSBOOKS.map(b => b.key).join(',');
-  const url = `${SOLDI_API_URL}/api/v1/sports/${sport}/odds?regions=us,us2,eu,au&markets=h2h,spreads,totals&oddsFormat=american&bookmakers=${bookKeys}`;
+  const url = `${SOLDI_API_URL}/api/v1/sports/${sport}/odds?regions=us&markets=h2h,spreads,totals&oddsFormat=american`;
   const headers = { 'Authorization': `Bearer ${SOLDI_API_KEY}` };
   const apiRes = await fetch(url, { headers, signal: AbortSignal.timeout(15000) });
   if (!apiRes.ok) {
