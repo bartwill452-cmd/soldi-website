@@ -1345,28 +1345,21 @@
 
     registrations.push(data);
 
-    // Submit to server API
-    try {
-      const res = await fetch('/api/webinar/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      });
-      const result = await res.json();
-      if (!res.ok) throw new Error(result.error || 'Registration failed');
-      console.log('Registration saved:', result);
-    } catch (err) {
-      console.error('Registration error:', err);
-      // Still show success — we saved locally and can retry
-    }
+    // Fire-and-forget API call — don't block the UI
+    fetch('/api/webinar/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    }).then(r => r.json()).then(r => console.log('Registration saved:', r))
+      .catch(err => console.error('Registration error:', err));
 
-    // Show success
+    // Show success immediately (brief spinner for visual feedback)
     setTimeout(() => {
       btn.classList.remove('loading');
       form.style.display = 'none';
       document.querySelector('.form-card h2').style.display = 'none';
       document.getElementById('success-screen').classList.add('active');
-    }, 1200);
+    }, 400);
   }
 
   // ===== ADD TO GOOGLE CALENDAR =====

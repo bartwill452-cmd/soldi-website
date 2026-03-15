@@ -995,30 +995,49 @@ app.post('/api/webinar/register', async (req, res) => {
     saveWebinarRegistrations(registrations);
     console.log(`[Webinar] New registration: ${firstName} (${email})`);
 
-    // Send confirmation email
-    try {
-      await sendEmail({
-        to: email,
-        subject: "You're In! The 3 Income Engines — Free Live Training",
-        html: buildWebinarConfirmationEmail(firstName)
-      });
-      console.log(`[Webinar] Confirmation email sent to ${email}`);
-    } catch (mailErr) {
-      console.error(`[Webinar] Failed to send confirmation to ${email}:`, mailErr.message);
-    }
+    // Respond immediately — don't make user wait for emails
+    res.json({ status: 'success', message: 'Registration confirmed!' });
 
-    // Send newsletter welcome if opted in
-    if (newsletter) {
+    // Fire-and-forget: send emails + Google Sheets in background
+    (async () => {
+      // Send confirmation email
       try {
         await sendEmail({
           to: email,
-          subject: "Welcome to the Soldi Newsletter",
-          html: buildNewsletterWelcomeEmail(firstName)
+          subject: "You're In! The 3 Income Engines — Free Live Training",
+          html: buildWebinarConfirmationEmail(firstName)
         });
-      } catch (e) { console.error('[Webinar] Newsletter welcome failed:', e.message); }
-    }
+        console.log(`[Webinar] Confirmation email sent to ${email}`);
+      } catch (mailErr) {
+        console.error(`[Webinar] Failed to send confirmation to ${email}:`, mailErr.message);
+      }
 
-    res.json({ status: 'success', message: 'Registration confirmed!' });
+      // Send newsletter welcome if opted in
+      if (newsletter) {
+        try {
+          await sendEmail({
+            to: email,
+            subject: "Welcome to the Soldi Newsletter",
+            html: buildNewsletterWelcomeEmail(firstName)
+          });
+        } catch (e) { console.error('[Webinar] Newsletter welcome failed:', e.message); }
+      }
+
+      // Forward to Google Sheets via Apps Script webhook
+      const GOOGLE_SCRIPT_URL = process.env.GOOGLE_SCRIPT_URL;
+      if (GOOGLE_SCRIPT_URL) {
+        try {
+          await fetch(GOOGLE_SCRIPT_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(registration)
+          });
+          console.log(`[Webinar] Forwarded to Google Sheets: ${email}`);
+        } catch (sheetErr) {
+          console.error(`[Webinar] Google Sheets forward failed:`, sheetErr.message);
+        }
+      }
+    })();
   } catch (err) {
     console.error('[Webinar] Registration error:', err);
     res.status(500).json({ error: 'Registration failed. Please try again.' });
@@ -1044,7 +1063,7 @@ function buildWebinarConfirmationEmail(firstName) {
       <div style="background:#1A1A1A;border:1px solid #333;border-radius:12px;padding:20px;margin:24px 0;">
         <p style="margin:0 0 8px;color:#888;font-size:13px;">EVENT DETAILS</p>
         <p style="margin:0 0 6px;font-size:15px;"><strong>Date:</strong> Sunday, March 15, 2026</p>
-        <p style="margin:0 0 6px;font-size:15px;"><strong>Time:</strong> 6:00 PM ET</p>
+        <p style="margin:0 0 6px;font-size:15px;"><strong>Time:</strong> 3:00 PM ET</p>
         <p style="margin:0 0 6px;font-size:15px;"><strong>Duration:</strong> ~60 minutes</p>
         <p style="margin:0;font-size:15px;"><strong>Where:</strong> Online (link sent before the event)</p>
       </div>
