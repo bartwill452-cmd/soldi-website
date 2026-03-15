@@ -1390,10 +1390,9 @@ const ODDS_SPORTSBOOKS = [
   { key: 'bet105', name: 'Bet105', shortName: '105' },
   { key: 'prophetx', name: 'ProphetX', shortName: 'PX' },
   { key: 'novig', name: 'Novig', shortName: 'NOV' },
-  { key: 'bookmaker', name: 'Bookmaker', shortName: 'BM' },
   { key: 'buckeye', name: 'Buckeye', shortName: 'BKY' },
 ];
-const SHARP_BOOKS = ['pinnacle', 'novig', 'bookmaker'];
+const SHARP_BOOKS = ['pinnacle', 'novig'];
 
 const ODDS_SPORT_CATEGORIES = [
   { id: 'basketball', name: 'Basketball', icon: '🏀', leagues: [
