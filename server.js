@@ -1093,6 +1093,154 @@ app.post('/api/webinar/send-marketing', async (req, res) => {
   res.json({ sent: results.filter(r => r.status === 'sent').length, failed: results.filter(r => r.status === 'failed').length, results });
 });
 
+// POST /api/webinar/send-invites - Send individualized webinar invitation emails
+app.post('/api/webinar/send-invites', async (req, res) => {
+  const pw = req.query.pw;
+  const WEBINAR_ADMIN_PW = process.env.WEBINAR_ADMIN_PW || 'soldi2026';
+  if (pw !== WEBINAR_ADMIN_PW) {
+    return res.status(401).json({ error: 'Invalid password' });
+  }
+  const { emails } = req.body;
+  if (!emails || !Array.isArray(emails) || emails.length === 0) {
+    return res.status(400).json({ error: 'Provide an array of emails in the request body' });
+  }
+
+  // Greeting variations to individualize each email
+  const openings = [
+    'Hope your weekend is going well',
+    'Happy Sunday',
+    'Hope you\'re having a great day',
+    'Quick heads up for you',
+    'Wanted to make sure you saw this',
+    'Got something you might be interested in',
+    'Reaching out with a quick invite',
+    'Hope things are going well on your end'
+  ];
+  const closings = [
+    'See you there',
+    'Hope to see you there',
+    'Looking forward to it',
+    'Would love to see you on the call',
+    'Hope you can make it',
+    'Should be a great session'
+  ];
+
+  function extractFirstName(email) {
+    const local = email.split('@')[0];
+    // Try to extract a name from the email prefix
+    const cleaned = local.replace(/[0-9._\-]+/g, ' ').trim().split(' ')[0];
+    if (cleaned.length >= 2 && cleaned.length <= 15) {
+      return cleaned.charAt(0).toUpperCase() + cleaned.slice(1).toLowerCase();
+    }
+    return '';
+  }
+
+  function buildWebinarInviteHtml(email, idx) {
+    const firstName = extractFirstName(email);
+    const greeting = firstName ? `Hey ${firstName}` : 'Hey';
+    const opening = openings[idx % openings.length];
+    const closing = closings[idx % closings.length];
+    return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Live Training Tomorrow</title></head>
+<body style="margin:0;padding:0;background-color:#f4f4f4;font-family:Arial,Helvetica,sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;">
+<tr><td align="center" style="padding:20px 0;">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background-color:#ffffff;border-radius:8px;overflow:hidden;">
+
+  <tr><td style="padding:32px 28px;">
+    <p style="margin:0 0 20px;font-size:16px;color:#333;line-height:1.6;">${greeting},</p>
+    <p style="margin:0 0 16px;font-size:16px;color:#333;line-height:1.6;">${opening} — we're hosting a free live training session <strong>tomorrow (Monday) at 7 PM ET</strong> and I wanted to personally invite you.</p>
+    <p style="margin:0 0 16px;font-size:16px;color:#333;line-height:1.6;">Here's what we're covering:</p>
+    <ul style="margin:0 0 16px;padding-left:20px;font-size:16px;color:#333;line-height:1.8;">
+      <li>The 3 income engines our members use to build real revenue online</li>
+      <li>How our sports betting systems and bots find profitable opportunities 24/7</li>
+      <li>Live Q&A — ask anything about making money online</li>
+    </ul>
+    <p style="margin:0 0 24px;font-size:16px;color:#333;line-height:1.6;">It's completely free. No pitch, just value. Register here to save your spot:</p>
+    <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 24px;">
+      <tr><td style="background-color:#00C853;border-radius:8px;padding:14px 32px;">
+        <a href="https://trysoldi.com/webinar.html" style="color:#000;font-size:16px;font-weight:700;text-decoration:none;display:inline-block;">Register for Free Training</a>
+      </td></tr>
+    </table>
+    <p style="margin:0 0 8px;font-size:16px;color:#333;line-height:1.6;">${closing},</p>
+    <p style="margin:0;font-size:16px;color:#333;line-height:1.6;font-weight:600;">— The Soldi Team</p>
+  </td></tr>
+
+  <tr><td style="padding:20px 28px;border-top:1px solid #eee;font-size:12px;color:#999;text-align:center;">
+    <p style="margin:0 0 4px;">Soldi | trysoldi.com</p>
+    <p style="margin:0 0 4px;">30 N Gould St, Ste R, Sheridan, WY 82801</p>
+    <p style="margin:0;"><a href="https://trysoldi.com/unsubscribe" style="color:#999;">Unsubscribe</a></p>
+  </td></tr>
+
+</table>
+</td></tr>
+</table>
+</body>
+</html>`;
+  }
+
+  function buildWebinarInviteText(email, idx) {
+    const firstName = extractFirstName(email);
+    const greeting = firstName ? `Hey ${firstName}` : 'Hey';
+    const opening = openings[idx % openings.length];
+    const closing = closings[idx % closings.length];
+    return `${greeting},
+
+${opening} — we're hosting a free live training session tomorrow (Monday) at 7 PM ET and I wanted to personally invite you.
+
+Here's what we're covering:
+- The 3 income engines our members use to build real revenue online
+- How our sports betting systems and bots find profitable opportunities 24/7
+- Live Q&A — ask anything about making money online
+
+It's completely free. No pitch, just value.
+
+Register here: https://trysoldi.com/webinar.html
+
+${closing},
+— The Soldi Team
+
+Soldi | trysoldi.com
+30 N Gould St, Ste R, Sheridan, WY 82801
+Unsubscribe: https://trysoldi.com/unsubscribe`;
+  }
+
+  // Subject line variations
+  const subjects = [
+    'Free live training tomorrow at 7 PM ET',
+    'You\'re invited: free training session tomorrow',
+    'Join us tomorrow — free live training at 7 PM',
+    'Tomorrow at 7 PM ET: free training session',
+    'Live training tomorrow evening — free to join',
+    'Quick invite: free training tomorrow at 7 PM ET',
+    'Free session tomorrow at 7 PM — you\'re invited',
+    'Join our free live training tomorrow night'
+  ];
+
+  const results = [];
+  for (let i = 0; i < emails.length; i++) {
+    const email = emails[i].trim();
+    if (!email || !email.includes('@')) continue;
+    const subject = subjects[i % subjects.length];
+    const html = buildWebinarInviteHtml(email, i);
+    const text = buildWebinarInviteText(email, i);
+    try {
+      const r = await sendEmail({ to: email, subject, html, text });
+      results.push({ email, status: 'sent', provider: r.provider });
+      console.log(`[Webinar Invite] Sent to ${email} (${i + 1}/${emails.length})`);
+      // Small delay between sends to avoid rate limiting
+      if (i < emails.length - 1) await new Promise(resolve => setTimeout(resolve, 200));
+    } catch (e) {
+      results.push({ email, status: 'failed', error: e.message });
+      console.error(`[Webinar Invite] Failed for ${email}:`, e.message);
+    }
+  }
+  const sent = results.filter(r => r.status === 'sent').length;
+  const failed = results.filter(r => r.status === 'failed').length;
+  res.json({ total: emails.length, sent, failed, results });
+});
+
 // Marketing newsletter email template
 function buildMarketingEmail() {
   return `<!DOCTYPE html>
