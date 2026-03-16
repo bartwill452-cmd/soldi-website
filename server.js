@@ -531,15 +531,16 @@ app.post('/api/send-verification', async (req, res) => {
         const memberships = data.data || [];
         if (memberships.length === 0) break;
         const match = memberships.find(m => {
-          const memberEmail = m.user?.email || m.email;
+          const memberEmail = m.user?.email || m.member?.email || m.email;
           return memberEmail && memberEmail.toLowerCase() === emailLower;
         });
         if (match) {
-          const activeStatuses = ['active', 'trialing', 'canceling'];
+          const activeStatuses = ['active', 'trialing', 'canceling', 'completed', 'past_due'];
           if (!activeStatuses.includes(match.status)) {
             return res.status(403).json({
               error: 'inactive_membership',
-              message: `Membership status: ${match.status}`,
+              message: `Your membership is ${match.status}. Please renew to continue.`,
+              status: match.status,
               purchaseUrl: 'https://whop.com/checkout/plan_BOEx9lveGo3yO/'
             });
           }
@@ -553,7 +554,7 @@ app.post('/api/send-verification', async (req, res) => {
       if (!found) {
         return res.status(404).json({
           error: 'no_membership',
-          message: 'No membership found for this email',
+          message: 'No active membership found for this email. Make sure you are using the same email you signed up with on Whop.',
           purchaseUrl: 'https://whop.com/checkout/plan_BOEx9lveGo3yO/'
         });
       }
@@ -1504,38 +1505,6 @@ app.get('/api/debug/whop-test', async (req, res) => {
     res.json({ whopKey: true, companyId: hasCompany, brevo: hasBrevo, resend: hasResend, gmailSmtp: hasMail, smtpOk, smtpErr, whopStatus: response.status, whopResponseTime: `${elapsed}ms`, memberCount: data.data?.length || 0, hasNextPage: data.page_info?.has_next_page || false });
   } catch (err) {
     res.json({ whopKey: true, companyId: hasCompany, mailConfigured: hasMail, error: err.name === 'AbortError' ? 'Whop API timed out (8s)' : err.message });
-  }
-});
-
-// DEBUG: Temporary endpoint to inspect Whop membership data structure
-app.get('/api/debug/whop-memberships', async (req, res) => {
-  const pw = req.query.pw;
-  if (pw !== (process.env.WEBINAR_ADMIN_PW || 'soldi2026')) return res.status(401).json({ error: 'Unauthorized' });
-  try {
-    const url = `https://api.whop.com/api/v1/memberships?company_id=${WHOP_COMPANY_ID}&page=1&per=5`;
-    const response = await fetchWithTimeout(url, { headers: { Authorization: `Bearer ${WHOP_API_KEY}` } }, 8000);
-    const data = await response.json();
-    // Show first 5 memberships with their full structure (redact sensitive data)
-    const memberships = (data.data || []).map(m => ({
-      id: m.id,
-      status: m.status,
-      email: m.email,
-      user: m.user ? { id: m.user?.id, email: m.user?.email, username: m.user?.username } : null,
-      plan_id: m.plan_id || m.plan?.id,
-      product_id: m.product_id || m.product?.id,
-      allKeys: Object.keys(m),
-      userKeys: m.user ? Object.keys(m.user) : null
-    }));
-    // Also try v2 API
-    let v2Data = null;
-    try {
-      const v2Url = `https://api.whop.com/api/v2/memberships?per=5`;
-      const v2Response = await fetchWithTimeout(v2Url, { headers: { Authorization: `Bearer ${WHOP_API_KEY}` } }, 8000);
-      v2Data = await v2Response.json();
-    } catch(e) { v2Data = { error: e.message }; }
-    res.json({ v1: { total: data.data?.length, page_info: data.page_info, memberships }, v2: v2Data });
-  } catch (err) {
-    res.json({ error: err.message });
   }
 });
 

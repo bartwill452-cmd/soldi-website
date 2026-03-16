@@ -1146,9 +1146,11 @@
         } else {
           let errorMsg = data.message || 'Failed to send code. Please try again.';
           if (data.error === 'no_membership') {
-            errorMsg = 'No membership found for this email. <a href="' + (data.purchaseUrl || 'https://whop.com/checkout/plan_BOEx9lveGo3yO/') + '" target="_blank">Join Soldi here</a>.';
+            errorMsg = 'No membership found for this email. Make sure you\'re using the same email you signed up with on Whop. <a href="' + (data.purchaseUrl || 'https://whop.com/checkout/plan_BOEx9lveGo3yO/') + '" target="_blank" style="color:#22c55e;">Join Soldi here</a>';
           } else if (data.error === 'inactive_membership') {
-            errorMsg = 'Your membership is ' + (data.status || 'inactive') + '. <a href="' + (data.purchaseUrl || 'https://whop.com/checkout/plan_BOEx9lveGo3yO/') + '" target="_blank">Reactivate here</a>.';
+            errorMsg = 'Your membership is ' + (data.status || 'inactive') + '. <a href="' + (data.purchaseUrl || 'https://whop.com/checkout/plan_BOEx9lveGo3yO/') + '" target="_blank" style="color:#22c55e;">Reactivate here</a>';
+          } else if (data.error === 'cooldown') {
+            errorMsg = data.message;
           }
           errorEl.innerHTML = errorMsg;
           errorEl.style.display = 'block';

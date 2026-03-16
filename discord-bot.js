@@ -834,5 +834,55 @@ async function verifyWhopMembership(email) {
   }
 }
 
-// Login
-client.login(DISCORD_TOKEN);
+// ============================================
+// ERROR HANDLING & RECONNECTION
+// ============================================
+
+// Handle Discord client errors gracefully
+client.on('error', (err) => {
+  console.error('[Discord Bot] Client error:', err.message);
+});
+
+client.on('warn', (info) => {
+  console.warn('[Discord Bot] Warning:', info);
+});
+
+client.on('disconnect', () => {
+  console.error('[Discord Bot] Disconnected! Will attempt to reconnect...');
+});
+
+client.on('reconnecting', () => {
+  console.log('[Discord Bot] Reconnecting...');
+});
+
+// Prevent process from crashing on unhandled rejections
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[Discord Bot] Unhandled Rejection:', reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('[Discord Bot] Uncaught Exception:', err.message);
+  // Don't exit — let Supervisor handle restarts if truly fatal
+});
+
+// Login with retry logic
+async function loginWithRetry(retries = 5, delay = 5000) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      await client.login(DISCORD_TOKEN);
+      console.log('[Discord Bot] Login successful');
+      return;
+    } catch (err) {
+      console.error(`[Discord Bot] Login attempt ${i + 1}/${retries} failed:`, err.message);
+      if (i < retries - 1) {
+        console.log(`[Discord Bot] Retrying in ${delay / 1000}s...`);
+        await new Promise(r => setTimeout(r, delay));
+        delay = Math.min(delay * 2, 60000); // Exponential backoff, max 60s
+      }
+    }
+  }
+  console.error('[Discord Bot] All login attempts failed. Exiting for Supervisor restart.');
+  process.exit(1);
+}
+
+loginWithRetry();
