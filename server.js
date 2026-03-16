@@ -44,7 +44,34 @@ if (!BREVO_API_KEY && !resend && !mailTransporter) {
 }
 
 // Unified email sender: tries Brevo (HTTP) > Resend (HTTP) > Gmail SMTP
-async function sendEmail({ to, subject, html, text }) {
+// Track Brevo daily sends to detect rate limit (free tier = 300/day)
+const brevoTracker = { count: 0, resetDate: new Date().toDateString() };
+const BREVO_DAILY_LIMIT = 280; // Stay under the 300 limit with some buffer
+
+async function sendEmail({ to, subject, html, text, priority }) {
+  // Reset daily counter at midnight
+  const today = new Date().toDateString();
+  if (brevoTracker.resetDate !== today) {
+    brevoTracker.count = 0;
+    brevoTracker.resetDate = today;
+  }
+
+  // For priority emails (2FA codes), always use Gmail SMTP first for guaranteed delivery
+  // Brevo may silently drop emails when daily limit (300/day free tier) is exceeded
+  if (priority === 'high' && mailTransporter) {
+    console.log(`[Mail] Priority email — trying Gmail SMTP first for guaranteed delivery`);
+    try {
+      const sendPromise = mailTransporter.sendMail({ from: `Soldi <${GMAIL_USER}>`, to, subject, html });
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Gmail SMTP timed out (10s)')), 10000));
+      await Promise.race([sendPromise, timeoutPromise]);
+      console.log(`[Mail] Sent to ${to} via Gmail SMTP (priority)`);
+      return { success: true, provider: 'gmail' };
+    } catch (err) {
+      console.error(`[Mail] Gmail SMTP failed for priority email to ${to}:`, err.message || err);
+      // Fall through to try Brevo
+    }
+  }
+
   // 1. Brevo / Sendinblue (HTTP — works everywhere, sends to any email)
   if (BREVO_API_KEY) {
     try {
@@ -64,7 +91,8 @@ async function sendEmail({ to, subject, html, text }) {
         const errBody = await brevoRes.text().catch(() => '');
         throw new Error(`Brevo ${brevoRes.status}: ${errBody}`);
       }
-      console.log(`[Mail] Sent to ${to} via Brevo`);
+      brevoTracker.count++;
+      console.log(`[Mail] Sent to ${to} via Brevo (${brevoTracker.count} today)`);
       return { success: true, provider: 'brevo' };
     } catch (err) {
       console.error(`[Mail] Brevo failed for ${to}:`, err.message || err);
@@ -86,7 +114,7 @@ async function sendEmail({ to, subject, html, text }) {
     }
   }
 
-  // 3. Gmail SMTP (works locally but blocked on most PaaS)
+  // 3. Gmail SMTP fallback
   if (mailTransporter) {
     try {
       const sendPromise = mailTransporter.sendMail({ from: `Soldi <${GMAIL_USER}>`, to, subject, html });
@@ -568,11 +596,12 @@ app.post('/api/send-verification', async (req, res) => {
   const code = generateVerificationCode();
   verificationCodes.set(emailLower, { code, expiresAt: Date.now() + CODE_EXPIRY_MS, sentAt: Date.now() });
 
-  // Send code via email (Resend HTTP preferred, Gmail SMTP fallback)
+  // Send code via email (priority=high ensures Gmail SMTP fallback if Brevo limit hit)
   const emailResult = await sendEmail({
     to: email,
     subject: `${code} — Your Soldi verification code`,
-    html: buildVerificationCodeEmailHtml(code)
+    html: buildVerificationCodeEmailHtml(code),
+    priority: 'high'
   });
 
   if (!emailResult.success) {
