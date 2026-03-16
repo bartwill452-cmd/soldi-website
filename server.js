@@ -1507,6 +1507,38 @@ app.get('/api/debug/whop-test', async (req, res) => {
   }
 });
 
+// DEBUG: Temporary endpoint to inspect Whop membership data structure
+app.get('/api/debug/whop-memberships', async (req, res) => {
+  const pw = req.query.pw;
+  if (pw !== (process.env.WEBINAR_ADMIN_PW || 'soldi2026')) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    const url = `https://api.whop.com/api/v1/memberships?company_id=${WHOP_COMPANY_ID}&page=1&per=5`;
+    const response = await fetchWithTimeout(url, { headers: { Authorization: `Bearer ${WHOP_API_KEY}` } }, 8000);
+    const data = await response.json();
+    // Show first 5 memberships with their full structure (redact sensitive data)
+    const memberships = (data.data || []).map(m => ({
+      id: m.id,
+      status: m.status,
+      email: m.email,
+      user: m.user ? { id: m.user?.id, email: m.user?.email, username: m.user?.username } : null,
+      plan_id: m.plan_id || m.plan?.id,
+      product_id: m.product_id || m.product?.id,
+      allKeys: Object.keys(m),
+      userKeys: m.user ? Object.keys(m.user) : null
+    }));
+    // Also try v2 API
+    let v2Data = null;
+    try {
+      const v2Url = `https://api.whop.com/api/v2/memberships?per=5`;
+      const v2Response = await fetchWithTimeout(v2Url, { headers: { Authorization: `Bearer ${WHOP_API_KEY}` } }, 8000);
+      v2Data = await v2Response.json();
+    } catch(e) { v2Data = { error: e.message }; }
+    res.json({ v1: { total: data.data?.length, page_info: data.page_info, memberships }, v2: v2Data });
+  } catch (err) {
+    res.json({ error: err.message });
+  }
+});
+
 // ============================================
 // WHOP WEBHOOK: Post-purchase welcome email
 // ============================================
