@@ -67,7 +67,7 @@ const ACCOUNTS = [
   { handle: 'UnderdogMLB',   channelId: process.env.MLB_NEWS_CHANNEL_ID   || '1477004046857670686', sport: 'MLB',    emoji: '⚾' },
   { handle: 'GazeboCombat',  channelId: process.env.UFC_JUDGING_CHANNEL_ID || '1477003990251077745', sport: 'UFC',    emoji: '🥊' },
   { handle: 'tennisgrinder1', channelId: process.env.TENNIS_INJURY_CHANNEL_ID || '1477011631308275877', sport: 'Tennis', emoji: '🎾' },
-  { handle: 'JonRothstein',  channelId: process.env.NCAAB_CHANNEL_ID      || 'auto',                sport: 'NCAAB',  emoji: '🏀', paidOnly: true, channelName: 'college-hoops' },
+  { handle: 'JonRothstein',  channelId: process.env.NCAAB_CHANNEL_ID      || 'find',                sport: 'NCAAB',  emoji: '🏀', paidOnly: true, channelName: 'ncaab-notifications' },
 ];
 
 const CHECK_INTERVAL = 1;              // 1ms between full cycles (continuous monitoring)
@@ -577,84 +577,39 @@ function sleep(ms) {
 }
 
 // ============================================
-// DISCORD CHANNEL AUTO-CREATION
-// Creates paid-member-only channels on startup
+// DISCORD CHANNEL FINDER
+// Finds existing channel by name — never creates duplicates
 // ============================================
-async function ensureChannel(account) {
-  if (account.channelId !== 'auto') return account.channelId;
+async function findChannel(account) {
+  if (account.channelId !== 'find' && account.channelId !== 'auto') return account.channelId;
   if (!GUILD_ID) {
-    console.error(`  [${account.handle}] Cannot auto-create channel: DISCORD_GUILD_ID not set`);
+    console.error(`  [${account.handle}] Cannot find channel: DISCORD_GUILD_ID not set`);
     return null;
   }
 
   const BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
   const channelName = account.channelName || `${account.sport.toLowerCase()}-notifications`;
 
-  // First, check if channel already exists (check both custom name and fallback)
   try {
     const listRes = await fetch(`https://discord.com/api/v10/guilds/${GUILD_ID}/channels`, {
       headers: { Authorization: `Bot ${BOT_TOKEN}` },
     });
     if (listRes.ok) {
       const channels = await listRes.json();
-      const existing = channels.find(c => c.name === channelName || c.name === 'college-hoops');
+      // Search by exact name match
+      const existing = channels.find(c => c.name === channelName);
       if (existing) {
-        console.log(`  [${account.handle}] Found existing #${channelName} (${existing.id})`);
+        console.log(`  [${account.handle}] Found #${existing.name} (${existing.id})`);
         return existing.id;
       }
+      // Not found — don't create, just log
+      console.warn(`  [${account.handle}] Channel #${channelName} not found in server. Skipping.`);
     }
   } catch (err) {
-    console.error(`  [${account.handle}] Error checking channels:`, err.message);
+    console.error(`  [${account.handle}] Error listing channels:`, err.message);
   }
 
-  // Create the channel with permission overwrites for paid members only
-  try {
-    const permissionOverwrites = [
-      // Deny @everyone from viewing
-      { id: GUILD_ID, type: 0, deny: '1024' },  // VIEW_CHANNEL = 1024
-    ];
-    // Allow paid role to view
-    if (PAID_ROLE_ID) {
-      permissionOverwrites.push({
-        id: PAID_ROLE_ID, type: 0, allow: '1024',  // VIEW_CHANNEL
-      });
-    }
-
-    const createRes = await fetch(`https://discord.com/api/v10/guilds/${GUILD_ID}/channels`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bot ${BOT_TOKEN}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        name: channelName,
-        type: 0, // GUILD_TEXT
-        topic: `${account.emoji} Live ${account.sport} tweets from @${account.handle} — Soldi Paid Members Only`,
-        permission_overwrites: permissionOverwrites,
-      }),
-    });
-
-    if (createRes.ok) {
-      const channel = await createRes.json();
-      console.log(`  [${account.handle}] Created #${channelName} (${channel.id}) — Paid Members Only`);
-
-      // Send welcome message
-      await sendEmbed(channel.id, createEmbed({
-        title: `${account.emoji} ${account.sport} Notifications`,
-        description: `This channel will post live tweets from **@${account.handle}** — college basketball insider.\n\nThis is an exclusive channel for **Soldi Paid Members** only.`,
-        color: COLORS.GREEN,
-      }));
-
-      return channel.id;
-    } else {
-      const errText = await createRes.text();
-      console.error(`  [${account.handle}] Failed to create channel: ${createRes.status} ${errText}`);
-      return null;
-    }
-  } catch (err) {
-    console.error(`  [${account.handle}] Channel creation error:`, err.message);
-    return null;
-  }
+  return null;
 }
 
 async function main() {
@@ -666,20 +621,20 @@ async function main() {
 
   console.log('\n=== Soldi Twitter/X Notification Bot ===');
 
-  // Auto-create channels for accounts with channelId='auto'
+  // Resolve channels that need to be found by name (never creates new ones)
   for (const acc of ACCOUNTS) {
-    if (acc.channelId === 'auto') {
-      const resolvedId = await ensureChannel(acc);
+    if (acc.channelId === 'find' || acc.channelId === 'auto') {
+      const resolvedId = await findChannel(acc);
       if (resolvedId) {
         acc.channelId = resolvedId;
       } else {
-        console.error(`  [${acc.handle}] Skipping — could not resolve channel`);
+        console.warn(`  [${acc.handle}] Skipping — channel not found in server`);
       }
     }
   }
 
   // Filter out accounts with unresolved channels
-  const activeAccounts = ACCOUNTS.filter(a => a.channelId && a.channelId !== 'auto');
+  const activeAccounts = ACCOUNTS.filter(a => a.channelId && a.channelId !== 'find' && a.channelId !== 'auto');
 
   console.log('Monitoring accounts:');
   for (const acc of activeAccounts) {
