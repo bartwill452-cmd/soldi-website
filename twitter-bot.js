@@ -70,8 +70,8 @@ const ACCOUNTS = [
   { handle: 'JonRothstein',  channelId: process.env.NCAAB_CHANNEL_ID      || 'auto',                sport: 'NCAAB',  emoji: '🏀', paidOnly: true },
 ];
 
-const CHECK_INTERVAL = 1 * 60 * 1000; // 1 minute between full cycles
-const ACCOUNT_DELAY = 1000;            // 1s between account checks (fast rotation)
+const CHECK_INTERVAL = 1;              // 1ms between full cycles (continuous monitoring)
+const ACCOUNT_DELAY = 0;              // 0ms between account checks (parallel fetch)
 const MAX_TWEET_AGE = 10 * 60 * 1000;  // Only post tweets from the last 10 minutes
 
 const GUILD_ID = process.env.DISCORD_GUILD_ID;
@@ -545,19 +545,24 @@ async function checkAllAccounts() {
   const state = loadState();
   let totalNew = 0;
 
-  for (const account of ACCOUNTS) {
-    try {
-      const count = await checkAccount(account, state);
-      if (count > 0) {
-        console.log(`  [${account.handle}] Posted ${count} new tweet(s) to #${account.sport.toLowerCase()}`);
-        totalNew += count;
+  // Fetch all accounts in parallel for maximum speed
+  const results = await Promise.allSettled(
+    ACCOUNTS.filter(a => a.channelId && a.channelId !== 'auto').map(async (account) => {
+      try {
+        const count = await checkAccount(account, state);
+        if (count > 0) {
+          console.log(`  [${account.handle}] Posted ${count} new tweet(s) to #${account.sport.toLowerCase()}`);
+        }
+        return count;
+      } catch (err) {
+        console.error(`  [${account.handle}] Error: ${err.message}`);
+        return 0;
       }
-    } catch (err) {
-      console.error(`  [${account.handle}] Error: ${err.message}`);
-    }
+    })
+  );
 
-    // Delay between accounts
-    await sleep(ACCOUNT_DELAY);
+  for (const r of results) {
+    if (r.status === 'fulfilled') totalNew += r.value;
   }
 
   saveState(state);
