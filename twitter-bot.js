@@ -10,7 +10,7 @@
 //   @UnderdogMLB    → #mlb-news
 //   @GazeboCombat   → #ufc-judging
 //   @tennisgrinder1 → #tennis-injury
-//   @JonRothstein   → #ncaab-notifications (Paid Members Only)
+//   @JonRothstein   → #college-hoops (Paid Members Only)
 //
 // Usage: node twitter-bot.js
 //
@@ -67,7 +67,7 @@ const ACCOUNTS = [
   { handle: 'UnderdogMLB',   channelId: process.env.MLB_NEWS_CHANNEL_ID   || '1477004046857670686', sport: 'MLB',    emoji: '⚾' },
   { handle: 'GazeboCombat',  channelId: process.env.UFC_JUDGING_CHANNEL_ID || '1477003990251077745', sport: 'UFC',    emoji: '🥊' },
   { handle: 'tennisgrinder1', channelId: process.env.TENNIS_INJURY_CHANNEL_ID || '1477011631308275877', sport: 'Tennis', emoji: '🎾' },
-  { handle: 'JonRothstein',  channelId: process.env.NCAAB_CHANNEL_ID      || 'auto',                sport: 'NCAAB',  emoji: '🏀', paidOnly: true },
+  { handle: 'JonRothstein',  channelId: process.env.NCAAB_CHANNEL_ID      || 'auto',                sport: 'NCAAB',  emoji: '🏀', paidOnly: true, channelName: 'college-hoops' },
 ];
 
 const CHECK_INTERVAL = 1;              // 1ms between full cycles (continuous monitoring)
@@ -588,16 +588,16 @@ async function ensureChannel(account) {
   }
 
   const BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
-  const channelName = `${account.sport.toLowerCase()}-notifications`;
+  const channelName = account.channelName || `${account.sport.toLowerCase()}-notifications`;
 
-  // First, check if channel already exists
+  // First, check if channel already exists (check both custom name and fallback)
   try {
     const listRes = await fetch(`https://discord.com/api/v10/guilds/${GUILD_ID}/channels`, {
       headers: { Authorization: `Bot ${BOT_TOKEN}` },
     });
     if (listRes.ok) {
       const channels = await listRes.json();
-      const existing = channels.find(c => c.name === channelName);
+      const existing = channels.find(c => c.name === channelName || c.name === 'college-hoops');
       if (existing) {
         console.log(`  [${account.handle}] Found existing #${channelName} (${existing.id})`);
         return existing.id;
