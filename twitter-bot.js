@@ -5,11 +5,12 @@
 // ============================================
 //
 // Monitored accounts:
-//   @UnderdogNBA  → #nba-news
-//   @UnderdogNFL  → #nfl-news
-//   @UnderdogMLB  → #mlb-news
-//   @GazeboCombat → #ufc-judging
+//   @UnderdogNBA    → #nba-news
+//   @UnderdogNFL    → #nfl-news
+//   @UnderdogMLB    → #mlb-news
+//   @GazeboCombat   → #ufc-judging
 //   @tennisgrinder1 → #tennis-injury
+//   @JonRothstein   → #ncaab-notifications (Paid Members Only)
 //
 // Usage: node twitter-bot.js
 //
@@ -66,11 +67,15 @@ const ACCOUNTS = [
   { handle: 'UnderdogMLB',   channelId: process.env.MLB_NEWS_CHANNEL_ID   || '1477004046857670686', sport: 'MLB',    emoji: '⚾' },
   { handle: 'GazeboCombat',  channelId: process.env.UFC_JUDGING_CHANNEL_ID || '1477003990251077745', sport: 'UFC',    emoji: '🥊' },
   { handle: 'tennisgrinder1', channelId: process.env.TENNIS_INJURY_CHANNEL_ID || '1477011631308275877', sport: 'Tennis', emoji: '🎾' },
+  { handle: 'JonRothstein',  channelId: process.env.NCAAB_CHANNEL_ID      || 'auto',                sport: 'NCAAB',  emoji: '🏀', paidOnly: true },
 ];
 
-const CHECK_INTERVAL = 2 * 60 * 1000; // 2 minutes between full cycles
-const ACCOUNT_DELAY = 5000;            // 5s between account checks (avoid rate limits)
+const CHECK_INTERVAL = 1 * 60 * 1000; // 1 minute between full cycles
+const ACCOUNT_DELAY = 1000;            // 1s between account checks (fast rotation)
 const MAX_TWEET_AGE = 10 * 60 * 1000;  // Only post tweets from the last 10 minutes
+
+const GUILD_ID = process.env.DISCORD_GUILD_ID;
+const PAID_ROLE_ID = process.env.DISCORD_ROLE_ID;
 const STATE_FILE = path.join(__dirname, 'data', 'twitter-bot-state.json');
 
 // RSS / scraping sources (tried in order)
@@ -416,6 +421,7 @@ async function fetchTweets(handle) {
   // Try each strategy in order (Nitter RSS is most reliable)
   const strategies = [
     { name: 'Nitter', fn: () => fetchFromNitter(handle) },
+    { name: 'FxTwitter', fn: () => fetchFromFxTwitter(handle) },
     { name: 'Syndication', fn: () => fetchFromSyndication(handle) },
     { name: 'RSSHub', fn: () => fetchFromRSSHub(handle) },
   ];
@@ -565,6 +571,87 @@ function sleep(ms) {
   return new Promise(r => setTimeout(r, ms));
 }
 
+// ============================================
+// DISCORD CHANNEL AUTO-CREATION
+// Creates paid-member-only channels on startup
+// ============================================
+async function ensureChannel(account) {
+  if (account.channelId !== 'auto') return account.channelId;
+  if (!GUILD_ID) {
+    console.error(`  [${account.handle}] Cannot auto-create channel: DISCORD_GUILD_ID not set`);
+    return null;
+  }
+
+  const BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
+  const channelName = `${account.sport.toLowerCase()}-notifications`;
+
+  // First, check if channel already exists
+  try {
+    const listRes = await fetch(`https://discord.com/api/v10/guilds/${GUILD_ID}/channels`, {
+      headers: { Authorization: `Bot ${BOT_TOKEN}` },
+    });
+    if (listRes.ok) {
+      const channels = await listRes.json();
+      const existing = channels.find(c => c.name === channelName);
+      if (existing) {
+        console.log(`  [${account.handle}] Found existing #${channelName} (${existing.id})`);
+        return existing.id;
+      }
+    }
+  } catch (err) {
+    console.error(`  [${account.handle}] Error checking channels:`, err.message);
+  }
+
+  // Create the channel with permission overwrites for paid members only
+  try {
+    const permissionOverwrites = [
+      // Deny @everyone from viewing
+      { id: GUILD_ID, type: 0, deny: '1024' },  // VIEW_CHANNEL = 1024
+    ];
+    // Allow paid role to view
+    if (PAID_ROLE_ID) {
+      permissionOverwrites.push({
+        id: PAID_ROLE_ID, type: 0, allow: '1024',  // VIEW_CHANNEL
+      });
+    }
+
+    const createRes = await fetch(`https://discord.com/api/v10/guilds/${GUILD_ID}/channels`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bot ${BOT_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: channelName,
+        type: 0, // GUILD_TEXT
+        topic: `${account.emoji} Live ${account.sport} tweets from @${account.handle} — Soldi Paid Members Only`,
+        permission_overwrites: permissionOverwrites,
+      }),
+    });
+
+    if (createRes.ok) {
+      const channel = await createRes.json();
+      console.log(`  [${account.handle}] Created #${channelName} (${channel.id}) — Paid Members Only`);
+
+      // Send welcome message
+      await sendEmbed(channel.id, createEmbed({
+        title: `${account.emoji} ${account.sport} Notifications`,
+        description: `This channel will post live tweets from **@${account.handle}** — college basketball insider.\n\nThis is an exclusive channel for **Soldi Paid Members** only.`,
+        color: COLORS.GREEN,
+      }));
+
+      return channel.id;
+    } else {
+      const errText = await createRes.text();
+      console.error(`  [${account.handle}] Failed to create channel: ${createRes.status} ${errText}`);
+      return null;
+    }
+  } catch (err) {
+    console.error(`  [${account.handle}] Channel creation error:`, err.message);
+    return null;
+  }
+}
+
 async function main() {
   const BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
   if (!BOT_TOKEN) {
@@ -573,11 +660,28 @@ async function main() {
   }
 
   console.log('\n=== Soldi Twitter/X Notification Bot ===');
-  console.log('Monitoring accounts:');
+
+  // Auto-create channels for accounts with channelId='auto'
   for (const acc of ACCOUNTS) {
-    console.log(`  ${acc.emoji} @${acc.handle} → #${acc.sport.toLowerCase()} (${acc.channelId})`);
+    if (acc.channelId === 'auto') {
+      const resolvedId = await ensureChannel(acc);
+      if (resolvedId) {
+        acc.channelId = resolvedId;
+      } else {
+        console.error(`  [${acc.handle}] Skipping — could not resolve channel`);
+      }
+    }
   }
-  console.log(`\nCheck interval: ${CHECK_INTERVAL / 1000}s`);
+
+  // Filter out accounts with unresolved channels
+  const activeAccounts = ACCOUNTS.filter(a => a.channelId && a.channelId !== 'auto');
+
+  console.log('Monitoring accounts:');
+  for (const acc of activeAccounts) {
+    const paidTag = acc.paidOnly ? ' [PAID ONLY]' : '';
+    console.log(`  ${acc.emoji} @${acc.handle} → #${acc.sport.toLowerCase()} (${acc.channelId})${paidTag}`);
+  }
+  console.log(`\nCheck interval: ${CHECK_INTERVAL / 1000}s | Account delay: ${ACCOUNT_DELAY}ms`);
   console.log('Sources: Nitter RSS → Syndication → RSSHub\n');
 
   // Initial check
