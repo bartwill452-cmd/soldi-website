@@ -978,7 +978,13 @@ class Bet105Source(DataSource):
 
         # 3. Team-name-based classification (fallback)
         if sport_id == 2:  # Basketball
-            both_nba = away_team in _NBA_TEAMS and home_team in _NBA_TEAMS
+            def _is_nba(team: str) -> bool:
+                if team in _NBA_TEAMS:
+                    return True
+                # Partial match: "Los Angeles" → Clippers/Lakers, "New Orleans" → Pelicans, etc.
+                t = team.lower().strip()
+                return any(t in nba.lower() or nba.lower() in t for nba in _NBA_TEAMS)
+            both_nba = _is_nba(away_team) and _is_nba(home_team)
             return "basketball_nba" if both_nba else "basketball_ncaab"
 
         if sport_id == 8:  # Tennis — default to ATP if no WTA league tag

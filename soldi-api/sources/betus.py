@@ -57,7 +57,7 @@ _SPORT_SLUGS: Dict[str, str] = {
 }
 
 _CACHE_TTL = 15  # seconds — refresh every 15s
-_STALE_TTL = 120  # serve stale up to 2 min
+_STALE_TTL = 300  # serve stale up to 5 min (survives prefetch gaps)
 
 # JS to extract all game data from the DOM.
 # BetUS uses ASP.NET WebForms with server-rendered HTML.
@@ -272,9 +272,12 @@ class BetUSSource(DataSource):
         if sport_key not in _SPORT_SLUGS:
             return [], headers
 
-        # Serve from cache
+        # Serve from cache — prefetch loop keeps it warm
         cached = self._cache.get(sport_key)
         if cached and (time.time() - cached[1]) < _STALE_TTL:
+            return cached[0], headers
+        # Serve stale data if prefetch hasn't refreshed yet (better than empty)
+        if cached:
             return cached[0], headers
         return [], headers
 
