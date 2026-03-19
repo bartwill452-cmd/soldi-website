@@ -366,7 +366,8 @@ class Bet105Source(DataSource):
                 try:
                     await self._ensure_browser()
                     if self._page is None:
-                        await asyncio.sleep(30)
+                        logger.warning("Bet105: Browser failed to launch, retrying in 10s")
+                        await asyncio.sleep(10)
                         continue
                     # Fetch once per GS sport ID (except soccer which needs per-league)
                     fetched_ids = set()  # type: set

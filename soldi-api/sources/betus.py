@@ -145,6 +145,30 @@ _JS_EXTRACT = """
         }
 
         // Column order: 0=Spread, 1=Moneyline, 2=Total, 3=TeamTotal
+        // Also try parsing each column by content pattern (robust against column reorder)
+        function tryParseColumns(containers, isVisitor) {
+            for (let i = 0; i < containers.length && i < 5; i++) {
+                const text = parseBetLink(containers[i]);
+                if (!text) continue;
+                const cleanText = text.replace(/½/g, '.5');
+                // Total: starts with O/U
+                if (/^[oOuU]\s/.test(cleanText)) {
+                    if (isVisitor) ev.total.over = parseTotal(text);
+                    else ev.total.under = parseTotal(text);
+                }
+                // Spread: starts with +/- number followed by odds
+                else if (/^[+-]?\d+\.?\d*\s+[+-]\d{3}/.test(cleanText)) {
+                    if (isVisitor) ev.spread.away = parseSpread(text);
+                    else ev.spread.home = parseSpread(text);
+                }
+                // Moneyline: just a +/- number (3-4 digits)
+                else if (/^[+-]\d{3,4}$/.test(cleanText.trim())) {
+                    if (isVisitor) ev.money.away = parseML(text);
+                    else ev.money.home = parseML(text);
+                }
+            }
+        }
+        // Primary: positional parsing
         if (vContainers.length >= 3) {
             ev.spread.away = parseSpread(parseBetLink(vContainers[0]));
             ev.money.away = parseML(parseBetLink(vContainers[1]));
@@ -155,6 +179,9 @@ _JS_EXTRACT = """
             ev.money.home = parseML(parseBetLink(hContainers[1]));
             ev.total.under = parseTotal(parseBetLink(hContainers[2]));
         }
+        // Fallback: content-based parsing if positional missed totals
+        if (!ev.total.over || !ev.total.over.point) tryParseColumns(vContainers, true);
+        if (!ev.total.under || !ev.total.under.point) tryParseColumns(hContainers, false);
         // Team totals — column index 3 (may be in .line-container-teamtotal)
         if (vContainers.length >= 4) {
             ev.teamTotal.away = parseTotal(parseBetLink(vContainers[3]));
