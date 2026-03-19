@@ -471,23 +471,27 @@ class ProphetXSource(DataSource):
 
     @staticmethod
     def _best_level(side: list) -> dict:
-        """Pick the orderbook level with the most liquidity as the market price.
+        """Pick the best tradeable price from the orderbook.
 
-        Exchange orderbooks can contain stale limit orders at extreme prices
-        with tiny amounts.  The level where the most money sits is the
-        real market price that will actually get filled.
+        The first level is the top-of-book (best available price).
+        Deep limit orders at other prices may have more money but
+        represent off-market prices that don't reflect the real line.
+
+        Strategy:
+        1. Use the first level with >= $25 stake (top-of-book with real liquidity)
+        2. If no level has $25+, fall back to the first level (best price regardless)
         """
-        best = side[0]
-        best_stake = 0.0
+        # First pass: find the first level with meaningful liquidity
         for level in side:
             try:
                 s = float(level.get("stake", 0))
             except (ValueError, TypeError):
                 s = 0.0
-            if s > best_stake:
-                best_stake = s
-                best = level
-        return best
+            if s >= 25.0:
+                return level
+
+        # Fallback: top-of-book (first level = best available price)
+        return side[0]
 
     def _parse_moneyline(
         self, selections: list, home_team: str, away_team: str,
