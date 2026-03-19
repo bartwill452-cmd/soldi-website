@@ -295,14 +295,14 @@ class KalshiSource(DataSource):
             # Fetch real orderbook liquidity at current prices for h2h markets.
             # This replaces the volume-based fallback with actual depth available
             # at the current yes_ask price.  Kalshi contracts = $1 each.
-            # Wrap in 5s timeout so base events always return even if orderbook is slow.
+            # Wrap in 10s timeout so base events always return even if orderbook is slow.
             try:
                 await asyncio.wait_for(
                     self._patch_orderbook_liquidity(events_keyed, game_data),
-                    timeout=5.0,
+                    timeout=10.0,
                 )
             except asyncio.TimeoutError:
-                logger.info("Kalshi: orderbook liquidity timed out (5s) for %s, returning without liquidity", sport_key)
+                logger.info("Kalshi: orderbook liquidity timed out (10s) for %s, returning without liquidity", sport_key)
 
             # Count period markets for logging
             period_count = sum(len(m) for m in [game_1h_map, spread_1h_map, total_1h_map, game_q1_map, spread_q1_map, total_q1_map])
@@ -647,9 +647,10 @@ class KalshiSource(DataSource):
         if not market_info:
             return
 
-        # Sort by volume descending, cap at 40 markets (= ~20 games)
+        # Sort by volume descending, cap at 80 markets (= ~40 games)
+        # Increased from 40 to cover NCAAB/NHL with 30+ events
         market_info.sort(key=lambda x: x[3], reverse=True)
-        market_info = market_info[:40]
+        market_info = market_info[:80]
 
         ticker_to_ask = {}  # type: Dict[str, int]
         for _, tk, ya, _ in market_info:
@@ -683,12 +684,13 @@ class KalshiSource(DataSource):
                 continue
             no_side = ob.get("no") or []
             target_price = 100 - ya
+            # Sum depth at target price AND one tick better (within 1 cent)
+            # This gives a more realistic view of fillable liquidity
             depth = 0
             for price, qty in no_side:
-                if price == target_price:
-                    depth = qty
-                    break
-            # Dollar liquidity at this price
+                if abs(price - target_price) <= 1:
+                    depth += qty
+            # Dollar liquidity = contracts * cost per contract (yes_ask in cents)
             dollar_liq = float(depth) * (ya / 100.0)
             ticker_liq[tk] = round(dollar_liq, 2)
 
