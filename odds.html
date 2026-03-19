@@ -1057,6 +1057,8 @@ async function loadOdds() {
       renderBookFilter();
       renderOddsScreen();
       prefetchEVAndArb();
+      // After first sport loads, prefetch all other sports in background
+      if (!bgPrefetchDone) setTimeout(prefetchAllSports, 100);
     } else if (!oddsData || oddsData.length === 0) {
       container.innerHTML = `<div class="empty-state">${data.error || 'Failed to load odds'}</div>`;
     }
@@ -1156,6 +1158,27 @@ async function prefetchEVAndArb() {
     if (arbRes.status === 'fulfilled' && arbRes.value.success) { arbData = arbRes.value.arbs; saveCache('arb', arbData); }
   } catch (e) { /* silent — data will load when user switches tabs */ }
   prefetchInFlight = false;
+}
+
+// Prefetch ALL sports in background so switching is instant
+const ALL_SPORTS = ['basketball_nba','basketball_ncaab','icehockey_nhl','baseball_mlb','mma_mixed_martial_arts'];
+let bgPrefetchDone = false;
+async function prefetchAllSports() {
+  if (bgPrefetchDone) return;
+  const headers = getAuthHeaders();
+  const otherSports = ALL_SPORTS.filter(s => s !== currentSport);
+  await Promise.allSettled(otherSports.map(async (sport) => {
+    try {
+      const res = await fetch(buildUrl('/api/odds/events', { sport }), { headers });
+      const data = await res.json();
+      if (data.success && data.events) {
+        // Save to per-sport sessionStorage cache
+        const key = `soldi_odds_${sport}`;
+        sessionStorage.setItem(key, JSON.stringify({ data: data.events, ts: Date.now() }));
+      }
+    } catch {}
+  }));
+  bgPrefetchDone = true;
 }
 
 // ── Stats ──

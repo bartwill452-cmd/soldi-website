@@ -1764,6 +1764,46 @@ function setOddsCache(key, data, ttlSeconds) {
   oddsCache.set(key, { data, expiry: Date.now() + ttlSeconds * 1000 });
 }
 
+// ============================================
+// BACKGROUND ODDS PREFETCHER
+// Keeps ALL sports cached so user requests are always instant
+// ============================================
+const ALL_SPORT_KEYS = [
+  'basketball_nba', 'basketball_ncaab', 'icehockey_nhl',
+  'baseball_mlb', 'mma_mixed_martial_arts'
+];
+
+async function prefetchAllOdds() {
+  const bookKeys = ODDS_SPORTSBOOKS.map(b => b.key).join(',');
+  const headers = { 'Authorization': `Bearer ${SOLDI_API_KEY}` };
+  let cached = 0;
+  for (const sport of ALL_SPORT_KEYS) {
+    try {
+      const url = `${SOLDI_API_URL}/api/v1/sports/${sport}/odds?regions=us,us2,eu,au&markets=h2h,spreads,totals&oddsFormat=american&bookmakers=${bookKeys}`;
+      const apiRes = await fetch(url, { headers, signal: AbortSignal.timeout(20000) });
+      if (apiRes.ok) {
+        const rawEvents = await apiRes.json();
+        const events = transformOddsEvents(rawEvents);
+        setOddsCache(`odds_events_${sport}`, events, 15); // 15s TTL — generous so it never expires between refreshes
+        cached++;
+      }
+    } catch (err) {
+      // Silently continue — don't block other sports
+    }
+  }
+  return cached;
+}
+
+// Start prefetch loop after server boots (10s initial delay, then every 10s)
+setTimeout(async () => {
+  console.log('[Prefetch] Starting background odds prefetcher for all sports...');
+  const initial = await prefetchAllOdds();
+  console.log(`[Prefetch] Initial: ${initial}/${ALL_SPORT_KEYS.length} sports cached`);
+  setInterval(async () => {
+    try { await prefetchAllOdds(); } catch {}
+  }, 10000);
+}, 10000);
+
 // Sportsbook definitions (matching SoldiAPI scrapers)
 const ODDS_SPORTSBOOKS = [
   { key: 'draftkings', name: 'DraftKings', shortName: 'DK' },
@@ -2093,8 +2133,8 @@ async function fetchOddsEvents(sport) {
   }
   const rawEvents = await apiRes.json();
   const events = transformOddsEvents(rawEvents);
-  // Cache for 3s — short TTL ensures frontend gets fresh data every ~10s
-  setOddsCache(cacheKey, events, 3);
+  // Cache for 12s — background prefetcher refreshes every 10s so data stays warm
+  setOddsCache(cacheKey, events, 12);
   console.log(`[SoldiAPI] Fetched ${events.length} events for ${sport}`);
   return { events, cached: false };
 }
