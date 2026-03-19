@@ -61,8 +61,8 @@ _ACTIVE_SPORTS: List[str] = [
 ]
 
 # Pause (seconds) AFTER each refresh cycle completes before starting the next.
-# Set to 0 for continuous refresh — new cycle starts immediately after previous
-# one finishes.  Individual per-source caches handle their own rate-limiting.
+# With ~2-5s per cycle + 5s pause = ~10s total refresh interval.
+# All books refresh every ~10 seconds as required.
 _REFRESH_PAUSE = 5
 
 

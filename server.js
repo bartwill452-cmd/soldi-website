@@ -1778,6 +1778,9 @@ const ODDS_SPORTSBOOKS = [
   { key: 'prophetx', name: 'ProphetX', shortName: 'PX' },
   { key: 'novig', name: 'Novig', shortName: 'NOV' },
   { key: 'buckeye', name: 'Buckeye', shortName: 'BKY' },
+  { key: 'betmgm', name: 'BetMGM', shortName: 'MGM' },
+  { key: 'bet365', name: 'bet365', shortName: '365' },
+  { key: 'fanatics', name: 'Fanatics', shortName: 'FAN' },
 ];
 const SHARP_BOOKS = ['pinnacle', 'novig'];
 
@@ -2090,8 +2093,8 @@ async function fetchOddsEvents(sport) {
   }
   const rawEvents = await apiRes.json();
   const events = transformOddsEvents(rawEvents);
-  // Cache for 5s — Python-side stale carry-forward ensures books persist
-  setOddsCache(cacheKey, events, 5);
+  // Cache for 3s — short TTL ensures frontend gets fresh data every ~10s
+  setOddsCache(cacheKey, events, 3);
   console.log(`[SoldiAPI] Fetched ${events.length} events for ${sport}`);
   return { events, cached: false };
 }
@@ -2128,7 +2131,7 @@ app.get('/api/odds/ev', async (req, res) => {
   try {
     const result = await fetchOddsEvents(sport);
     const evBets = calculatePositiveEV(result.events);
-    setOddsCache(evCacheKey, evBets, 5);
+    setOddsCache(evCacheKey, evBets, 3);
     res.json({ success: true, bets: evBets, cached: false });
   } catch (err) {
     console.error('EV calculation error:', err.message);
@@ -2147,7 +2150,7 @@ app.get('/api/odds/arbitrage', async (req, res) => {
   try {
     const result = await fetchOddsEvents(sport);
     const arbs = findArbitrageOpportunities(result.events);
-    setOddsCache(arbCacheKey, arbs, 5);
+    setOddsCache(arbCacheKey, arbs, 3);
     res.json({ success: true, arbs, cached: false });
   } catch (err) {
     console.error('Arbitrage calculation error:', err.message);

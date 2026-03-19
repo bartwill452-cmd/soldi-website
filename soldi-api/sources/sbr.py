@@ -100,8 +100,8 @@ _BOOK_TITLE_MAP: Dict[str, str] = {
     "fanatics": "Fanatics",
 }
 
-# We only care about these specific SBR books
-_TARGET_BOOKS = frozenset(["draftkings", "caesars"])
+# Scrape ALL available SBR books for maximum coverage
+_TARGET_BOOKS = frozenset(["draftkings", "caesars", "betmgm", "bet365", "fanatics"])
 
 _NEXT_DATA_RE = re.compile(
     r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', re.DOTALL

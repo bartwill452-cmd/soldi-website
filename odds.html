@@ -743,7 +743,7 @@ async function loadSports() {
       renderMarketTabs();
       renderBookFilter();
       refreshData();
-      refreshTimer = setInterval(refreshData, 1000);
+      refreshTimer = setInterval(refreshData, 10000); // Refresh every 10 seconds
     }
   } catch (e) {
     console.error('Failed to load sports:', e);

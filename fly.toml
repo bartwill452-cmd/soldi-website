@@ -28,7 +28,7 @@ primary_region = 'iad'
   max_retries = 5
 
 [env]
-  DISABLED_SCRAPERS = "stakeus,betmgm,hardrock,betonline,caesars,buckeye"
+  DISABLED_SCRAPERS = "stakeus,hardrock"
   GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzSizb2PDpGoNGhompqyBttJzdbjq1KlthqDM9E8kDzDkDvnSerQbETkVswGS7esgmd/exec"
 
 [[vm]]
