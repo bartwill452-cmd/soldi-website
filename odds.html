@@ -1940,9 +1940,22 @@ function getSportBadge(sportKey) {
 
 // ── Auto-Auth (Members Only) ──
 (async function autoAuth() {
+  // 1. Check session storage (fastest — already validated this session)
   const savedKey = sessionStorage.getItem('soldi_odds_key');
   if (savedKey) { currentApiKey = savedKey; showDashboard(); return; }
 
+  // 2. Check URL ?key= parameter (from "Open Odds Screen" button on dashboard)
+  const urlKey = new URLSearchParams(window.location.search).get('key');
+  if (urlKey && urlKey.startsWith('soldi_')) {
+    currentApiKey = urlKey;
+    sessionStorage.setItem('soldi_odds_key', urlKey);
+    // Also save to localStorage so it persists across tabs
+    localStorage.setItem('soldi_api_key', urlKey);
+    showDashboard();
+    return;
+  }
+
+  // 3. Check JWT token from main site login
   const token = localStorage.getItem('soldi_token');
   if (token) {
     try {
@@ -1957,6 +1970,7 @@ function getSportBadge(sportKey) {
     } catch {}
   }
 
+  // 4. Check localStorage API key (from previous login)
   const lsKey = localStorage.getItem('soldi_api_key');
   if (lsKey) {
     try {

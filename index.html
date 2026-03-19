@@ -1309,6 +1309,9 @@
       if (apiKey) {
         document.getElementById('dashApiKeyInput').value = apiKey;
         document.getElementById('oddsScreenLink').href = 'odds.html?key=' + encodeURIComponent(apiKey);
+      } else {
+        // Fallback: odds.html will auth via JWT from localStorage
+        document.getElementById('oddsScreenLink').href = 'odds.html';
       }
 
       // Show affiliate link
