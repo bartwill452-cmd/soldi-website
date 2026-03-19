@@ -1938,51 +1938,38 @@ function getSportBadge(sportKey) {
   return 'badge-default';
 }
 
-// ── Auto-Auth (Members Only) ──
-(async function autoAuth() {
-  // 1. Check session storage (fastest — already validated this session)
+// ── Auto-Auth (Members Only) — INSTANT, no network calls for known keys ──
+(function autoAuth() {
+  // 1. Session storage (instant — already validated this session)
   const savedKey = sessionStorage.getItem('soldi_odds_key');
   if (savedKey) { currentApiKey = savedKey; showDashboard(); return; }
 
-  // 2. Check URL ?key= parameter (from "Open Odds Screen" button on dashboard)
+  // 2. URL ?key= parameter (instant — from dashboard "Open Odds Screen" button)
   const urlKey = new URLSearchParams(window.location.search).get('key');
   if (urlKey && urlKey.startsWith('soldi_')) {
     currentApiKey = urlKey;
     sessionStorage.setItem('soldi_odds_key', urlKey);
-    // Also save to localStorage so it persists across tabs
     localStorage.setItem('soldi_api_key', urlKey);
     showDashboard();
     return;
   }
 
-  // 3. Check JWT token from main site login
-  const token = localStorage.getItem('soldi_token');
-  if (token) {
-    try {
-      const res = await fetch('/api/me', { headers: { 'Authorization': 'Bearer ' + token } });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        currentApiKey = data.apiKey || localStorage.getItem('soldi_api_key') || 'jwt_auth';
-        sessionStorage.setItem('soldi_odds_key', currentApiKey);
-        showDashboard();
-        return;
-      }
-    } catch {}
+  // 3. localStorage API key (instant — saved from previous login)
+  const lsKey = localStorage.getItem('soldi_api_key');
+  if (lsKey && lsKey.startsWith('soldi_')) {
+    currentApiKey = lsKey;
+    sessionStorage.setItem('soldi_odds_key', lsKey);
+    showDashboard();
+    return;
   }
 
-  // 4. Check localStorage API key (from previous login)
-  const lsKey = localStorage.getItem('soldi_api_key');
-  if (lsKey) {
-    try {
-      const res = await fetch('/api/validate-key?key=' + encodeURIComponent(lsKey));
-      const data = await res.json();
-      if (res.ok && data.success) {
-        currentApiKey = lsKey;
-        sessionStorage.setItem('soldi_odds_key', lsKey);
-        showDashboard();
-        return;
-      }
-    } catch {}
+  // 4. JWT token (instant — set key to jwt_auth, validate lazily)
+  const token = localStorage.getItem('soldi_token');
+  if (token) {
+    currentApiKey = 'jwt_auth';
+    sessionStorage.setItem('soldi_odds_key', 'jwt_auth');
+    showDashboard();
+    return;
   }
 
   showGate();
