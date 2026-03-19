@@ -56,7 +56,7 @@ _SPORT_SLUGS: Dict[str, str] = {
     "tennis_wta": "tennis",
 }
 
-_CACHE_TTL = 15  # seconds — refresh every 15s
+_CACHE_TTL = 10  # seconds — 10s refresh target
 _STALE_TTL = 300  # serve stale up to 5 min (survives prefetch gaps)
 
 # JS to extract all game data from the DOM.
@@ -230,11 +230,11 @@ class BetUSSource(DataSource):
                                 await ctx.close()
                         except Exception as e:
                             logger.warning("BetUS prefetch %s failed: %s", sport_key, e)
-                        await asyncio.sleep(3)
+                        await asyncio.sleep(1)
                 except Exception as e:
                     logger.warning("BetUS prefetch error: %s", e)
             logger.info("BetUS: Prefetch cycle #%d complete", cycle)
-            await asyncio.sleep(10)
+            await asyncio.sleep(2)  # 10s target: ~8s scrape + 2s pause
 
     async def _ensure_browser(self) -> None:
         """Launch browser if needed.  Contexts/pages are created per-sport."""

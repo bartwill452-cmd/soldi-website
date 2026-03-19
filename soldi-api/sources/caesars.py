@@ -87,7 +87,7 @@ _CZR_SPORT_SLUGS = {
     "boxing_boxing": "boxing/competitions/boxing",
 }
 
-_CACHE_TTL = 15  # seconds — refresh every 15s
+_CACHE_TTL = 10  # seconds — 10s refresh target
 _STALE_TTL = 120  # seconds — serve stale data up to 2 minutes
 _JURISDICTION = "nj"
 

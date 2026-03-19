@@ -42,7 +42,7 @@ MARKETS_URL = BASE_URL + "/partner/v2/public/get_multiple_markets"
 _STAGING_URL = "https://api-ss-staging.betprophet.co"
 
 # Cache TTL — longer to avoid spamming if API is blocked
-_CACHE_TTL = 15  # seconds — refresh every 15s
+_CACHE_TTL = 10  # seconds — 10s refresh target
 
 # ProphetX tournament_id -> OddsScreen sport_key
 TOURNAMENT_TO_SPORT = {

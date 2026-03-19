@@ -26,7 +26,7 @@ from sources.sport_mapping import (
 logger = logging.getLogger(__name__)
 
 SITE_URL = "https://be.bookmaker.eu"
-_CACHE_TTL = 15  # seconds — refresh every 15s
+_CACHE_TTL = 10  # seconds — 10s refresh target
 
 # Map Bookmaker sport-ID (idspt) to OddsScreen sport_key.
 _SPORT_ID_MAP = {
@@ -111,7 +111,7 @@ class BookmakerSource(DataSource):
                 logger.info("Bookmaker: Prefetch cycle #%d complete", cycle)
             except Exception as exc:
                 logger.warning("Bookmaker prefetch cycle #%d failed: %s", cycle, exc)
-            await asyncio.sleep(10)  # Fast refresh — fetches all sports at once
+            await asyncio.sleep(2)  # 10s target: fast refresh
 
     # ── Browser lifecycle ───────────────────────────────────────────────────
 

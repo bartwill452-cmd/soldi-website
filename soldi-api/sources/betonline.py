@@ -80,7 +80,7 @@ _FUTURES_KEYWORDS = frozenset([
 ])
 
 # Cache TTL: avoid fetching the same sport too often (seconds)
-_CACHE_TTL = 15  # seconds — refresh every 15s
+_CACHE_TTL = 10  # seconds — 10s refresh target
 
 # Sports that support period markets (1st half / 1st quarter / 1st period / innings)
 _PERIOD_SPORTS = frozenset([
@@ -242,9 +242,9 @@ class BetOnlineSource(DataSource):
 
             # If 403 blocked, slow down retries
             if cycle_total == 0:
-                await asyncio.sleep(30)
+                await asyncio.sleep(15)
             else:
-                await asyncio.sleep(5)
+                await asyncio.sleep(2)  # 10s target
 
     async def _prefetch_all(self) -> None:
         """Background task: continuously warm up cache for all supported sports."""
@@ -294,7 +294,7 @@ class BetOnlineSource(DataSource):
                 "BetOnline: Prefetch cycle #%d complete (%d total events)",
                 cycle, cycle_total_events,
             )
-            await asyncio.sleep(5)  # Keep cache warm — fast refresh
+            await asyncio.sleep(2)  # 10s target: fast refresh
 
     async def _ensure_browser(self) -> None:
         """Launch Playwright browser with stealth mode to bypass Cloudflare."""

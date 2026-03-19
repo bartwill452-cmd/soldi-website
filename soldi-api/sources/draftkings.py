@@ -150,7 +150,7 @@ _SPORTS_WITH_PERIODS = {
 # Tennis hub page for dynamic tournament discovery
 _TENNIS_HUB = "https://sportsbook.draftkings.com/sports/tennis"
 
-_CACHE_TTL = 15  # seconds — refresh every 15s
+_CACHE_TTL = 10  # seconds — 10s refresh target
 _STALE_TTL = 120  # seconds — serve stale data up to 2 minutes
 
 # Unicode minus sign used in DraftKings displayOdds

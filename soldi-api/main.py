@@ -61,9 +61,9 @@ _ACTIVE_SPORTS: List[str] = [
 ]
 
 # Pause (seconds) AFTER each refresh cycle completes before starting the next.
-# With ~2-5s per cycle + 5s pause = ~10s total refresh interval.
+# With ~3-7s per cycle + 3s pause = ~10s total refresh interval.
 # All books refresh every ~10 seconds as required.
-_REFRESH_PAUSE = 5
+_REFRESH_PAUSE = 3
 
 
 

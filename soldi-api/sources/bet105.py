@@ -195,7 +195,7 @@ _SOCCER_COUNTRIES = {k: v[0] for k, v in _SOCCER_NAV.items()}
 # Cache TTL in seconds — kept short for live odds freshness.
 # The scraper navigates to the /live/ page, so results include
 # in-play events that update rapidly via WebSocket.
-_CACHE_TTL = 15  # seconds — refresh every 15s
+_CACHE_TTL = 10  # seconds — 10s refresh target
 
 # ── JavaScript: extract all events from the rendered DOM ─────────────────────
 # Iterates over .event-list sections (one per league), finds the league name
@@ -404,7 +404,7 @@ class Bet105Source(DataSource):
                 except Exception as e:
                     logger.warning("Bet105 prefetch error: %s", e)
             logger.info("Bet105: Prefetch cycle #%d complete", cycle)
-            await asyncio.sleep(5)  # Fast refresh cycle
+            await asyncio.sleep(2)  # 10s target: ~8s scrape + 2s pause
 
     # ------------------------------------------------------------------
     # Browser lifecycle
