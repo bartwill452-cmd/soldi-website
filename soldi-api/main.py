@@ -168,7 +168,8 @@ async def _refresh_one_sport(sport_key: str) -> None:
 
 
 # Maximum age (seconds) to carry forward a bookmaker that went missing.
-_STALE_BOOK_TTL = 60  # 1 minute — faster refresh means shorter carry-forward
+# 5 minutes ensures books survive transient API failures/rate-limits.
+_STALE_BOOK_TTL = 300
 
 
 def _merge_stale_bookmakers(

@@ -170,7 +170,7 @@ class KalshiSource(DataSource):
         self._ticker_side_map = {}  # type: Dict[str, Dict[str, str]]
         # Per-sport cache: sport_key → (events, timestamp)
         self._sport_cache = {}  # type: Dict[str, Tuple[List[OddsEvent], float]]
-        self._sport_cache_ttl = 15  # seconds — refresh every 15s
+        self._sport_cache_ttl = 45  # seconds — hold data longer to survive rate-limit periods
 
     def _sign_request(self, method: str, path: str) -> Dict[str, str]:
         """Generate RSA-PKCS1v15 signed auth headers for Kalshi API.

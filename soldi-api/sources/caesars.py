@@ -64,7 +64,7 @@ _CZR_ALT_STATES = ["az", "co", "il", "in", "oh", "pa", "va"]
 # ── Direct API config ────────────────────────────────────────────────
 # Try multiple state locations — some may work from cloud IPs while others geo-block
 _API_BASE_TEMPLATE = "https://api.americanwagering.com/regions/us/locations/{state}/brands/czr/sb/v3"
-_API_STATES = ["nj", "az", "co", "oh", "va", "il", "in", "pa"]
+_API_STATES = ["nj", "az", "co", "oh", "va", "il", "in", "pa", "mi", "ky", "ny", "tn", "la", "md"]
 _API_BASE = _API_BASE_TEMPLATE.format(state="nj")  # default
 
 # Sport slugs for direct API calls (if available)
