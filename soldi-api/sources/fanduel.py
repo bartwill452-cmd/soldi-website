@@ -620,6 +620,19 @@ class FanDuelSource(DataSource):
             if "(W)" in home_team or "(W)" in away_team:
                 continue
 
+            # For MMA: only keep UFC events, skip Bellator/PFL/Cage Warriors/etc.
+            # FanDuel lumps ALL combat sports under one eventTypeId.
+            # Check competition name or typeName for "UFC" keyword.
+            if sport_key == "mma_mixed_martial_arts":
+                comp_name = (ev.get("competitionName") or ev.get("typeName")
+                             or ev.get("name") or "").upper()
+                # Accept events from UFC competitions only
+                if "UFC" not in comp_name:
+                    # Also check the openDate group name (FanDuel groups events by promotion)
+                    group = (ev.get("groupName") or ev.get("typeId") or "")
+                    if isinstance(group, str) and "UFC" not in group.upper():
+                        continue
+
             commence_time = ev.get("openDate", "")
 
             # Find markets for this event via the eventId mapping

@@ -161,14 +161,18 @@ _UFC_INDICATOR_BOOKS = frozenset([
 def _is_non_ufc_mma(event: OddsEvent, sport_key: str) -> bool:
     """Return True if the event is a non-UFC MMA fight.
 
-    UFC events are always listed on mainstream books (FanDuel, DraftKings,
-    BetMGM, Caesars, Pinnacle).  If none of those books carry the event,
-    it's almost certainly a regional / PFL / Bellator fight card.
+    UFC events are carried by many books (typically 4+). Regional/minor
+    promotions (Bellator, PFL, Cage Warriors, karate, etc.) typically
+    appear on only 1-2 books. We require at least 3 bookmakers as a
+    signal that it's a real UFC fight, not a minor promotion event.
     """
     if "mma" not in sport_key:
         return False
     book_keys = {bm.key for bm in event.bookmakers}
-    return not book_keys.intersection(_UFC_INDICATOR_BOOKS)
+    # UFC events typically have 4+ books. Minor promotions have 1-2.
+    if len(book_keys) >= 3:
+        return False  # Likely UFC — keep it
+    return True  # Only 1-2 books — likely non-UFC, filter it out
 
 
 def _has_suspicious_solo_moneyline(event: OddsEvent, sport_key: str) -> bool:
@@ -768,6 +772,10 @@ class CompositeSource(DataSource):
                 merged_headers["x-requests-remaining"] = headers["x-requests-remaining"]
 
             for event in events:
+                # Skip events whose ID doesn't match the requested sport
+                # (catches cross-sport leaking from scrapers)
+                if not event.id.startswith(sport_key + ":"):
+                    continue
                 if event.id in all_events:
                     # Merge: append new bookmakers from secondary sources
                     existing = all_events[event.id]

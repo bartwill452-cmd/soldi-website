@@ -576,6 +576,13 @@ class BetOnlineSource(DataSource):
             if any(kw in combined for kw in _FUTURES_KEYWORDS):
                 continue
 
+            # For MMA: only keep UFC events (skip Bellator, PFL, Cage Warriors, etc.)
+            if sport_key == "mma_mixed_martial_arts":
+                league_name = (game.get("League") or game.get("LeagueName")
+                               or gd.get("League") or gd.get("GroupName") or "").upper()
+                if "UFC" not in league_name and "UFC" not in schedule_text.upper():
+                    continue
+
             # Parse commence time from WagerCutOff
             cutoff = game.get("WagerCutOff", "")
             commence_time = self._parse_time(cutoff)
